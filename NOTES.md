@@ -44,6 +44,11 @@ local persistent storage, first-run Accessibility screen, «الالتقاط» o
   (#A09589 light / #736A5E dark) fail 4.5:1, so hints use the secondary tokens
   instead; small accent-colored text uses a darkened honey (`--accent-text`
   #8F5B14) in light mode. Everything else matches the reference values exactly.
+- **Dark app-icon sheen**: the identity spec uses `white @ 0.09` for the top
+  sheen in both icon states, but 0.09 over near-black glows far brighter than
+  over cream — side-by-side the dark icon read top-heavy (geometry is
+  pixel-identical; verified). The dark variant uses `0.05` to match the
+  *perceived* sheen intensity; light keeps the spec value.
 - **Fonts**: Cairo ships as static weights (300–900) rather than the variable
   file — `R/fonts` contains statics; same rendered result. `@font-face`
   `unicode-range` limits both families to Arabic script so Latin text and

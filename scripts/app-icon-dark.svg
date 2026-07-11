@@ -1,6 +1,10 @@
 <svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
   <!-- Dark state of the رفّ app icon — same geometry as app-icon-light.svg,
-       palette per the identity spec (R/_ref/icon/src/App.tsx, AppIcon dark). -->
+       palette per the identity spec (R/_ref/icon/src/App.tsx, AppIcon dark).
+       Optical tuning: the top sheen is 0.05 here (spec says 0.09 for both
+       states) because 0.09 white over near-black glows far brighter than the
+       same value over cream — at 0.09 the dark icon read top-heavy next to
+       the light one. 0.05 matches the *perceived* sheen intensity. -->
   <defs>
     <linearGradient id="bg" x1="10%" y1="5%" x2="90%" y2="95%">
       <stop offset="0%" stop-color="#2C2823" />
@@ -19,7 +23,7 @@
 
   <g clip-path="url(#sq)">
     <rect width="512" height="512" fill="url(#bg)" />
-    <ellipse cx="256" cy="-20" rx="220" ry="100" fill="white" opacity="0.09" />
+    <ellipse cx="256" cy="-20" rx="220" ry="100" fill="white" opacity="0.05" />
 
     <rect x="86" y="184" width="92" height="148" rx="14" fill="#3D3730" filter="url(#cs)" />
     <rect x="102" y="212" width="60" height="6" rx="3" fill="#524840" />
