@@ -25,7 +25,7 @@ pub struct AppState {
 }
 
 fn main() {
-    tauri::Builder::default()
+    let mut app = tauri::Builder::default()
         // Must be the first plugin: a second launch exits immediately and this
         // callback runs in the surviving instance instead (no duplicate tray,
         // no second monitor thread writing the same JSON files).
@@ -64,9 +64,6 @@ fn main() {
             commands::list_running_apps,
         ])
         .setup(|app| {
-            // Menu-bar app: never show a Dock icon.
-            app.set_activation_policy(tauri::ActivationPolicy::Accessory);
-
             let data_dir = app.path().app_data_dir()?;
             let store = storage::Store::load(data_dir);
             let hotkey = store.settings.hotkey.clone();
@@ -97,6 +94,19 @@ fn main() {
             }
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running Raff");
+        .build(tauri::generate_context!())
+        .expect("error while building Raff");
+
+    // Set the Accessory (menu-bar) activation policy on the *built* App, before
+    // the run loop starts. At this point `App::set_activation_policy` writes
+    // tao's launch-time activation policy, so `applicationDidFinishLaunching`
+    // applies Accessory directly instead of tao's default Regular. The app is a
+    // menu-bar agent from the first frame — no Dock icon, no ⌘Tab entry, and it
+    // is never recorded in the Dock's "Recent Applications". Setting this inside
+    // `setup` (which runs after didFinishLaunching) is too late: tao has already
+    // applied Regular and activated the app, so the launch is logged in the Dock
+    // before the app flips to Accessory. Reinforces the bundle's LSUIElement.
+    app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+
+    app.run(|_app_handle, _event| {});
 }
