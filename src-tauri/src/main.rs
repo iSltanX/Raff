@@ -32,6 +32,7 @@ fn main() {
         // `raff --settings` surfaces the settings window; any other relaunch
         // surfaces the panel.
         .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
+            eprintln!("raff: relaunch forwarded, argv: {argv:?}");
             if argv.iter().any(|a| a == "--settings") {
                 commands::open_settings_window(app);
             } else {
