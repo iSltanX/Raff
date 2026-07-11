@@ -27,11 +27,13 @@
     <div class="list scroll-pane" id="list" role="listbox" aria-label="عناصر الحافظة"></div>
     <div class="divider"></div>
     <footer class="footer">
-      <span class="hint">↑↓ تنقّل</span>
-      <span class="hint">⏎ لصق</span>
-      <span class="hint">⌥P تثبيت</span>
-      <span class="hint">⌘F بحث</span>
-      <span class="hint">esc إغلاق</span>
+      <!-- .keys isolates each shortcut so the bidi algorithm can't flip
+           ⌥P into P⌥ inside the RTL line. -->
+      <span class="hint"><span class="keys">↑↓</span> تنقّل</span>
+      <span class="hint"><span class="keys">⏎</span> لصق</span>
+      <span class="hint"><span class="keys">⌥P</span> تثبيت</span>
+      <span class="hint"><span class="keys">⌘F</span> بحث</span>
+      <span class="hint"><span class="keys">esc</span> إغلاق</span>
       <span class="toast" id="toast" hidden></span>
     </footer>
   </main>

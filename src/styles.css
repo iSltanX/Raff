@@ -93,6 +93,9 @@
   --surface: #FFFFFF;
   --text: #201C16;
   --secondary: #736A5E;
+  /* Darker secondary for small text on tinted fills (esc chip, selected row)
+     where plain --secondary falls just below AA. */
+  --secondary-strong: #675F54;
   --border: #E6E0D7;
   --accent: #D8913C;
   --accent-hover: #C7822F;
@@ -103,7 +106,8 @@
   --selected-edge: #D8913C;
   --hover-bg: rgba(32, 28, 22, 0.04);
   --input-bg: rgba(32, 28, 22, 0.06);
-  --placeholder: #A09589;
+  /* Reference grey #A09589 is 2.65:1 — placeholder text must still meet AA. */
+  --placeholder: #736A5E;
   --key-hint: #736A5E;
 
   --glass-bg: rgba(246, 243, 238, 0.82);
@@ -113,9 +117,10 @@
 
   --btn-bg: rgba(32, 28, 22, 0.06);
   --btn-primary: #D8913C;
-  --btn-primary-text: #FFFFFF;
-  --danger: #B84040;
-  --danger-bg: rgba(184, 64, 64, 0.08);
+  /* White on honey is 2.61:1; dark text (as dark mode already does) passes. */
+  --btn-primary-text: #201C16;
+  --danger: #A93A3A;
+  --danger-bg: rgba(169, 58, 58, 0.08);
 
   --icon-bg: rgba(216, 145, 60, 0.10);
   --privacy-bg: rgba(216, 145, 60, 0.06);
@@ -148,6 +153,7 @@
   --surface: #262320;
   --text: #F2EDE6;
   --secondary: #A79D90;
+  --secondary-strong: #A79D90;
   --border: #38332D;
   --accent: #E8B267;
   --accent-hover: #F0BE78;
@@ -157,7 +163,8 @@
   --selected-edge: #E8B267;
   --hover-bg: rgba(242, 237, 230, 0.05);
   --input-bg: rgba(242, 237, 230, 0.06);
-  --placeholder: #736A5E;
+  /* #736A5E is 3.30:1 on the dark glass — below AA for placeholder text. */
+  --placeholder: #A79D90;
   --key-hint: #A79D90;
 
   --glass-bg: rgba(27, 25, 23, 0.88);
@@ -168,8 +175,8 @@
   --btn-bg: rgba(242, 237, 230, 0.08);
   --btn-primary: #E8B267;
   --btn-primary-text: #201C16;
-  --danger: #E06060;
-  --danger-bg: rgba(224, 96, 96, 0.10);
+  --danger: #E4716F;
+  --danger-bg: rgba(228, 113, 111, 0.10);
 
   --icon-bg: rgba(232, 178, 103, 0.10);
   --privacy-bg: rgba(232, 178, 103, 0.06);
@@ -179,7 +186,8 @@
   --link-chip-bg-selected: rgba(232, 178, 103, 0.18);
 
   --tab-active: #F2EDE6;
-  --tab-inactive: #736A5E;
+  /* #736A5E was 3.30:1 on the dark toolbar — below AA for the tab labels. */
+  --tab-inactive: #A79D90;
   --toggle-track: #38332D;
 
   --scrollbar-thumb: rgba(255, 255, 255, 0.12);
@@ -313,6 +321,8 @@ kbd,
 }
 
 :focus-visible {
-  outline: 2px solid var(--accent);
+  /* --accent is 2.36:1 against the light canvas — below the 3:1 required of
+     focus indicators; the text-grade honey passes in both themes. */
+  outline: 2px solid var(--accent-text);
   outline-offset: 1px;
 }

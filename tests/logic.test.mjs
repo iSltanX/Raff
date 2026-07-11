@@ -22,6 +22,9 @@ test('normalizeArabic strips tashkeel and tatweel', () => {
   assert.equal(normalizeArabic('رفّ'), 'رف');
   assert.equal(normalizeArabic('كـــتاب'), 'كتاب');
   assert.equal(normalizeArabic('HeLLo'), 'hello');
+  // The tashkeel class must not swallow Arabic punctuation or rare letters.
+  assert.equal(normalizeArabic('٥٠٪'), '50٪');
+  assert.equal(normalizeArabic('٫٬٭ٮٯ'), '٫٬٭ٮٯ');
 });
 
 test('filterItems matches text and source app, diacritic-insensitive', () => {

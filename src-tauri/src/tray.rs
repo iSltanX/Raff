@@ -103,7 +103,9 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
 
 fn menu_label(text: &str, kind: ItemKind) -> String {
     if kind == ItemKind::Image {
-        return text.to_string(); // already "صورة W×H"
+        // "صورة W×H" is stored with Western digits; the UI convention
+        // (matching the panel) is Arabic-Indic digits everywhere.
+        return arabic_digits(text);
     }
     let one_line = text.split_whitespace().collect::<Vec<_>>().join(" ");
     let mut label: String = one_line.chars().take(LABEL_MAX_CHARS).collect();
@@ -111,6 +113,15 @@ fn menu_label(text: &str, kind: ItemKind) -> String {
         label.push('…');
     }
     label
+}
+
+fn arabic_digits(s: &str) -> String {
+    s.chars()
+        .map(|c| match c {
+            '0'..='9' => char::from_u32('٠' as u32 + (c as u32 - '0' as u32)).unwrap_or(c),
+            _ => c,
+        })
+        .collect()
 }
 
 fn handle_menu_event(app: &AppHandle, id: &str) {

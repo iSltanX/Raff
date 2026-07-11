@@ -9,7 +9,6 @@ export const TYPE_ICONS = {
   link: `<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M6.5 9.5a3.54 3.54 0 0 0 5 0l1.5-1.5a3.54 3.54 0 0 0-5-5L7.5 4" ${stroke}/><path d="M9.5 6.5a3.54 3.54 0 0 0-5 0L3 8a3.54 3.54 0 0 0 5 5l.5-.5" ${stroke}/></svg>`,
   code: `<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M5.5 5L2.5 8l3 3M10.5 5l3 3-3 3M7 11l2-6" ${stroke} stroke-linejoin="round"/></svg>`,
   image: `<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="12" height="10" rx="2" ${stroke}/><circle cx="6" cy="6.5" r="1.5" fill="currentColor" opacity="0.7"/><path d="M2 11l3.5-3.5 2.5 2.5 2-2 4 3" ${stroke} stroke-linejoin="round"/></svg>`,
-  prompt: `<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2l1.5 4.5H14l-3.75 2.73 1.43 4.39L8 11l-3.68 2.62 1.43-4.39L2 6.5h4.5L8 2z" ${stroke} stroke-linejoin="round"/></svg>`,
 };
 
 const PIN_PATH = 'M10 2L14 6l-2 2-4-1-3 3v2l2-2 1 4 3-3 1 1 2-2L10 2z';

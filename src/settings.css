@@ -336,6 +336,6 @@ body {
 .about-credit {
   font-size: 11px;
   color: var(--secondary);
-  opacity: 0.75;
+  /* No opacity: 0.75 × --secondary lands at 3.0:1 on the canvas (below AA). */
   margin-top: 14px;
 }

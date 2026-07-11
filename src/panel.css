@@ -38,6 +38,8 @@ body {
   color: var(--text);
   font-family: var(--font-body);
   direction: rtl;
+  /* Latin/code queries lay out LTR while the Arabic placeholder stays RTL. */
+  unicode-bidi: plaintext;
 }
 .search-input::placeholder {
   color: var(--placeholder);
@@ -45,7 +47,7 @@ body {
 
 .esc-chip {
   font-size: 11px;
-  color: var(--secondary);
+  color: var(--secondary-strong); /* --secondary is 4.27:1 on the chip bg — below AA */
   background: var(--input-bg);
   border-radius: 4px;
   padding: 1px 5px;
@@ -169,6 +171,11 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* On the honey selection tint, --secondary drops to 4.35:1 in light mode. */
+.row.selected .row-meta,
+.row.selected .image-label {
+  color: var(--secondary-strong);
+}
 
 .pin-btn {
   flex-shrink: 0;
@@ -253,6 +260,10 @@ body {
   color: var(--key-hint);
   font-size: 11px;
   white-space: nowrap;
+}
+.hint .keys {
+  direction: ltr;
+  unicode-bidi: isolate;
 }
 .toast {
   margin-inline-start: auto;
