@@ -12,6 +12,7 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2", features = ["macos-private-api", "tray-icon", "image-png"] }
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-autostart = "2"
+tauri-plugin-single-instance = "2"
 tauri-nspanel = { git = "https://github.com/ahkohd/tauri-nspanel", branch = "v2" }
 window-vibrancy = "0.6"
 serde = { version = "1", features = ["derive"] }

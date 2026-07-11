@@ -26,6 +26,12 @@ pub struct AppState {
 
 fn main() {
     tauri::Builder::default()
+        // Must be the first plugin: a second launch exits immediately and this
+        // callback runs in the surviving instance instead (no duplicate tray,
+        // no second monitor thread writing the same JSON files).
+        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+            panel::show(app);
+        }))
         .plugin(tauri_nspanel::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_autostart::init(

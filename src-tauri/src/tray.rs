@@ -13,6 +13,12 @@ const RECENT_IN_MENU: usize = 5;
 const LABEL_MAX_CHARS: usize = 44;
 
 pub fn create(app: &AppHandle) -> tauri::Result<()> {
+    // The menu-bar item must exist exactly once, no matter how often this is
+    // called (setup re-entry, future callers): a second build would put a
+    // duplicate رفّ icon in the menu bar.
+    if app.tray_by_id(TRAY_ID).is_some() {
+        return Ok(());
+    }
     let menu = build_menu(app)?;
     let icon = tauri::image::Image::from_bytes(include_bytes!("../icons/tray.png"))?;
     TrayIconBuilder::with_id(TRAY_ID)
