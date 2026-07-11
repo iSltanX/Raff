@@ -211,11 +211,40 @@ pub fn set_bundle_icon(icns_path: &std::path::Path) -> bool {
 }
 
 /// The .app bundle containing the running executable, if any
-/// (…/Raff.app/Contents/MacOS/raff → …/Raff.app).
-fn app_bundle_path() -> Option<std::path::PathBuf> {
+/// (…/Raff.app/Contents/MacOS/raff → …/Raff.app). `None` in dev mode.
+pub fn app_bundle_path() -> Option<std::path::PathBuf> {
     let exe = std::env::current_exe().ok()?;
     let bundle = exe.parent()?.parent()?.parent()?;
     (bundle.extension()? == "app").then(|| bundle.to_path_buf())
+}
+
+/// Relaunches the packaged app exactly once, after this process has fully
+/// exited: a detached `/bin/sh` polls the pid (10 Hz, ~20 s cap) and only then
+/// hands the bundle to LaunchServices. The wait is what makes the relaunch
+/// safe with the single-instance plugin — launching while the old process
+/// still holds the instance socket would make the new one forward its argv
+/// and exit (i.e. no relaunch at all). `open` without `-n` never creates a
+/// second process: if the cap is ever hit with the old instance alive, it
+/// merely activates it — no duplicate tray, no relaunch loop. `--settings`
+/// is forwarded so the fresh instance reopens the window the user was in.
+pub fn spawn_relauncher(bundle: &std::path::Path, pid: u32) {
+    use std::process::{Command, Stdio};
+    // The bundle path travels as "$0" (never interpolated into the script).
+    let script = format!(
+        "i=0; while kill -0 {pid} 2>/dev/null && [ $i -lt 200 ]; do sleep 0.1; i=$((i+1)); done; \
+         exec /usr/bin/open \"$0\" --args --settings"
+    );
+    let result = Command::new("/bin/sh")
+        .arg("-c")
+        .arg(script)
+        .arg(bundle)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn();
+    if let Err(err) = result {
+        eprintln!("raff: relauncher spawn failed: {err}");
+    }
 }
 
 /// Whether the app's effective appearance is Dark, read from

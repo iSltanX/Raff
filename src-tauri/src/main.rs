@@ -100,6 +100,13 @@ fn main() {
             if first_run_pending && !macos::ax_trusted() {
                 commands::open_firstrun_window(&handle);
             }
+            // A controlled relaunch (icon/appearance change) forwards
+            // --settings so the user returns to the window they were in.
+            // Opening a window never triggers another relaunch, so this
+            // cannot loop.
+            if std::env::args().any(|a| a == "--settings") {
+                commands::open_settings_window(&handle);
+            }
             Ok(())
         })
         .build(tauri::generate_context!())

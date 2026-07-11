@@ -283,6 +283,25 @@ async function renderLearning() {
 
 on('raff://changed', () => load().catch(console.error));
 
+// ─── Controlled relaunch notice ───────────────────────────────────────────
+// The backend announces it right before quitting-and-relaunching to apply a
+// new app icon. The overlay also blocks further clicks during the short
+// grace period, so no second change can race the relaunch.
+
+on('raff://relaunching', showRelaunchNotice);
+
+function showRelaunchNotice() {
+  if (document.getElementById('relaunch-overlay')) return;
+  const overlay = document.createElement('div');
+  overlay.id = 'relaunch-overlay';
+  overlay.className = 'relaunch-overlay';
+  const message = document.createElement('div');
+  message.className = 'relaunch-message';
+  message.textContent = 'سيُعاد تشغيل رفّ لتطبيق التغيير.';
+  overlay.append(message);
+  document.body.append(overlay);
+}
+
 // First load: retry briefly (IPC can lag right after window creation) so a
 // transient failure never leaves the window showing default values.
 (async () => {

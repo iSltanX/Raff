@@ -194,6 +194,18 @@ pub fn update_settings(
             return Err(err);
         }
     }
+
+    // Persist before any other side effect: whatever happens next — including
+    // the controlled relaunch below — the chosen settings are already on disk
+    // and survive into the next process.
+    {
+        let mut store = state.store.lock().unwrap();
+        store.settings = settings.clone();
+        store.trim_history(); // the cap may have shrunk — enforce it now
+        store.save_settings();
+        store.save_history();
+    }
+
     if settings.launch_at_login != old.launch_at_login {
         let autolaunch = app.autolaunch();
         let result = if settings.launch_at_login {
@@ -206,25 +218,13 @@ pub fn update_settings(
         }
     }
 
-    if settings.follow_system != old.follow_system || settings.appearance != old.appearance {
-        apply_appearance(&app, &settings);
-    }
     if settings.app_icon != old.app_icon
         || settings.follow_system != old.follow_system
         || settings.appearance != old.appearance
     {
-        // Queued after apply_appearance's main-thread task, so an Auto icon
-        // reads the theme the appearance change just produced.
-        apply_app_icon(&app);
+        sync_appearance_and_icon(&app);
     }
 
-    {
-        let mut store = state.store.lock().unwrap();
-        store.settings = settings;
-        store.trim_history(); // the cap may have shrunk — enforce it now
-        store.save_settings();
-        store.save_history();
-    }
     notify(&app);
     Ok(())
 }
@@ -308,90 +308,184 @@ pub fn theme_for(settings: &Settings) -> Option<tauri::Theme> {
     }
 }
 
-/// Applies the appearance preference natively: an explicit override drives the
-/// window appearance (vibrancy, title bars, and the webviews' CSS media query
-/// all follow it); `None` returns every window to the system appearance.
-///
-/// Used for runtime changes (settings updated while windows already exist),
-/// where `AppHandle::set_theme`'s asynchronous main-thread dispatch is safe.
-/// Cold-launch startup instead calls `App::set_theme` directly (synchronous)
-/// — see `main.rs` — so the very first window is created with the right
-/// appearance already in effect, with no race against window creation.
-pub fn apply_appearance(app: &AppHandle, settings: &Settings) {
-    let theme = theme_for(settings);
+// ─── Appearance & app icon ────────────────────────────────────────────────────
+//
+// The theme itself is runtime-safe: `NSApp.appearance` is an AppKit-guaranteed
+// override that every window, vibrancy layer, and webview media query follows
+// synchronously. The *bundle icon* is not: `NSWorkspace.setIcon` writes the
+// resource fork correctly, but what Finder/the Dock *display* for a running
+// app goes through icon caches macOS gives no invalidation guarantee for.
+// So a settings change that needs a different bundle icon triggers a controlled
+// relaunch: the fresh launch applies the icon on one ordered path (before any
+// window or theme event can interleave), which is the only moment macOS
+// refreshes it dependably.
+
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
+
+/// Bundle-icon variant tags. `ICON_UNKNOWN` = never applied / last apply failed.
+const ICON_UNKNOWN: u8 = 0;
+const ICON_LIGHT: u8 = 1;
+const ICON_DARK: u8 = 2;
+
+/// The variant this process last wrote successfully onto the bundle.
+static APPLIED_ICON: AtomicU8 = AtomicU8::new(ICON_UNKNOWN);
+/// Set once a controlled relaunch is scheduled: every later icon path stands
+/// down (the fresh launch owns the icon), and no second relaunch can start.
+static RELAUNCH_PENDING: AtomicBool = AtomicBool::new(false);
+
+/// Grace period between announcing the relaunch (the settings window shows
+/// «سيُعاد تشغيل رفّ لتطبيق التغيير.») and performing it.
+const RELAUNCH_NOTICE_MS: u64 = 1400;
+
+/// The variant a settings snapshot asks for. Pure — `appearance_dark` is the
+/// explicit setting, `system_dark` the effective appearance — so the relaunch
+/// decision is unit-testable.
+fn icon_variant(
+    pref: AppIconPref,
+    follow_system: bool,
+    appearance_dark: bool,
+    system_dark: bool,
+) -> u8 {
+    let dark = match pref {
+        AppIconPref::Light => false,
+        AppIconPref::Dark => true,
+        AppIconPref::Auto => {
+            if follow_system {
+                system_dark
+            } else {
+                appearance_dark
+            }
+        }
+    };
+    if dark {
+        ICON_DARK
+    } else {
+        ICON_LIGHT
+    }
+}
+
+/// Main-thread only (reads `NSApp.effectiveAppearance` for the Auto+follow
+/// case, which is current at launch, after `set_theme`, and at `ThemeChanged`).
+fn wanted_icon_variant(app: &AppHandle) -> u8 {
+    let state = app.state::<AppState>();
+    let store = state.store.lock().unwrap();
+    let s = &store.settings;
+    icon_variant(
+        s.app_icon,
+        s.follow_system,
+        s.appearance == Appearance::Dark,
+        macos::app_appearance_is_dark(),
+    )
+}
+
+/// Main-thread only: writes the variant's .icns onto the bundle unless the
+/// bundle already shows it. On failure the guard returns to `ICON_UNKNOWN` so
+/// the next call does not wrongly dedup-skip.
+fn apply_icon_variant(app: &AppHandle, wanted: u8) {
+    if APPLIED_ICON.swap(wanted, Ordering::SeqCst) == wanted {
+        return; // already showing this variant
+    }
+    let file = if wanted == ICON_DARK {
+        "icons/icon-dark.icns"
+    } else {
+        "icons/icon-light.icns"
+    };
+    match app
+        .path()
+        .resolve(file, tauri::path::BaseDirectory::Resource)
+    {
+        Ok(path) => {
+            if !macos::set_bundle_icon(&path) {
+                APPLIED_ICON.store(ICON_UNKNOWN, Ordering::SeqCst);
+            }
+        }
+        Err(err) => {
+            eprintln!("raff: icon resource missing ({file}): {err}");
+            APPLIED_ICON.store(ICON_UNKNOWN, Ordering::SeqCst);
+        }
+    }
+}
+
+/// Runtime icon sync for the paths where a relaunch is impossible or needless:
+/// cold launch (single ordered path — the reliable moment) and system
+/// appearance flips in Auto+follow mode (`ThemeChanged`; the app cannot
+/// restart itself every time macOS switches appearance). Deterministic and
+/// dedup-guarded; stands down entirely once a relaunch is pending.
+pub fn apply_app_icon(app: &AppHandle) {
     let handle = app.clone();
     let _ = app.run_on_main_thread(move || {
-        handle.set_theme(theme);
+        if RELAUNCH_PENDING.load(Ordering::SeqCst) {
+            return; // the fresh launch owns the icon from here
+        }
+        let wanted = wanted_icon_variant(&handle);
+        apply_icon_variant(&handle, wanted);
     });
 }
 
-/// Applies the selected app-icon variant (أيقونة التطبيق) to the bundle so the
-/// four states always agree: saved setting → chosen variant → what Finder shows.
-///
-/// The variant is computed *authoritatively*, never from a window's async
-/// `theme()` (which lagged theme changes and fell back to light on any hiccup —
-/// the source of the reopen/switch desync):
-///   • Light / Dark → that variant, unconditionally.
-///   • Auto, explicit theme (follow-system off) → `settings.appearance`,
-///     deterministic and race-free (no dependency on `set_theme` having landed).
-///   • Auto, follow-system on → `NSApp.effectiveAppearance`, which is current
-///     when the `ThemeChanged` event fires and at launch.
-/// Runs on the main thread. A dedup guard avoids rewriting the icon when the
-/// variant is unchanged; because the variant is now deterministic, the two
-/// calls that can race (settings write + ThemeChanged) always agree, so
-/// whichever lands last is still correct.
-pub fn apply_app_icon(app: &AppHandle) {
-    use std::sync::atomic::{AtomicU8, Ordering};
-    /// Last applied variant: 0 unknown · 1 light · 2 dark.
-    static APPLIED: AtomicU8 = AtomicU8::new(0);
-
+/// Settings-driven appearance/icon change, as ONE main-thread task so nothing
+/// can interleave between its steps:
+///   1. `set_theme` — runtime-safe, applied immediately (AppKit-native).
+///   2. Decide the icon: `NSApp.effectiveAppearance` now already reflects the
+///      theme set in step 1, and the `ThemeChanged` events that theme change
+///      produces are delivered only after this task returns — by then either
+///      the relaunch is pending (they stand down) or the variant is unchanged
+///      (they dedup to a no-op). The old two-task version left exactly this
+///      window open, which is where the remaining desyncs lived.
+///   3. If the bundle must change icon → controlled relaunch (packaged app);
+///      in dev mode there is no bundle icon to show, so best-effort apply.
+fn sync_appearance_and_icon(app: &AppHandle) {
     let handle = app.clone();
     let _ = app.run_on_main_thread(move || {
-        let (pref, follow_system, appearance_dark) = {
+        let theme = {
             let state = handle.state::<AppState>();
             let store = state.store.lock().unwrap();
-            let s = &store.settings;
-            (
-                s.app_icon,
-                s.follow_system,
-                s.appearance == Appearance::Dark,
-            )
+            theme_for(&store.settings)
         };
-        let dark = match pref {
-            AppIconPref::Light => false,
-            AppIconPref::Dark => true,
-            AppIconPref::Auto => {
-                if follow_system {
-                    macos::app_appearance_is_dark()
-                } else {
-                    appearance_dark
-                }
-            }
-        };
-        let (tag, file) = if dark {
-            (2, "icons/icon-dark.icns")
+        handle.set_theme(theme);
+
+        let wanted = wanted_icon_variant(&handle);
+        if wanted == APPLIED_ICON.load(Ordering::SeqCst) {
+            return; // bundle already shows it — nothing needs a full refresh
+        }
+        if macos::app_bundle_path().is_some() {
+            begin_relaunch(&handle);
         } else {
-            (1, "icons/icon-light.icns")
-        };
-        if APPLIED.swap(tag, Ordering::SeqCst) == tag {
-            return; // already showing this variant
+            apply_icon_variant(&handle, wanted); // dev mode: no bundle, best effort
         }
-        match handle
-            .path()
-            .resolve(file, tauri::path::BaseDirectory::Resource)
-        {
-            Ok(path) => {
-                if !macos::set_bundle_icon(&path) {
-                    // Apply failed (e.g. transient): don't leave APPLIED claiming
-                    // success, or the next call would wrongly dedup-skip.
-                    APPLIED.store(0, Ordering::SeqCst);
+    });
+}
+
+/// The controlled relaunch: announce → grace period → close windows cleanly →
+/// spawn the pid-waiting relauncher → normal quit. The `RELAUNCH_PENDING`
+/// swap makes the whole sequence run at most once per process, so no relaunch
+/// loop and no duplicate instance is possible even if more settings writes
+/// land during the grace period (they are already on disk and simply ride
+/// along into the next launch).
+fn begin_relaunch(app: &AppHandle) {
+    if RELAUNCH_PENDING.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    let _ = app.emit("raff://relaunching", ());
+    let handle = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(RELAUNCH_NOTICE_MS));
+        let inner = handle.clone();
+        let _ = handle.run_on_main_thread(move || {
+            panel::hide(&inner);
+            for (label, window) in inner.webview_windows() {
+                if label != panel::PANEL_LABEL {
+                    let _ = window.close();
                 }
             }
-            Err(err) => {
-                eprintln!("raff: icon resource missing ({file}): {err}");
-                APPLIED.store(0, Ordering::SeqCst);
+            if let Some(bundle) = macos::app_bundle_path() {
+                macos::spawn_relauncher(&bundle, std::process::id());
             }
-        }
+            // Normal quit: RunEvent::Exit runs (single-instance socket is
+            // released), the store is already saved, the monitor thread dies
+            // with the process. The relauncher waits for the pid to vanish
+            // before `open`ing the bundle again.
+            inner.exit(0);
+        });
     });
 }
 
@@ -467,4 +561,49 @@ pub fn open_settings_window(app: &AppHandle) {
 
 pub fn open_firstrun_window(app: &AppHandle) {
     open_window_when_ready(app, "firstrun", "firstrun.html", "رفّ", (480.0, 620.0));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pinned_variants_ignore_both_appearances() {
+        for follow in [false, true] {
+            for app_dark in [false, true] {
+                for sys_dark in [false, true] {
+                    assert_eq!(
+                        icon_variant(AppIconPref::Light, follow, app_dark, sys_dark),
+                        ICON_LIGHT
+                    );
+                    assert_eq!(
+                        icon_variant(AppIconPref::Dark, follow, app_dark, sys_dark),
+                        ICON_DARK
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn auto_follows_explicit_appearance_when_not_following_system() {
+        assert_eq!(icon_variant(AppIconPref::Auto, false, true, false), ICON_DARK);
+        assert_eq!(icon_variant(AppIconPref::Auto, false, false, true), ICON_LIGHT);
+    }
+
+    #[test]
+    fn auto_follows_system_when_following_system() {
+        assert_eq!(icon_variant(AppIconPref::Auto, true, false, true), ICON_DARK);
+        assert_eq!(icon_variant(AppIconPref::Auto, true, true, false), ICON_LIGHT);
+    }
+
+    #[test]
+    fn variant_is_never_unknown() {
+        for pref in [AppIconPref::Auto, AppIconPref::Light, AppIconPref::Dark] {
+            for follow in [false, true] {
+                assert_ne!(icon_variant(pref, follow, false, false), ICON_UNKNOWN);
+                assert_ne!(icon_variant(pref, follow, true, true), ICON_UNKNOWN);
+            }
+        }
+    }
 }

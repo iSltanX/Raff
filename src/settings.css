@@ -383,3 +383,36 @@ body {
   /* No opacity: 0.75 × --secondary lands at 3.0:1 on the canvas (below AA). */
   margin-top: 14px;
 }
+
+/* ─── Controlled relaunch notice ───────────────────────────────────────── */
+/* Covers the whole window: shows the message and blocks further clicks
+   during the short grace period before رفّ quits and relaunches. */
+
+.relaunch-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--glass-bg);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  animation: relaunch-fade 0.18s ease-out;
+}
+
+.relaunch-message {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--r-window);
+  padding: 18px 28px;
+  font-size: 14px;
+  font-family: var(--font-body);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
+}
+
+@keyframes relaunch-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
