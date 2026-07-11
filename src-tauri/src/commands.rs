@@ -75,13 +75,22 @@ pub fn get_state(app: AppHandle, state: State<AppState>) -> StatePayload {
 }
 
 #[tauri::command]
-pub fn paste_item(app: AppHandle, id: String, plain: bool) {
-    paste::paste_item(&app, &id, plain);
+pub fn paste_item(app: AppHandle, id: String, plain: bool) -> Result<(), String> {
+    if paste::paste_item(&app, &id, plain) {
+        Ok(())
+    } else {
+        Err("العنصر غير موجود".into())
+    }
 }
 
 #[tauri::command]
-pub fn copy_item(app: AppHandle, id: String) {
-    paste::write_item_to_clipboard(&app, &id, false);
+pub fn copy_item(app: AppHandle, id: String) -> Result<(), String> {
+    if paste::write_item_to_clipboard(&app, &id, false) {
+        paste::bump_copy_signals(&app, &id);
+        Ok(())
+    } else {
+        Err("العنصر غير موجود".into())
+    }
 }
 
 #[tauri::command]

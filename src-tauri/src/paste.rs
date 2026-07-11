@@ -8,7 +8,7 @@ use std::time::Duration;
 use base64::Engine;
 use tauri::{AppHandle, Emitter, Manager};
 
-use crate::storage::{now_ms, ItemKind};
+use crate::storage::now_ms;
 use crate::{macos, panel, AppState};
 
 /// How long we give macOS to move focus back before synthesizing ⌘V.
@@ -52,9 +52,10 @@ pub fn write_item_to_clipboard(app: &AppHandle, id: &str, plain: bool) -> bool {
 }
 
 /// Full paste: clipboard write + focus restore + ⌘V + silent learning signals.
-pub fn paste_item(app: &AppHandle, id: &str, plain: bool) {
+/// Returns false when the id is unknown.
+pub fn paste_item(app: &AppHandle, id: &str, plain: bool) -> bool {
     if !write_item_to_clipboard(app, id, plain) {
-        return;
+        return false;
     }
 
     let state = app.state::<AppState>();
@@ -78,19 +79,35 @@ pub fn paste_item(app: &AppHandle, id: &str, plain: bool) {
             bump_paste_signals(&handle2, &id);
         });
     });
+    true
 }
 
 fn bump_paste_signals(app: &AppHandle, id: &str) {
+    bump_signals(app, id, |item| item.paste_count += 1);
+}
+
+/// Copying through رفّ (panel ⌘C, tray item click) is a usage signal exactly
+/// like pasting — recorded explicitly instead of re-capturing our own write.
+pub fn bump_copy_signals(app: &AppHandle, id: &str) {
+    bump_signals(app, id, |item| item.copy_count += 1);
+}
+
+fn bump_signals(app: &AppHandle, id: &str, bump: impl Fn(&mut crate::storage::ClipItem)) {
     let state = app.state::<AppState>();
     let mut store = state.store.lock().unwrap();
     if !store.settings.learning_enabled {
         return;
     }
     let mut pinned_touched = false;
+    let mut found = false;
     if let Some(item) = store.find_mut(id) {
-        item.paste_count += 1;
+        bump(item);
         item.last_used_at = now_ms();
         pinned_touched = item.is_pinned;
+        found = true;
+    }
+    if !found {
+        return;
     }
     if pinned_touched {
         store.save_pinned();
@@ -99,11 +116,4 @@ fn bump_paste_signals(app: &AppHandle, id: &str) {
     }
     drop(store);
     let _ = app.emit("raff://changed", ());
-}
-
-/// Kind of a stored item, used by the tray to label image entries.
-pub fn item_kind(app: &AppHandle, id: &str) -> Option<ItemKind> {
-    let state = app.state::<AppState>();
-    let store = state.store.lock().unwrap();
-    store.find(id).map(|i| i.kind)
 }

@@ -130,21 +130,12 @@ fn handle_menu_event(app: &AppHandle, id: &str) {
         }
         clip if clip.starts_with("clip:") => {
             let item_id = &clip["clip:".len()..];
-            // Tray click copies to the clipboard. Images bypass the monitor's
-            // dedupe via the skip counter, so suppress nothing for text: the
-            // monitor's dedupe naturally bumps the item to the top.
-            let is_image = paste::item_kind(app, item_id) == Some(ItemKind::Image);
-            if is_image {
-                paste::write_item_to_clipboard(app, item_id, false);
-            } else {
-                let state = app.state::<AppState>();
-                let text = {
-                    let store = state.store.lock().unwrap();
-                    store.find(item_id).map(|i| i.text.clone())
-                };
-                if let Some(text) = text {
-                    crate::macos::write_clip(Some(&text), None, None, None);
-                }
+            // Tray click copies with the item's full representations (plain +
+            // HTML/RTF/PNG); the monitor skips our own write and the copy is
+            // recorded as an explicit learning signal instead of letting the
+            // capture-dedupe reshuffle the history and reset created_at.
+            if paste::write_item_to_clipboard(app, item_id, false) {
+                paste::bump_copy_signals(app, item_id);
             }
         }
         _ => {}

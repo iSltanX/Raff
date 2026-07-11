@@ -180,7 +180,7 @@ function showToast(message) {
 
 function paste(id, plain) {
   if (!id) return;
-  api.pasteItem(id, plain);
+  api.pasteItem(id, plain).catch((err) => showToast(String(err)));
   if (!state.axTrusted) {
     showToast('نُسخ إلى الحافظة — الصقه بـ ⌘V');
   }
@@ -247,14 +247,22 @@ window.addEventListener('keydown', (e) => {
   }
   if (e.metaKey && e.key === 'Backspace') {
     e.preventDefault();
-    if (selectedId) api.deleteItem(selectedId);
+    if (selectedId) {
+      // Keep the selection at the same list position instead of snapping
+      // back to the first row after the refresh.
+      const index = visible.findIndex((i) => i.id === selectedId);
+      const doomed = selectedId;
+      selectedId = visible[index + 1]?.id ?? visible[index - 1]?.id ?? null;
+      api.deleteItem(doomed);
+    }
     return;
   }
   if (e.metaKey && e.code === 'KeyC') {
     e.preventDefault();
     if (selectedId) {
-      api.copyItem(selectedId);
-      showToast('نُسخ إلى الحافظة');
+      api.copyItem(selectedId)
+        .then(() => showToast('نُسخ إلى الحافظة'))
+        .catch((err) => showToast(String(err)));
     }
     return;
   }
