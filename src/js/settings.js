@@ -250,5 +250,18 @@ async function renderLearning() {
   }
 }
 
-on('raff://changed', load);
-load();
+on('raff://changed', () => load().catch(console.error));
+
+// First load: retry briefly (IPC can lag right after window creation) so a
+// transient failure never leaves the window showing default values.
+(async () => {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      await load();
+      return;
+    } catch (err) {
+      if (attempt === 2) console.error('raff: settings load failed', err);
+      else await new Promise((r) => setTimeout(r, 150 * (attempt + 1)));
+    }
+  }
+})();

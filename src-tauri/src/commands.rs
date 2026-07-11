@@ -318,38 +318,61 @@ pub fn register_hotkey(app: &AppHandle, accel: &str) -> Result<(), String> {
     .map_err(|e| e.to_string())
 }
 
-pub fn open_settings_window(app: &AppHandle) {
-    if let Some(w) = app.get_webview_window("settings") {
-        let _ = w.show();
-        let _ = w.set_focus();
+/// How long a hidden window may stay unrevealed before the watchdog shows it
+/// anyway (a lost page-load event must never leave the window invisible).
+const WINDOW_REVEAL_FALLBACK_MS: u64 = 1500;
+
+/// Builds a secondary window *hidden* and reveals it only once its content has
+/// actually loaded. Showing at build time raced the WKWebView's first paint
+/// and could present a permanently white window (especially when triggered
+/// from the tray menu, whose tracking run loop is still unwinding).
+fn open_window_when_ready(app: &AppHandle, label: &str, page: &str, title: &str, size: (f64, f64)) {
+    if let Some(w) = app.get_webview_window(label) {
+        // Visible → just focus it. Hidden → it is still loading; the
+        // page-load handler (or the watchdog below) will reveal it.
+        if w.is_visible().unwrap_or(false) {
+            let _ = w.set_focus();
+        }
         return;
     }
-    let result = WebviewWindowBuilder::new(app, "settings", WebviewUrl::App("settings.html".into()))
-        .title("إعدادات رفّ")
-        .inner_size(560.0, 540.0)
+    let result = WebviewWindowBuilder::new(app, label, WebviewUrl::App(page.into()))
+        .title(title)
+        .inner_size(size.0, size.1)
         .resizable(false)
         .maximizable(false)
         .minimizable(false)
         .center()
+        .visible(false)
+        .on_page_load(|window, payload| {
+            if payload.event() == tauri::webview::PageLoadEvent::Finished {
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
+        })
         .build();
-    if let Ok(w) = result {
-        let _ = w.set_focus();
+    match result {
+        Ok(w) => {
+            std::thread::spawn(move || {
+                std::thread::sleep(std::time::Duration::from_millis(WINDOW_REVEAL_FALLBACK_MS));
+                if !w.is_visible().unwrap_or(true) {
+                    let _ = w.show();
+                    let _ = w.set_focus();
+                }
+            });
+        }
+        Err(err) => eprintln!("raff: failed to open {label} window: {err}"),
     }
 }
 
+pub fn open_settings_window(app: &AppHandle) {
+    // Deferred one event-loop tick: never build a webview synchronously
+    // inside the tray-menu callback (see open_window_when_ready).
+    let handle = app.clone();
+    let _ = app.run_on_main_thread(move || {
+        open_window_when_ready(&handle, "settings", "settings.html", "إعدادات رفّ", (560.0, 540.0));
+    });
+}
+
 pub fn open_firstrun_window(app: &AppHandle) {
-    if app.get_webview_window("firstrun").is_some() {
-        return;
-    }
-    let result = WebviewWindowBuilder::new(app, "firstrun", WebviewUrl::App("firstrun.html".into()))
-        .title("رفّ")
-        .inner_size(480.0, 620.0)
-        .resizable(false)
-        .maximizable(false)
-        .minimizable(false)
-        .center()
-        .build();
-    if let Ok(w) = result {
-        let _ = w.set_focus();
-    }
+    open_window_when_ready(app, "firstrun", "firstrun.html", "رفّ", (480.0, 620.0));
 }
