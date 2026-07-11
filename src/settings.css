@@ -188,6 +188,50 @@ body {
   font-size: 13px;
   color: var(--text);
 }
+
+/* ─── App-icon cards (أيقونة التطبيق) — compact twins of the appearance cards */
+
+.icon-cards {
+  display: flex;
+  gap: 12px;
+  padding: 10px 0 6px;
+}
+.icon-card {
+  gap: 6px;
+  padding: 10px 8px 8px;
+}
+.icon-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 48px;
+}
+.icon-preview img {
+  width: 44px;
+  height: 44px;
+}
+/* «تلقائي» — one squircle, split between the two states (RTL: light first). */
+.icon-preview-auto {
+  position: relative;
+  width: 44px;
+  margin: 0 auto;
+}
+.icon-preview-auto img {
+  position: absolute;
+  inset-block-start: 2px;
+}
+.icon-preview-auto img:first-child {
+  clip-path: inset(0 0 0 50%); /* right half = light */
+}
+.icon-preview-auto img:last-child {
+  clip-path: inset(0 50% 0 0); /* left half = dark */
+}
+.icon-note {
+  font-size: 11px;
+  color: var(--secondary);
+  padding: 2px 0 10px;
+  border-bottom: 1px solid var(--border);
+}
 .card-icon {
   display: flex;
   color: var(--secondary);

@@ -62,6 +62,18 @@ pub enum Appearance {
     Dark,
 }
 
+/// أيقونة التطبيق — which app-icon variant Finder shows. Independent from the
+/// theme: `Auto` follows the app's *effective* appearance, the other two pin
+/// one variant regardless of theme.
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum AppIconPref {
+    #[default]
+    Auto,
+    Light,
+    Dark,
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Settings {
@@ -79,6 +91,8 @@ pub struct Settings {
     pub appearance: Appearance,
     /// Follow the macOS appearance (default on first launch).
     pub follow_system: bool,
+    /// أيقونة التطبيق — auto / light / dark.
+    pub app_icon: AppIconPref,
 }
 
 impl Default for Settings {
@@ -94,6 +108,7 @@ impl Default for Settings {
             first_run_shown: false,
             appearance: Appearance::Light,
             follow_system: true,
+            app_icon: AppIconPref::Auto,
         }
     }
 }
@@ -525,6 +540,7 @@ mod tests {
         let s = Store::load(dir);
         assert!(s.settings.follow_system);
         assert_eq!(s.settings.appearance, Appearance::Light);
+        assert_eq!(s.settings.app_icon, AppIconPref::Auto);
     }
 
     #[test]

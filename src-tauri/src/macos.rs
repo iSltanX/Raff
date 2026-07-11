@@ -183,6 +183,41 @@ pub fn send_cmd_v() -> bool {
     true
 }
 
+/// Applies an .icns file as the app bundle's Finder icon via
+/// `NSWorkspace.setIcon(_:forFile:options:)` — the official, documented
+/// custom-icon mechanism (same as pasting an icon in Finder's Get Info).
+/// Persistent, reversible, and does not touch LaunchServices or caches.
+/// Returns false when not running from an .app bundle (dev mode) or on error.
+pub fn set_bundle_icon(icns_path: &std::path::Path) -> bool {
+    use objc2::AllocAnyThread;
+    use objc2_app_kit::{NSImage, NSWorkspace, NSWorkspaceIconCreationOptions};
+
+    let Some(bundle) = app_bundle_path() else {
+        return false; // dev mode: bare binary, no bundle to decorate
+    };
+    let Some(icns) = icns_path.to_str() else {
+        return false;
+    };
+    let Some(image) = NSImage::initWithContentsOfFile(NSImage::alloc(), &NSString::from_str(icns))
+    else {
+        eprintln!("raff: could not load icon image: {icns}");
+        return false;
+    };
+    NSWorkspace::sharedWorkspace().setIcon_forFile_options(
+        Some(&image),
+        &NSString::from_str(&bundle.to_string_lossy()),
+        NSWorkspaceIconCreationOptions(0),
+    )
+}
+
+/// The .app bundle containing the running executable, if any
+/// (…/Raff.app/Contents/MacOS/raff → …/Raff.app).
+fn app_bundle_path() -> Option<std::path::PathBuf> {
+    let exe = std::env::current_exe().ok()?;
+    let bundle = exe.parent()?.parent()?.parent()?;
+    (bundle.extension()? == "app").then(|| bundle.to_path_buf())
+}
+
 pub fn open_accessibility_pane() {
     let _ = std::process::Command::new("open")
         .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")

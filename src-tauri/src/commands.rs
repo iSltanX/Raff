@@ -6,7 +6,7 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_autostart::ManagerExt as AutostartExt;
 
-use crate::storage::{Appearance, ItemKind, Settings};
+use crate::storage::{AppIconPref, Appearance, ItemKind, Settings};
 use crate::{macos, panel, paste, tray, AppState};
 
 const PREVIEW_MAX_CHARS: usize = 1000;
@@ -209,6 +209,14 @@ pub fn update_settings(
     if settings.follow_system != old.follow_system || settings.appearance != old.appearance {
         apply_appearance(&app, &settings);
     }
+    if settings.app_icon != old.app_icon
+        || settings.follow_system != old.follow_system
+        || settings.appearance != old.appearance
+    {
+        // Queued after apply_appearance's main-thread task, so an Auto icon
+        // reads the theme the appearance change just produced.
+        apply_app_icon(&app);
+    }
 
     {
         let mut store = state.store.lock().unwrap();
@@ -314,6 +322,52 @@ pub fn apply_appearance(app: &AppHandle, settings: &Settings) {
     let handle = app.clone();
     let _ = app.run_on_main_thread(move || {
         handle.set_theme(theme);
+    });
+}
+
+/// Applies the selected app-icon variant (أيقونة التطبيق) to the bundle.
+/// `Auto` follows the app's *effective* appearance (the explicit theme, or the
+/// system theme while following it) — read from the panel window, which always
+/// exists. Queued on the main thread so it runs after any theme change queued
+/// just before it, and deduplicated so repeated events don't rewrite the icon.
+pub fn apply_app_icon(app: &AppHandle) {
+    use std::sync::atomic::{AtomicU8, Ordering};
+    /// Last applied variant: 0 unknown · 1 light · 2 dark.
+    static APPLIED: AtomicU8 = AtomicU8::new(0);
+
+    let handle = app.clone();
+    let _ = app.run_on_main_thread(move || {
+        let pref = {
+            let state = handle.state::<AppState>();
+            let store = state.store.lock().unwrap();
+            store.settings.app_icon
+        };
+        let dark = match pref {
+            AppIconPref::Light => false,
+            AppIconPref::Dark => true,
+            AppIconPref::Auto => handle
+                .get_webview_window(panel::PANEL_LABEL)
+                .and_then(|w| w.theme().ok())
+                .map(|t| t == tauri::Theme::Dark)
+                .unwrap_or(false),
+        };
+        let (tag, file) = if dark {
+            (2, "icons/icon-dark.icns")
+        } else {
+            (1, "icons/icon-light.icns")
+        };
+        if APPLIED.swap(tag, Ordering::SeqCst) == tag {
+            return; // already showing this variant
+        }
+        match handle
+            .path()
+            .resolve(file, tauri::path::BaseDirectory::Resource)
+        {
+            Ok(path) => {
+                macos::set_bundle_icon(&path);
+            }
+            Err(err) => eprintln!("raff: icon resource missing ({file}): {err}"),
+        }
     });
 }
 

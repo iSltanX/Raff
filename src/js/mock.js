@@ -42,6 +42,7 @@ const SETTINGS = {
   firstRunShown: false,
   appearance: 'light',
   followSystem: true,
+  appIcon: 'auto',
 };
 
 export function mockInvoke(cmd, args = {}) {

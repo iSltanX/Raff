@@ -1,0 +1,46 @@
+<svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <!-- Dark state of the رفّ app icon — same geometry as app-icon-light.svg,
+       palette per the identity spec (R/_ref/icon/src/App.tsx, AppIcon dark). -->
+  <defs>
+    <linearGradient id="bg" x1="10%" y1="5%" x2="90%" y2="95%">
+      <stop offset="0%" stop-color="#2C2823" />
+      <stop offset="100%" stop-color="#1C1814" />
+    </linearGradient>
+    <filter id="cs" x="-20%" y="-30%" width="140%" height="180%">
+      <feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#201C16" flood-opacity="0.22" />
+    </filter>
+    <filter id="css" x="-10%" y="-30%" width="120%" height="180%">
+      <feDropShadow dx="0" dy="6" stdDeviation="8" flood-color="#201C16" flood-opacity="0.3" />
+    </filter>
+    <clipPath id="sq">
+      <rect width="512" height="512" rx="116" ry="116" />
+    </clipPath>
+  </defs>
+
+  <g clip-path="url(#sq)">
+    <rect width="512" height="512" fill="url(#bg)" />
+    <ellipse cx="256" cy="-20" rx="220" ry="100" fill="white" opacity="0.09" />
+
+    <rect x="86" y="184" width="92" height="148" rx="14" fill="#3D3730" filter="url(#cs)" />
+    <rect x="102" y="212" width="60" height="6" rx="3" fill="#524840" />
+    <rect x="102" y="228" width="46" height="6" rx="3" fill="#524840" />
+    <rect x="102" y="244" width="54" height="6" rx="3" fill="#524840" />
+    <rect x="102" y="260" width="38" height="6" rx="3" fill="#524840" />
+
+    <rect x="210" y="150" width="92" height="162" rx="14" fill="#D8913C" filter="url(#cs)" />
+    <circle cx="256" cy="176" r="8" fill="white" opacity="0.55" />
+    <circle cx="256" cy="176" r="8" fill="none" stroke="white" stroke-width="1.5" opacity="0.35" />
+    <rect x="226" y="198" width="60" height="6" rx="3" fill="white" opacity="0.38" />
+    <rect x="226" y="214" width="46" height="6" rx="3" fill="white" opacity="0.38" />
+    <rect x="226" y="230" width="54" height="6" rx="3" fill="white" opacity="0.38" />
+
+    <rect x="334" y="200" width="92" height="132" rx="14" fill="#3D3730" filter="url(#cs)" />
+    <rect x="350" y="228" width="60" height="6" rx="3" fill="#524840" />
+    <rect x="350" y="244" width="46" height="6" rx="3" fill="#524840" />
+    <rect x="350" y="260" width="54" height="6" rx="3" fill="#524840" />
+
+    <rect x="68" y="332" width="376" height="22" rx="11" fill="#A8701E" filter="url(#css)" />
+    <rect x="68" y="332" width="376" height="7" rx="3.5" fill="white" opacity="0.16" />
+    <rect x="68" y="348" width="376" height="6" rx="3" fill="#201C16" opacity="0.12" />
+  </g>
+</svg>

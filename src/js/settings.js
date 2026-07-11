@@ -37,6 +37,7 @@ async function load() {
   el('history-limit').value = String(settings.historyLimit);
   el('about-version').textContent = `الإصدار ${arabicDigits(state.version)}`;
   renderAppearance();
+  renderAppIcon();
   renderExcluded();
 }
 
@@ -104,6 +105,20 @@ document.querySelectorAll('.appearance-card').forEach((card) => {
   card.addEventListener('click', () =>
     save({ appearance: card.dataset.appearance, followSystem: false })
   );
+});
+
+// ─── App icon (أيقونة التطبيق) — independent from the theme ───────────────
+
+function renderAppIcon() {
+  document.querySelectorAll('.icon-card').forEach((card) => {
+    const selected = card.dataset.appIcon === settings.appIcon;
+    card.classList.toggle('selected', selected);
+    card.setAttribute('aria-checked', String(selected));
+  });
+}
+
+document.querySelectorAll('.icon-card').forEach((card) => {
+  card.addEventListener('click', () => save({ appIcon: card.dataset.appIcon }));
 });
 
 el('follow-system-toggle').addEventListener('click', () => {

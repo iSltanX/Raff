@@ -63,6 +63,13 @@ fn main() {
             commands::firstrun_done,
             commands::list_running_apps,
         ])
+        // Keeps the Automatic app icon in sync while following the system
+        // appearance (fires when a window's effective theme flips).
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::ThemeChanged(_) = event {
+                commands::apply_app_icon(window.app_handle());
+            }
+        })
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;
             let store = storage::Store::load(data_dir);
@@ -84,6 +91,7 @@ fn main() {
             let handle = app.handle().clone();
             panel::init(&handle)?;
             tray::create(&handle)?;
+            commands::apply_app_icon(&handle); // أيقونة التطبيق preference
             if let Err(err) = commands::register_hotkey(&handle, &hotkey) {
                 eprintln!("raff: hotkey registration failed: {err}");
             }

@@ -29,6 +29,7 @@ objc2-app-kit = { version = "0.3", features = [
     "NSPasteboardItem",
     "NSWorkspace",
     "NSRunningApplication",
+    "NSImage",
     "NSImageRep",
     "NSBitmapImageRep",
     "NSGraphics",

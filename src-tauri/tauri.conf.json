@@ -38,6 +38,7 @@
     "targets": ["app", "dmg"],
     "category": "Productivity",
     "shortDescription": "رفّ — مدير الحافظة الشخصي والخاص لنظام macOS",
+    "resources": ["icons/icon-light.icns", "icons/icon-dark.icns"],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
