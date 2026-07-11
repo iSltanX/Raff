@@ -32,6 +32,39 @@
           <button class="toggle" id="launch-toggle" role="switch" aria-checked="false" aria-label="الإطلاق عند تسجيل الدخول"></button>
         </div>
 
+        <div class="section-label">المظهر</div>
+        <div class="appearance-cards" role="radiogroup" aria-label="المظهر">
+          <button class="appearance-card" id="card-light" data-appearance="light" role="radio" aria-checked="false">
+            <span class="card-preview preview-light" aria-hidden="true">
+              <span class="pv-search"></span>
+              <span class="pv-row pv-accent"></span>
+              <span class="pv-row"></span>
+            </span>
+            <span class="card-label">
+              <span class="card-icon" id="icon-light"></span>
+              نهاري
+            </span>
+          </button>
+          <button class="appearance-card" id="card-dark" data-appearance="dark" role="radio" aria-checked="false">
+            <span class="card-preview preview-dark" aria-hidden="true">
+              <span class="pv-search"></span>
+              <span class="pv-row pv-accent"></span>
+              <span class="pv-row"></span>
+            </span>
+            <span class="card-label">
+              <span class="card-icon" id="icon-dark"></span>
+              ليلي
+            </span>
+          </button>
+        </div>
+        <div class="setting-row">
+          <div>
+            <div class="setting-title">اتباع مظهر النظام</div>
+            <div class="setting-sub">يتبدّل رفّ تلقائيًا مع مظهر macOS</div>
+          </div>
+          <button class="toggle" id="follow-system-toggle" role="switch" aria-checked="true" aria-label="اتباع مظهر النظام"></button>
+        </div>
+
         <div class="section-label">السجل</div>
         <div class="setting-row">
           <div>
@@ -107,6 +140,7 @@
             مدير الحافظة الشخصي والخاص لنظام macOS.<br />
             لا سحابة. لا حساب. كل شيء على جهازك.
           </p>
+          <p class="about-credit">برمجة وتصميم سلطان</p>
         </div>
       </section>
     </div>

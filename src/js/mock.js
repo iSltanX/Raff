@@ -40,6 +40,8 @@ const SETTINGS = {
   excludedApps: ['com.1password.1password'],
   learningEnabled: true,
   firstRunShown: false,
+  appearance: 'light',
+  followSystem: true,
 };
 
 export function mockInvoke(cmd, args = {}) {
@@ -67,6 +69,9 @@ export function mockInvoke(cmd, args = {}) {
         { name: 'Safari', bundleId: 'com.apple.Safari' },
         { name: 'Notes', bundleId: 'com.apple.Notes' },
       ]);
+    case 'update_settings':
+      Object.assign(SETTINGS, args.settings);
+      return Promise.resolve(null);
     case 'get_image':
       return Promise.resolve(null);
     case 'ax_status':

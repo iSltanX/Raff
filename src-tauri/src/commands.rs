@@ -6,7 +6,7 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_autostart::ManagerExt as AutostartExt;
 
-use crate::storage::{ItemKind, Settings};
+use crate::storage::{Appearance, ItemKind, Settings};
 use crate::{macos, panel, paste, tray, AppState};
 
 const PREVIEW_MAX_CHARS: usize = 1000;
@@ -193,6 +193,10 @@ pub fn update_settings(
         }
     }
 
+    if settings.follow_system != old.follow_system || settings.appearance != old.appearance {
+        apply_appearance(&app, &settings);
+    }
+
     {
         let mut store = state.store.lock().unwrap();
         store.settings = settings;
@@ -267,6 +271,24 @@ pub fn list_running_apps() -> Vec<RunningApp> {
 fn notify(app: &AppHandle) {
     let _ = app.emit("raff://changed", ());
     tray::refresh(app);
+}
+
+/// Applies the appearance preference natively: an explicit override drives the
+/// window appearance (vibrancy, title bars, and the webviews' CSS media query
+/// all follow it); `None` returns every window to the system appearance.
+pub fn apply_appearance(app: &AppHandle, settings: &Settings) {
+    let theme = if settings.follow_system {
+        None
+    } else {
+        Some(match settings.appearance {
+            Appearance::Dark => tauri::Theme::Dark,
+            Appearance::Light => tauri::Theme::Light,
+        })
+    };
+    let handle = app.clone();
+    let _ = app.run_on_main_thread(move || {
+        handle.set_theme(theme);
+    });
 }
 
 pub fn register_hotkey(app: &AppHandle, accel: &str) -> Result<(), String> {

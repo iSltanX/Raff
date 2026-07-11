@@ -93,6 +93,109 @@ body {
   color: var(--accent-text);
 }
 
+/* ─── Appearance cards (نهاري / ليلي) ──────────────────────────────────── */
+
+.appearance-cards {
+  display: flex;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.appearance-card {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-row);
+  cursor: pointer;
+  font-family: var(--font-body);
+  transition: border-color 0.15s, background 0.15s;
+}
+.appearance-card:hover {
+  border-color: var(--secondary);
+}
+.appearance-card.selected {
+  border-color: var(--accent);
+  background: var(--selected-bg);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+/* Miniature theme previews — fixed palettes, one per theme. */
+.card-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 7px 8px;
+  border-radius: var(--r-chip);
+  height: 56px;
+}
+.preview-light {
+  background: #f6f3ee;
+  border: 1px solid #e6e0d7;
+}
+.preview-dark {
+  background: #1b1917;
+  border: 1px solid #38332d;
+}
+.pv-search,
+.pv-row {
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+.pv-search {
+  height: 8px;
+  width: 55%;
+}
+.pv-row {
+  height: 11px;
+  width: 100%;
+}
+.preview-light .pv-search {
+  background: rgba(32, 28, 22, 0.08);
+}
+.preview-light .pv-row {
+  background: #ffffff;
+  border: 1px solid #e6e0d7;
+}
+.preview-light .pv-accent {
+  background: rgba(216, 145, 60, 0.18);
+  border: 1px solid #d8913c;
+}
+.preview-dark .pv-search {
+  background: rgba(242, 237, 230, 0.1);
+}
+.preview-dark .pv-row {
+  background: #262320;
+  border: 1px solid #38332d;
+}
+.preview-dark .pv-accent {
+  background: rgba(232, 178, 103, 0.2);
+  border: 1px solid #e8b267;
+}
+
+.card-label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text);
+}
+.card-icon {
+  display: flex;
+  color: var(--secondary);
+}
+.appearance-card.selected .card-label {
+  font-weight: 700;
+}
+.appearance-card.selected .card-icon {
+  color: var(--accent);
+}
+
 /* ─── Excluded apps ────────────────────────────────────────────────────── */
 
 .excluded-manager {
@@ -226,4 +329,10 @@ body {
   color: var(--secondary);
   margin-top: 8px;
   line-height: 1.6;
+}
+.about-credit {
+  font-size: 11px;
+  color: var(--secondary);
+  opacity: 0.75;
+  margin-top: 14px;
 }

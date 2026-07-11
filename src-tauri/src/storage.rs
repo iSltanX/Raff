@@ -54,6 +54,14 @@ pub struct ClipItem {
     pub last_used_at: u64,
 }
 
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum Appearance {
+    #[default]
+    Light,
+    Dark,
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Settings {
@@ -67,6 +75,10 @@ pub struct Settings {
     pub excluded_apps: Vec<String>,
     pub learning_enabled: bool,
     pub first_run_shown: bool,
+    /// Explicit appearance, used when `follow_system` is off.
+    pub appearance: Appearance,
+    /// Follow the macOS appearance (default on first launch).
+    pub follow_system: bool,
 }
 
 impl Default for Settings {
@@ -80,6 +92,8 @@ impl Default for Settings {
             excluded_apps: Vec::new(),
             learning_enabled: true,
             first_run_shown: false,
+            appearance: Appearance::Light,
+            follow_system: true,
         }
     }
 }
@@ -486,6 +500,16 @@ mod tests {
         let s = Store::load(dir.clone());
         assert!(s.history.is_empty());
         assert!(dir.join("history.json.corrupt").exists());
+    }
+
+    #[test]
+    fn settings_from_older_versions_get_appearance_defaults() {
+        let dir = std::env::temp_dir().join(format!("raff-test-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join(SETTINGS_FILE), r#"{"hotkey":"shift+super+v"}"#).unwrap();
+        let s = Store::load(dir);
+        assert!(s.settings.follow_system);
+        assert_eq!(s.settings.appearance, Appearance::Light);
     }
 
     #[test]

@@ -2,6 +2,7 @@
 
 import { api, on } from './store.js';
 import { arabicDigits, metaLine, hotkeyDisplay, hotkeyFromEvent } from './logic.js';
+import { SUN_ICON, MOON_ICON } from './icons.js';
 
 let settings = null;
 
@@ -35,6 +36,7 @@ async function load() {
   setToggle('learning-toggle', settings.learningEnabled);
   el('history-limit').value = String(settings.historyLimit);
   el('about-version').textContent = `الإصدار ${arabicDigits(state.version)}`;
+  renderAppearance();
   renderExcluded();
 }
 
@@ -59,6 +61,48 @@ el('launch-toggle').addEventListener('click', () => save({ launchAtLogin: !setti
 el('concealed-toggle').addEventListener('click', () => save({ respectConcealed: !settings.respectConcealed }));
 el('learning-toggle').addEventListener('click', () => save({ learningEnabled: !settings.learningEnabled }));
 el('history-limit').addEventListener('change', (e) => save({ historyLimit: Number(e.target.value) }));
+
+// ─── Appearance (المظهر) ──────────────────────────────────────────────────
+
+document.getElementById('icon-light').innerHTML = SUN_ICON; // static SVG constant
+document.getElementById('icon-dark').innerHTML = MOON_ICON; // static SVG constant
+
+const systemDark = window.matchMedia('(prefers-color-scheme: dark)');
+
+/** The appearance currently in effect (explicit choice, or the system's). */
+function effectiveAppearance() {
+  return settings.followSystem ? (systemDark.matches ? 'dark' : 'light') : settings.appearance;
+}
+
+function renderAppearance() {
+  const effective = effectiveAppearance();
+  document.querySelectorAll('.appearance-card').forEach((card) => {
+    const selected = card.dataset.appearance === effective;
+    card.classList.toggle('selected', selected);
+    card.setAttribute('aria-checked', String(selected));
+  });
+  setToggle('follow-system-toggle', settings.followSystem);
+}
+
+document.querySelectorAll('.appearance-card').forEach((card) => {
+  card.addEventListener('click', () =>
+    save({ appearance: card.dataset.appearance, followSystem: false })
+  );
+});
+
+el('follow-system-toggle').addEventListener('click', () => {
+  if (settings.followSystem) {
+    // Turning follow-off keeps what is on screen right now.
+    save({ followSystem: false, appearance: effectiveAppearance() });
+  } else {
+    save({ followSystem: true });
+  }
+});
+
+// While following the system, the selected card tracks macOS live.
+systemDark.addEventListener('change', () => {
+  if (settings?.followSystem) renderAppearance();
+});
 
 // ─── Hotkey recorder ──────────────────────────────────────────────────────
 

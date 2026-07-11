@@ -25,4 +25,8 @@ export const NO_RESULTS_ICON = `<svg width="32" height="32" viewBox="0 0 32 32" 
 
 export const SHIELD_ICON = `<svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M10 2.5L3.5 5.5V10c0 4 3.5 6.5 6.5 7.5 3-1 6.5-3.5 6.5-7.5V5.5L10 2.5z" ${stroke} stroke-linejoin="round"/><path d="M7 10l2 2 4-4" ${stroke} stroke-linejoin="round"/></svg>`;
 
+export const SUN_ICON = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="3" ${stroke}/><path d="M8 1.2v1.9M8 12.9v1.9M1.2 8h1.9M12.9 8h1.9M3.2 3.2l1.35 1.35M11.45 11.45l1.35 1.35M12.8 3.2l-1.35 1.35M4.55 11.45L3.2 12.8" ${stroke}/></svg>`;
+
+export const MOON_ICON = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M13.6 9.8A5.9 5.9 0 0 1 6.2 2.4a5.9 5.9 0 1 0 7.4 7.4z" ${stroke} stroke-linejoin="round"/></svg>`;
+
 export const ACCESSIBILITY_ICON = `<svg width="56" height="56" viewBox="0 0 56 56" fill="none"><circle cx="28" cy="12" r="5" stroke="currentColor" stroke-width="2"/><path d="M16 22c0 0 4-3 12-3s12 3 12 3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M20 22v10l-4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M36 22v10l4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M24 32l-2 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M32 32l2 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`;
