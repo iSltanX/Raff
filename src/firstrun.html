@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <title>رفّ</title>
+  <script src="theme.js"></script>
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="firstrun.css" />
+</head>
+<body>
+  <main class="firstrun">
+    <div class="figure" id="figure"></div>
+
+    <h1 class="title">رفّ يحتاج إلى إذن الوصول</h1>
+    <p class="body-text">
+      لكي يلصق رفّ المحتوى في التطبيقات الأخرى تلقائيًا عند الضغط على ⏎،
+      يحتاج إلى إذن <strong>تسهيل الوصول</strong> في إعدادات النظام.
+    </p>
+
+    <div class="privacy-note">
+      <span class="shield" id="shield"></span>
+      <p>
+        رفّ خاص بالكامل — لا يُغادر شيء من بياناتك جهازك، ولا حساب، ولا سحابة.
+        إذن تسهيل الوصول مطلوب للصق فقط، وليس لرصد نشاطك.
+      </p>
+    </div>
+
+    <ol class="steps">
+      <li><span class="step-num">١</span>افتح إعدادات النظام</li>
+      <li><span class="step-num">٢</span>انتقل إلى الخصوصية والأمان › تسهيل الوصول</li>
+      <li><span class="step-num">٣</span>فعّل رفّ في القائمة</li>
+    </ol>
+
+    <div class="actions">
+      <button class="btn btn-primary big" id="open-settings">فتح إعدادات النظام</button>
+      <button class="btn big" id="later">لاحقًا</button>
+    </div>
+
+    <div class="granted" id="granted" hidden>✓ تم منح الإذن — رفّ جاهز</div>
+  </main>
+  <script type="module" src="js/firstrun.js"></script>
+</body>
+</html>

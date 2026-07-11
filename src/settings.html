@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <title>إعدادات رفّ</title>
+  <script src="theme.js"></script>
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="settings.css" />
+</head>
+<body>
+  <div class="window">
+    <nav class="tabs" id="tabs">
+      <button class="tab active" data-tab="general">عام</button>
+      <button class="tab" data-tab="privacy">الخصوصية</button>
+      <button class="tab" data-tab="learning">التعلّم</button>
+      <button class="tab" data-tab="about">حول</button>
+    </nav>
+
+    <div class="content scroll-pane">
+      <!-- عام -->
+      <section class="tab-panel active" id="tab-general">
+        <div class="section-label">الوصول</div>
+        <div class="setting-row">
+          <div>
+            <div class="setting-title">الاختصار العام</div>
+            <div class="setting-sub" id="hotkey-sub">⇧⌘V — يمكن تغييره</div>
+          </div>
+          <button class="kbd hotkey-chip" id="hotkey-chip">⇧⌘V</button>
+        </div>
+        <div class="setting-row">
+          <div class="setting-title">الإطلاق عند تسجيل الدخول</div>
+          <button class="toggle" id="launch-toggle" role="switch" aria-checked="false" aria-label="الإطلاق عند تسجيل الدخول"></button>
+        </div>
+
+        <div class="section-label">السجل</div>
+        <div class="setting-row">
+          <div>
+            <div class="setting-title">حجم السجل</div>
+            <div class="setting-sub">الحد الأقصى لعدد العناصر المحفوظة</div>
+          </div>
+          <select class="select" id="history-limit">
+            <option value="200">٢٠٠ عنصر</option>
+            <option value="500">٥٠٠ عنصر</option>
+            <option value="1000">١٠٠٠ عنصر</option>
+          </select>
+        </div>
+      </section>
+
+      <!-- الخصوصية -->
+      <section class="tab-panel" id="tab-privacy">
+        <div class="section-label">التطبيقات</div>
+        <div class="setting-row">
+          <div>
+            <div class="setting-title">التطبيقات المستبعَدة</div>
+            <div class="setting-sub">لن يلتقط رفّ نسخًا من هذه التطبيقات</div>
+          </div>
+          <button class="btn" id="manage-excluded">إدارة…</button>
+        </div>
+        <div class="excluded-manager" id="excluded-manager" hidden>
+          <ul class="excluded-list" id="excluded-list"></ul>
+          <div class="excluded-add">
+            <select class="select" id="running-apps"></select>
+            <button class="btn" id="add-excluded">إضافة</button>
+          </div>
+        </div>
+
+        <div class="section-label">المحتوى</div>
+        <div class="setting-row">
+          <div>
+            <div class="setting-title">احترام المحتوى المخفي</div>
+            <div class="setting-sub">كلمات المرور وحقول الإدخال الآمنة</div>
+          </div>
+          <button class="toggle" id="concealed-toggle" role="switch" aria-checked="true" aria-label="احترام المحتوى المخفي"></button>
+        </div>
+
+        <div class="section-label">البيانات</div>
+        <div class="setting-row">
+          <div class="setting-title danger">مسح السجل كاملًا</div>
+          <button class="btn btn-danger confirm-btn" id="clear-history" data-label="مسح الآن…" data-confirm="متأكد؟ اضغط للتأكيد">مسح الآن…</button>
+        </div>
+      </section>
+
+      <!-- التعلّم -->
+      <section class="tab-panel" id="tab-learning">
+        <div class="section-label">التعلّم من السلوك</div>
+        <div class="setting-row">
+          <div>
+            <div class="setting-title">تفعيل التعلّم</div>
+            <div class="setting-sub">يحلّل رفّ نمط نسخك على الجهاز فقط ليقترح ما يهمّك</div>
+          </div>
+          <button class="toggle" id="learning-toggle" role="switch" aria-checked="true" aria-label="تفعيل التعلّم"></button>
+        </div>
+        <div class="learning-actions">
+          <button class="btn" id="show-learning">عرض ما تعلّمه رفّ</button>
+          <button class="btn btn-danger confirm-btn" id="clear-learning" data-label="مسح بيانات التعلّم…" data-confirm="متأكد؟ اضغط للتأكيد">مسح بيانات التعلّم…</button>
+        </div>
+        <div class="learning-view" id="learning-view" hidden></div>
+      </section>
+
+      <!-- حول -->
+      <section class="tab-panel" id="tab-about">
+        <div class="about">
+          <img class="about-icon" src="assets/app-icon.png" alt="أيقونة رفّ" width="72" height="72" />
+          <div class="about-name">رفّ</div>
+          <div class="about-version" id="about-version">الإصدار ٠.١.٠</div>
+          <p class="about-desc">
+            مدير الحافظة الشخصي والخاص لنظام macOS.<br />
+            لا سحابة. لا حساب. كل شيء على جهازك.
+          </p>
+        </div>
+      </section>
+    </div>
+  </div>
+  <script type="module" src="js/settings.js"></script>
+</body>
+</html>

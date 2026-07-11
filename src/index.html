@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <title>رفّ</title>
+  <script src="theme.js"></script>
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="panel.css" />
+</head>
+<body>
+  <main class="panel" id="panel">
+    <div class="search-row">
+      <span class="search-icon" id="search-icon" aria-hidden="true"></span>
+      <input
+        id="search"
+        class="search-input"
+        type="text"
+        placeholder="ابحث في رفّك…"
+        autocomplete="off"
+        autocorrect="off"
+        spellcheck="false"
+        aria-label="ابحث في رفّك"
+      />
+      <span class="esc-chip" id="esc-chip" hidden>esc</span>
+    </div>
+    <div class="divider"></div>
+    <div class="list scroll-pane" id="list" role="listbox" aria-label="عناصر الحافظة"></div>
+    <div class="divider"></div>
+    <footer class="footer">
+      <span class="hint">↑↓ تنقّل</span>
+      <span class="hint">⏎ لصق</span>
+      <span class="hint">⌥P تثبيت</span>
+      <span class="hint">⌘F بحث</span>
+      <span class="hint">esc إغلاق</span>
+      <span class="toast" id="toast" hidden></span>
+    </footer>
+  </main>
+  <script type="module" src="js/panel.js"></script>
+</body>
+</html>

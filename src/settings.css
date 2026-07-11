@@ -1,0 +1,229 @@
+/* Settings window — عام · الخصوصية · التعلّم · حول */
+
+body {
+  background: var(--canvas);
+}
+
+.window {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+/* ─── Tabs ─────────────────────────────────────────────────────────────── */
+
+.tabs {
+  background: var(--toolbar-bg);
+  border-bottom: 1px solid var(--border);
+  padding: 0 16px;
+  display: flex;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.tab {
+  padding: 10px 16px 8px;
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  font-family: var(--font-body);
+  color: var(--tab-inactive);
+  background: transparent;
+  border-bottom: 2px solid transparent;
+  transition: color 0.15s;
+}
+.tab.active {
+  color: var(--tab-active);
+  border-bottom-color: var(--accent);
+  font-weight: 500;
+}
+
+/* ─── Content ──────────────────────────────────────────────────────────── */
+
+.content {
+  flex: 1;
+  padding: 4px 24px 24px;
+}
+
+.tab-panel {
+  display: none;
+}
+.tab-panel.active {
+  display: block;
+}
+
+.setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.setting-title {
+  font-size: 13px;
+  color: var(--text);
+}
+.setting-title.danger {
+  color: var(--danger);
+}
+.setting-sub {
+  font-size: 11px;
+  color: var(--secondary);
+  margin-top: 2px;
+}
+
+.select {
+  padding: 4px 8px;
+  border-radius: var(--r-chip);
+  font-size: 13px;
+  font-family: var(--font-body);
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.hotkey-chip {
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+.hotkey-chip.recording {
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
+
+/* ─── Excluded apps ────────────────────────────────────────────────────── */
+
+.excluded-manager {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+.excluded-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+.excluded-list:empty::after {
+  content: 'لا تطبيقات مستبعَدة بعد';
+  font-size: 12px;
+  color: var(--secondary);
+}
+.excluded-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-btn);
+  font-size: 12px;
+}
+.excluded-item .bundle {
+  color: var(--secondary);
+  font-size: 11px;
+  direction: ltr;
+}
+.remove-excluded {
+  border: none;
+  background: transparent;
+  color: var(--danger);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+.remove-excluded:hover {
+  background: var(--danger-bg);
+}
+.excluded-add {
+  display: flex;
+  gap: 8px;
+}
+.excluded-add .select {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ─── Learning ─────────────────────────────────────────────────────────── */
+
+.learning-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding-top: 16px;
+}
+
+.learning-view {
+  margin-top: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-row);
+  background: var(--surface);
+  padding: 4px 12px;
+}
+.learn-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+}
+.learn-row:last-child {
+  border-bottom: none;
+}
+.learn-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+}
+.learn-counts {
+  color: var(--secondary);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.learning-empty {
+  padding: 12px 0;
+  font-size: 12px;
+  color: var(--secondary);
+}
+
+/* ─── About ────────────────────────────────────────────────────────────── */
+
+.about {
+  padding-top: 32px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  text-align: center;
+}
+.about-icon {
+  border-radius: 16px;
+  margin-bottom: 8px;
+}
+.about-name {
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--text);
+  font-family: var(--font-display);
+}
+.about-version {
+  font-size: 13px;
+  color: var(--secondary);
+}
+.about-desc {
+  font-size: 12px;
+  color: var(--secondary);
+  margin-top: 8px;
+  line-height: 1.6;
+}

@@ -1,0 +1,318 @@
+/* رفّ — design tokens + shared styles, ported 1:1 from R/ visual identity.
+   Warm paper & wood · honey accent · calm & precise. */
+
+/* ─── Fonts ─────────────────────────────────────────────────────────────────
+   Cairo → display/headings/wordmark · Almarai → body/UI labels.
+   unicode-range limits them to Arabic script so Latin text and digits fall
+   through to the system font (SF Pro), per the identity spec. */
+
+@font-face {
+  font-family: 'Cairo';
+  src: url('fonts/Cairo-Light.ttf') format('truetype');
+  font-weight: 300;
+  font-display: block;
+  unicode-range: U+0600-06FF, U+0750-077F, U+08A0-08FF, U+FB50-FDFF, U+FE70-FEFF;
+}
+@font-face {
+  font-family: 'Cairo';
+  src: url('fonts/Cairo-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-display: block;
+  unicode-range: U+0600-06FF, U+0750-077F, U+08A0-08FF, U+FB50-FDFF, U+FE70-FEFF;
+}
+@font-face {
+  font-family: 'Cairo';
+  src: url('fonts/Cairo-Medium.ttf') format('truetype');
+  font-weight: 500;
+  font-display: block;
+  unicode-range: U+0600-06FF, U+0750-077F, U+08A0-08FF, U+FB50-FDFF, U+FE70-FEFF;
+}
+@font-face {
+  font-family: 'Cairo';
+  src: url('fonts/Cairo-SemiBold.ttf') format('truetype');
+  font-weight: 600;
+  font-display: block;
+  unicode-range: U+0600-06FF, U+0750-077F, U+08A0-08FF, U+FB50-FDFF, U+FE70-FEFF;
+}
+@font-face {
+  font-family: 'Cairo';
+  src: url('fonts/Cairo-Bold.ttf') format('truetype');
+  font-weight: 700;
+  font-display: block;
+  unicode-range: U+0600-06FF, U+0750-077F, U+08A0-08FF, U+FB50-FDFF, U+FE70-FEFF;
+}
+@font-face {
+  font-family: 'Cairo';
+  src: url('fonts/Cairo-ExtraBold.ttf') format('truetype');
+  font-weight: 800;
+  font-display: block;
+  unicode-range: U+0600-06FF, U+0750-077F, U+08A0-08FF, U+FB50-FDFF, U+FE70-FEFF;
+}
+@font-face {
+  font-family: 'Cairo';
+  src: url('fonts/Cairo-Black.ttf') format('truetype');
+  font-weight: 900;
+  font-display: block;
+  unicode-range: U+0600-06FF, U+0750-077F, U+08A0-08FF, U+FB50-FDFF, U+FE70-FEFF;
+}
+@font-face {
+  font-family: 'Almarai';
+  src: url('fonts/Almarai-Light.ttf') format('truetype');
+  font-weight: 300;
+  font-display: block;
+  unicode-range: U+0600-06FF, U+0750-077F, U+08A0-08FF, U+FB50-FDFF, U+FE70-FEFF;
+}
+@font-face {
+  font-family: 'Almarai';
+  src: url('fonts/Almarai-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-display: block;
+  unicode-range: U+0600-06FF, U+0750-077F, U+08A0-08FF, U+FB50-FDFF, U+FE70-FEFF;
+}
+@font-face {
+  font-family: 'Almarai';
+  src: url('fonts/Almarai-Bold.ttf') format('truetype');
+  font-weight: 700;
+  font-display: block;
+  unicode-range: U+0600-06FF, U+0750-077F, U+08A0-08FF, U+FB50-FDFF, U+FE70-FEFF;
+}
+@font-face {
+  font-family: 'Almarai';
+  src: url('fonts/Almarai-ExtraBold.ttf') format('truetype');
+  font-weight: 800;
+  font-display: block;
+  unicode-range: U+0600-06FF, U+0750-077F, U+08A0-08FF, U+FB50-FDFF, U+FE70-FEFF;
+}
+
+/* ─── Tokens ───────────────────────────────────────────────────────────── */
+
+:root {
+  color-scheme: light;
+
+  --canvas: #F6F3EE;
+  --surface: #FFFFFF;
+  --text: #201C16;
+  --secondary: #736A5E;
+  --border: #E6E0D7;
+  --accent: #D8913C;
+  --accent-hover: #C7822F;
+  /* Darkened honey for small accent-colored text (WCAG AA ≥ 4.5:1). */
+  --accent-text: #8F5B14;
+
+  --selected-bg: rgba(216, 145, 60, 0.12);
+  --selected-edge: #D8913C;
+  --hover-bg: rgba(32, 28, 22, 0.04);
+  --input-bg: rgba(32, 28, 22, 0.06);
+  --placeholder: #A09589;
+  --key-hint: #736A5E;
+
+  --glass-bg: rgba(246, 243, 238, 0.82);
+  --hairline: inset 0 0 0 1px rgba(255, 255, 255, 0.55);
+  --dropdown-bg: rgba(246, 243, 238, 0.95);
+  --toolbar-bg: rgba(246, 243, 238, 0.92);
+
+  --btn-bg: rgba(32, 28, 22, 0.06);
+  --btn-primary: #D8913C;
+  --btn-primary-text: #FFFFFF;
+  --danger: #B84040;
+  --danger-bg: rgba(184, 64, 64, 0.08);
+
+  --icon-bg: rgba(216, 145, 60, 0.10);
+  --privacy-bg: rgba(216, 145, 60, 0.06);
+  --privacy-border: rgba(216, 145, 60, 0.20);
+
+  --link-chip-bg: rgba(0, 0, 0, 0.06);
+  --link-chip-bg-selected: rgba(216, 145, 60, 0.15);
+
+  --tab-active: #201C16;
+  --tab-inactive: #736A5E;
+  --toggle-track: #E6E0D7;
+
+  --scrollbar-thumb: rgba(0, 0, 0, 0.15);
+
+  --r-panel: 14px;
+  --r-window: 12px;
+  --r-row: 8px;
+  --r-btn: 7px;
+  --r-chip: 6px;
+
+  --font-display: 'Cairo', 'Almarai', -apple-system, 'SF Arabic', 'Geeza Pro', system-ui, sans-serif;
+  --font-body: 'Almarai', -apple-system, 'SF Arabic', 'Geeza Pro', system-ui, sans-serif;
+  --font-mono: 'SF Mono', ui-monospace, 'Menlo', 'Monaco', monospace;
+}
+
+:root[data-appearance='dark'] {
+  color-scheme: dark;
+
+  --canvas: #1B1917;
+  --surface: #262320;
+  --text: #F2EDE6;
+  --secondary: #A79D90;
+  --border: #38332D;
+  --accent: #E8B267;
+  --accent-hover: #F0BE78;
+  --accent-text: #E8B267;
+
+  --selected-bg: rgba(232, 178, 103, 0.16);
+  --selected-edge: #E8B267;
+  --hover-bg: rgba(242, 237, 230, 0.05);
+  --input-bg: rgba(242, 237, 230, 0.06);
+  --placeholder: #736A5E;
+  --key-hint: #A79D90;
+
+  --glass-bg: rgba(27, 25, 23, 0.88);
+  --hairline: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+  --dropdown-bg: rgba(38, 35, 32, 0.96);
+  --toolbar-bg: rgba(27, 25, 23, 0.95);
+
+  --btn-bg: rgba(242, 237, 230, 0.08);
+  --btn-primary: #E8B267;
+  --btn-primary-text: #201C16;
+  --danger: #E06060;
+  --danger-bg: rgba(224, 96, 96, 0.10);
+
+  --icon-bg: rgba(232, 178, 103, 0.10);
+  --privacy-bg: rgba(232, 178, 103, 0.06);
+  --privacy-border: rgba(232, 178, 103, 0.18);
+
+  --link-chip-bg: rgba(255, 255, 255, 0.07);
+  --link-chip-bg-selected: rgba(232, 178, 103, 0.18);
+
+  --tab-active: #F2EDE6;
+  --tab-inactive: #736A5E;
+  --toggle-track: #38332D;
+
+  --scrollbar-thumb: rgba(255, 255, 255, 0.12);
+}
+
+/* ─── Base ─────────────────────────────────────────────────────────────── */
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  font-family: var(--font-body);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: default;
+  overflow: hidden;
+}
+
+.mono {
+  font-family: var(--font-mono);
+}
+
+.scroll-pane {
+  overflow-y: auto;
+}
+.scroll-pane::-webkit-scrollbar {
+  width: 4px;
+}
+.scroll-pane::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scroll-pane::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 2px;
+}
+
+.divider {
+  height: 1px;
+  background: var(--border);
+  flex-shrink: 0;
+}
+
+/* ─── Shared components (toggle · buttons · section labels) ───────────── */
+
+.toggle {
+  width: 36px;
+  height: 20px;
+  border-radius: 10px;
+  background: var(--toggle-track);
+  position: relative;
+  flex-shrink: 0;
+  transition: background 0.2s;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+.toggle::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  transition: left 0.2s;
+}
+.toggle[aria-checked='true'] {
+  background: var(--accent);
+}
+.toggle[aria-checked='true']::after {
+  left: 19px;
+}
+
+.btn {
+  padding: 5px 12px;
+  border-radius: var(--r-btn);
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  font-family: var(--font-body);
+  background: var(--btn-bg);
+  color: var(--text);
+}
+.btn:hover {
+  filter: brightness(0.97);
+}
+.btn-primary {
+  background: var(--btn-primary);
+  color: var(--btn-primary-text);
+  font-weight: 500;
+}
+.btn-primary:hover {
+  background: var(--accent-hover);
+}
+.btn-danger {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.section-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--secondary);
+  letter-spacing: 0.04em;
+  padding: 16px 0 6px;
+  font-family: var(--font-display);
+}
+
+kbd,
+.kbd {
+  font-family: inherit;
+  font-size: 13px;
+  background: var(--btn-bg);
+  color: var(--text);
+  border-radius: var(--r-chip);
+  padding: 4px 10px;
+  direction: ltr; /* keep ⇧⌘V in shortcut order inside RTL layout */
+  unicode-bidi: isolate;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
