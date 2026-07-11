@@ -47,7 +47,7 @@ pub fn refresh(app: &AppHandle) {
 
 fn build_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
     let state = app.state::<AppState>();
-    let (recent, capture_enabled): (Vec<(String, String, ItemKind)>, bool) = {
+    let (recent, capture_enabled, hotkey): (Vec<(String, String, ItemKind)>, bool, String) = {
         let store = state.store.lock().unwrap();
         (
             store
@@ -57,6 +57,7 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
                 .map(|i| (i.id.clone(), i.text.clone(), i.kind))
                 .collect(),
             store.settings.capture_enabled,
+            store.settings.hotkey.clone(),
         )
     };
 
@@ -77,9 +78,13 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
     let capture = CheckMenuItemBuilder::with_id("capture", "الالتقاط")
         .checked(capture_enabled)
         .build(app)?;
+    // The accelerator is display-only (the global shortcut does the work) and
+    // must mirror the *configured* hotkey. If muda cannot parse the stored
+    // accelerator string, fall back to a plain item rather than failing the menu.
     let open = MenuItemBuilder::with_id("open", "فتح رفّ")
-        .accelerator("Shift+Cmd+V")
-        .build(app)?;
+        .accelerator(&hotkey)
+        .build(app)
+        .or_else(|_| MenuItemBuilder::with_id("open", "فتح رفّ").build(app))?;
     let settings = MenuItemBuilder::with_id("settings", "الإعدادات…").build(app)?;
     let quit = MenuItemBuilder::with_id("quit", "إنهاء")
         .accelerator("Cmd+Q")

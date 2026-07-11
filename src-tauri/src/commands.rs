@@ -177,9 +177,13 @@ pub fn update_settings(
     };
 
     // Hotkey first: if the new accelerator cannot be registered, fail without
-    // persisting anything.
+    // persisting anything — and re-register the old one, because registration
+    // starts with unregister_all (the app must never lose its entry point).
     if settings.hotkey != old.hotkey {
-        register_hotkey(&app, &settings.hotkey)?;
+        if let Err(err) = register_hotkey(&app, &settings.hotkey) {
+            let _ = register_hotkey(&app, &old.hotkey);
+            return Err(err);
+        }
     }
     if settings.launch_at_login != old.launch_at_login {
         let autolaunch = app.autolaunch();

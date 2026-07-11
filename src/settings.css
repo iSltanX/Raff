@@ -73,6 +73,9 @@ body {
   color: var(--secondary);
   margin-top: 2px;
 }
+.setting-sub.error {
+  color: var(--danger);
+}
 
 .select {
   padding: 4px 8px;

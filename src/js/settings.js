@@ -46,13 +46,29 @@ function setToggle(id, value) {
 
 async function save(patch) {
   const next = { ...settings, ...patch };
+  let failure = null;
   try {
     await api.updateSettings(next);
     settings = next;
   } catch (err) {
     console.error(err);
+    failure = err;
   }
-  await load();
+  await load(); // re-sync (reverts the UI when the backend refused the change)
+  if (failure && 'hotkey' in patch) flashHotkeyError(String(failure));
+}
+
+// Surfaces the backend's Arabic error (e.g. «اختصار غير صالح») instead of
+// silently reverting the chip.
+let hotkeyErrorTimer = null;
+function flashHotkeyError(message) {
+  hotkeySub.textContent = message;
+  hotkeySub.classList.add('error');
+  clearTimeout(hotkeyErrorTimer);
+  hotkeyErrorTimer = setTimeout(() => {
+    hotkeySub.classList.remove('error');
+    load();
+  }, 4000);
 }
 
 // ─── Toggles / select ─────────────────────────────────────────────────────
