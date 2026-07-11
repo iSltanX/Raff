@@ -329,7 +329,9 @@ impl Store {
         }
     }
 
-    fn trim_history(&mut self) {
+    /// Enforces the history cap (oldest items dropped, their image files
+    /// deleted). Public so a shrunk `history_limit` applies immediately.
+    pub fn trim_history(&mut self) {
         while self.history.len() > self.settings.history_limit.max(1) {
             if let Some(dropped) = self.history.pop() {
                 self.delete_files(&dropped);
@@ -471,6 +473,19 @@ mod tests {
         }
         assert_eq!(s.history.len(), 3);
         assert_eq!(s.history[0].text, "item 4");
+    }
+
+    #[test]
+    fn shrinking_limit_trims_immediately() {
+        let mut s = store();
+        for i in 0..5 {
+            capture_text(&mut s, &format!("item {i}"));
+        }
+        s.settings.history_limit = 2;
+        s.trim_history();
+        assert_eq!(s.history.len(), 2);
+        assert_eq!(s.history[0].text, "item 4");
+        assert_eq!(s.history[1].text, "item 3");
     }
 
     #[test]

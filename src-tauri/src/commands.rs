@@ -213,8 +213,9 @@ pub fn update_settings(
     {
         let mut store = state.store.lock().unwrap();
         store.settings = settings;
+        store.trim_history(); // the cap may have shrunk — enforce it now
         store.save_settings();
-        store.save_history(); // history_limit may have shrunk
+        store.save_history();
     }
     notify(&app);
     Ok(())
