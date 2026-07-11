@@ -1,0 +1,11 @@
+.DS_Store
+node_modules/
+src-tauri/target/
+dist/
+R/_ref/
+build/
+DerivedData/
+*.xcuserdatad/
+xcuserdata/
+R/identity-extracted/
+R/icon-extracted/
