@@ -218,6 +218,29 @@ fn app_bundle_path() -> Option<std::path::PathBuf> {
     (bundle.extension()? == "app").then(|| bundle.to_path_buf())
 }
 
+/// Whether the app's effective appearance is Dark, read from
+/// `NSApp.effectiveAppearance` — the authoritative, in-process signal that is
+/// already current by the time Tauri emits its `ThemeChanged` event (that event
+/// is derived from this same appearance). Used to pick the Automatic app-icon
+/// variant while following the system. Must be called on the main thread.
+pub fn app_appearance_is_dark() -> bool {
+    use objc2::MainThreadMarker;
+    use objc2_app_kit::{NSAppearanceNameAqua, NSAppearanceNameDarkAqua, NSApplication};
+    use objc2_foundation::NSArray;
+
+    let Some(mtm) = MainThreadMarker::new() else {
+        return false;
+    };
+    let appearance = NSApplication::sharedApplication(mtm).effectiveAppearance();
+    // SAFETY: the two names are constant NSString globals owned by AppKit.
+    let (aqua, dark) = unsafe { (NSAppearanceNameAqua, NSAppearanceNameDarkAqua) };
+    let names = NSArray::from_slice(&[aqua, dark]);
+    match appearance.bestMatchFromAppearancesWithNames(&names) {
+        Some(best) => *best == *dark,
+        None => false,
+    }
+}
+
 pub fn open_accessibility_pane() {
     let _ = std::process::Command::new("open")
         .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")

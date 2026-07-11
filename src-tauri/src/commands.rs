@@ -325,11 +325,21 @@ pub fn apply_appearance(app: &AppHandle, settings: &Settings) {
     });
 }
 
-/// Applies the selected app-icon variant (أيقونة التطبيق) to the bundle.
-/// `Auto` follows the app's *effective* appearance (the explicit theme, or the
-/// system theme while following it) — read from the panel window, which always
-/// exists. Queued on the main thread so it runs after any theme change queued
-/// just before it, and deduplicated so repeated events don't rewrite the icon.
+/// Applies the selected app-icon variant (أيقونة التطبيق) to the bundle so the
+/// four states always agree: saved setting → chosen variant → what Finder shows.
+///
+/// The variant is computed *authoritatively*, never from a window's async
+/// `theme()` (which lagged theme changes and fell back to light on any hiccup —
+/// the source of the reopen/switch desync):
+///   • Light / Dark → that variant, unconditionally.
+///   • Auto, explicit theme (follow-system off) → `settings.appearance`,
+///     deterministic and race-free (no dependency on `set_theme` having landed).
+///   • Auto, follow-system on → `NSApp.effectiveAppearance`, which is current
+///     when the `ThemeChanged` event fires and at launch.
+/// Runs on the main thread. A dedup guard avoids rewriting the icon when the
+/// variant is unchanged; because the variant is now deterministic, the two
+/// calls that can race (settings write + ThemeChanged) always agree, so
+/// whichever lands last is still correct.
 pub fn apply_app_icon(app: &AppHandle) {
     use std::sync::atomic::{AtomicU8, Ordering};
     /// Last applied variant: 0 unknown · 1 light · 2 dark.
@@ -337,19 +347,26 @@ pub fn apply_app_icon(app: &AppHandle) {
 
     let handle = app.clone();
     let _ = app.run_on_main_thread(move || {
-        let pref = {
+        let (pref, follow_system, appearance_dark) = {
             let state = handle.state::<AppState>();
             let store = state.store.lock().unwrap();
-            store.settings.app_icon
+            let s = &store.settings;
+            (
+                s.app_icon,
+                s.follow_system,
+                s.appearance == Appearance::Dark,
+            )
         };
         let dark = match pref {
             AppIconPref::Light => false,
             AppIconPref::Dark => true,
-            AppIconPref::Auto => handle
-                .get_webview_window(panel::PANEL_LABEL)
-                .and_then(|w| w.theme().ok())
-                .map(|t| t == tauri::Theme::Dark)
-                .unwrap_or(false),
+            AppIconPref::Auto => {
+                if follow_system {
+                    macos::app_appearance_is_dark()
+                } else {
+                    appearance_dark
+                }
+            }
         };
         let (tag, file) = if dark {
             (2, "icons/icon-dark.icns")
@@ -364,9 +381,16 @@ pub fn apply_app_icon(app: &AppHandle) {
             .resolve(file, tauri::path::BaseDirectory::Resource)
         {
             Ok(path) => {
-                macos::set_bundle_icon(&path);
+                if !macos::set_bundle_icon(&path) {
+                    // Apply failed (e.g. transient): don't leave APPLIED claiming
+                    // success, or the next call would wrongly dedup-skip.
+                    APPLIED.store(0, Ordering::SeqCst);
+                }
             }
-            Err(err) => eprintln!("raff: icon resource missing ({file}): {err}"),
+            Err(err) => {
+                eprintln!("raff: icon resource missing ({file}): {err}");
+                APPLIED.store(0, Ordering::SeqCst);
+            }
         }
     });
 }

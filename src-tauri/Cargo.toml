@@ -1,6 +1,6 @@
 [package]
 name = "raff"
-version = "1.1.0"
+version = "1.2.0"
 description = "رفّ — personal, local-only, keyboard-first clipboard manager for macOS"
 authors = ["Raff"]
 edition = "2021"
@@ -25,6 +25,9 @@ core-foundation = "0.10"
 objc2 = "0.6"
 objc2-foundation = "0.3"
 objc2-app-kit = { version = "0.3", features = [
+    "NSApplication",
+    "NSResponder",
+    "NSAppearance",
     "NSPasteboard",
     "NSPasteboardItem",
     "NSWorkspace",

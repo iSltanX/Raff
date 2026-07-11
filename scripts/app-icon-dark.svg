@@ -21,6 +21,9 @@
     </clipPath>
   </defs>
 
+  <!-- Identical macOS icon-grid inset as the light variant (see app-icon-light.svg):
+       translate(50 50) scale(0.8046875) → 824/1024 artwork, matched optical size. -->
+  <g transform="translate(50 50) scale(0.8046875)">
   <g clip-path="url(#sq)">
     <rect width="512" height="512" fill="url(#bg)" />
     <ellipse cx="256" cy="-20" rx="220" ry="100" fill="white" opacity="0.05" />
@@ -46,5 +49,6 @@
     <rect x="68" y="332" width="376" height="22" rx="11" fill="#A8701E" filter="url(#css)" />
     <rect x="68" y="332" width="376" height="7" rx="3.5" fill="white" opacity="0.16" />
     <rect x="68" y="348" width="376" height="6" rx="3" fill="#201C16" opacity="0.12" />
+  </g>
   </g>
 </svg>
