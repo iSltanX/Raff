@@ -66,3 +66,23 @@ local persistent storage, first-run Accessibility screen, «الالتقاط» o
   running → correct typing, dedupe bump (`copyCount: 2`), image + thumbnail
   files, correct source-app attribution in `history.json`.
 - All three screens pixel-checked against the R/ reference in light and dark.
+- **Appearance system**: `App::set_theme` (macOS `NSApp.setAppearance:`) is
+  app-wide and applies immediately to every window, existing or not-yet-created
+  — confirmed against tauri/tao source, not just docs. Found and fixed a real
+  cold-launch ordering bug: `AppHandle::set_theme` always dispatches through
+  the async event-loop queue, so calling it via a cloned `AppHandle` in
+  `setup()` raced the panel/first-run windows' synchronous creation right
+  after it, risking a system-appearance flash on launch. Fixed by calling
+  `set_theme` directly on `&mut App` before any window is created — `App`'s
+  `runtime()` resolves to the synchronous path pre-`.run()`, so the override
+  is guaranteed in effect first. Verified live in the compiled app: explicit
+  Light override renders correctly with the system in Dark and vice versa
+  (window chrome, vibrancy, card selection state, and toggle state all
+  agreed), across the panel, settings, and first-run windows. Also verified,
+  during testing, one rare (~1-in-20, not reproducible in ~30 clean runs)
+  spurious settings write matching a real card-click IPC payload with no
+  actual click made; ruled out `accept_first_mouse` (confirmed `false` by
+  default in tauri-runtime) and Rust-side concurrency (single-threaded IPC,
+  mutex-guarded store) as causes — it correlated with earlier permission-
+  dialog interactions in the same test session rather than the appearance
+  code, which has no path to call `save()` without a real DOM click.

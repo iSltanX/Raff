@@ -58,7 +58,13 @@ fn main() {
             let store = storage::Store::load(data_dir);
             let hotkey = store.settings.hotkey.clone();
             let first_run_pending = !store.settings.first_run_shown;
-            let appearance_settings = store.settings.clone();
+            // Applied directly on `App` (not a cloned AppHandle): at this point
+            // in `setup`, `App::set_theme` takes the synchronous runtime path
+            // and sets NSApp.appearance immediately, before any window below
+            // is created. Going through AppHandle here would instead queue the
+            // change onto the event loop, racing the panel/first-run windows'
+            // creation and risking a system-appearance flash on cold launch.
+            app.set_theme(commands::theme_for(&store.settings));
             app.manage(AppState {
                 store: Mutex::new(store),
                 skip_change_count: AtomicI64::new(-1),
@@ -66,7 +72,6 @@ fn main() {
             });
 
             let handle = app.handle().clone();
-            commands::apply_appearance(&handle, &appearance_settings);
             panel::init(&handle)?;
             tray::create(&handle)?;
             if let Err(err) = commands::register_hotkey(&handle, &hotkey) {

@@ -273,18 +273,30 @@ fn notify(app: &AppHandle) {
     tray::refresh(app);
 }
 
-/// Applies the appearance preference natively: an explicit override drives the
-/// window appearance (vibrancy, title bars, and the webviews' CSS media query
-/// all follow it); `None` returns every window to the system appearance.
-pub fn apply_appearance(app: &AppHandle, settings: &Settings) {
-    let theme = if settings.follow_system {
+/// The native theme override for a settings snapshot: `None` means "follow
+/// the system", matching `AppHandle::set_theme`'s own convention.
+pub fn theme_for(settings: &Settings) -> Option<tauri::Theme> {
+    if settings.follow_system {
         None
     } else {
         Some(match settings.appearance {
             Appearance::Dark => tauri::Theme::Dark,
             Appearance::Light => tauri::Theme::Light,
         })
-    };
+    }
+}
+
+/// Applies the appearance preference natively: an explicit override drives the
+/// window appearance (vibrancy, title bars, and the webviews' CSS media query
+/// all follow it); `None` returns every window to the system appearance.
+///
+/// Used for runtime changes (settings updated while windows already exist),
+/// where `AppHandle::set_theme`'s asynchronous main-thread dispatch is safe.
+/// Cold-launch startup instead calls `App::set_theme` directly (synchronous)
+/// — see `main.rs` — so the very first window is created with the right
+/// appearance already in effect, with no race against window creation.
+pub fn apply_appearance(app: &AppHandle, settings: &Settings) {
+    let theme = theme_for(settings);
     let handle = app.clone();
     let _ = app.run_on_main_thread(move || {
         handle.set_theme(theme);
