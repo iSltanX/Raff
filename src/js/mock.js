@@ -53,7 +53,7 @@ export function mockInvoke(cmd, args = {}) {
         history: RECENT,
         settings: SETTINGS,
         axTrusted: true,
-        version: '1.0.0',
+        version: '1.1.0',
       });
     case 'learning_summary':
       return Promise.resolve(
