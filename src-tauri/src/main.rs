@@ -29,8 +29,14 @@ fn main() {
         // Must be the first plugin: a second launch exits immediately and this
         // callback runs in the surviving instance instead (no duplicate tray,
         // no second monitor thread writing the same JSON files).
-        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
-            panel::show(app);
+        // `raff --settings` surfaces the settings window; any other relaunch
+        // surfaces the panel.
+        .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
+            if argv.iter().any(|a| a == "--settings") {
+                commands::open_settings_window(app);
+            } else {
+                panel::show(app);
+            }
         }))
         .plugin(tauri_nspanel::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
