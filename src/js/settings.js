@@ -12,13 +12,17 @@ const hotkeySub = el('hotkey-sub');
 
 // ─── Tabs ─────────────────────────────────────────────────────────────────
 
+function activateTab(name) {
+  document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.dataset.tab === name));
+  document
+    .querySelectorAll('.tab-panel')
+    .forEach((p) => p.classList.toggle('active', p.id === `tab-${name}`));
+}
+
 el('tabs').addEventListener('click', (e) => {
   const tab = e.target.closest('.tab');
   if (!tab) return;
-  document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t === tab));
-  document
-    .querySelectorAll('.tab-panel')
-    .forEach((p) => p.classList.toggle('active', p.id === `tab-${tab.dataset.tab}`));
+  activateTab(tab.dataset.tab);
 });
 
 // ─── Load / sync ──────────────────────────────────────────────────────────
@@ -301,6 +305,213 @@ function showRelaunchNotice() {
   overlay.append(message);
   document.body.append(overlay);
 }
+
+// ─── Updates (تبويب «حول») ────────────────────────────────────────────────
+// Drives the three audited Rust commands (check → download+install → restart)
+// through the invoke bridge — never the updater plugin's JS API directly.
+// `renderUpdate` is the single source of truth for what the section shows, so
+// event-driven and click-driven transitions can never leave it inconsistent.
+
+const updateCheckBtn = el('update-check');
+const updateAvailable = el('update-available');
+const updateNewVersion = el('update-new-version');
+const updateDate = el('update-date');
+const updateNotes = el('update-notes');
+const updateDownloadBtn = el('update-download');
+const updateProgress = el('update-progress');
+const updateBar = el('update-bar');
+const updateBarFill = el('update-bar-fill');
+const updateRestartBtn = el('update-restart');
+const updateStatus = el('update-status');
+
+// Re-entry guard: blocks repeated clicks while a check/download/restart runs.
+let updateBusy = false;
+// Current update-section phase, so the menu entry point can tell whether an
+// operation is already underway (or an install is staged) and avoid a re-check.
+let updatePhase = 'idle';
+
+function renderUpdate(state, data = {}) {
+  updatePhase = state;
+  // Safe defaults; each state overrides only what it needs.
+  updateCheckBtn.hidden = false;
+  updateCheckBtn.disabled = false;
+  updateAvailable.hidden = true;
+  updateDownloadBtn.hidden = false;
+  updateDownloadBtn.disabled = false;
+  updateProgress.hidden = true;
+  updateBar.classList.remove('indeterminate');
+  updateRestartBtn.hidden = true;
+  updateRestartBtn.disabled = false;
+  updateStatus.classList.remove('error');
+
+  switch (state) {
+    case 'idle':
+      updateStatus.textContent = 'لم يتم التحقق بعد';
+      break;
+
+    case 'checking':
+      updateCheckBtn.disabled = true;
+      updateStatus.textContent = 'جارٍ التحقق من وجود تحديثات…';
+      break;
+
+    case 'uptodate':
+      updateStatus.textContent = 'لا توجد تحديثات';
+      break;
+
+    case 'available':
+      updateCheckBtn.hidden = true;
+      updateAvailable.hidden = false;
+      updateNewVersion.textContent = `الإصدار الجديد ${arabicDigits(data.version)}`;
+      updateDate.hidden = !data.date;
+      if (data.date) updateDate.textContent = `تاريخ النشر: ${arabicDigits(data.date)}`;
+      updateNotes.hidden = !data.notes;
+      updateNotes.textContent = data.notes || ''; // textContent → untrusted-safe
+      updateStatus.textContent = '';
+      break;
+
+    case 'downloading':
+      updateCheckBtn.hidden = true;
+      updateAvailable.hidden = false;
+      updateDownloadBtn.hidden = true;
+      updateProgress.hidden = false;
+      updateStatus.textContent = 'جارٍ تنزيل التحديث…';
+      break;
+
+    case 'installing':
+      updateCheckBtn.hidden = true;
+      updateAvailable.hidden = false;
+      updateDownloadBtn.hidden = true;
+      updateProgress.hidden = false;
+      updateBar.classList.add('indeterminate'); // install has no byte progress
+      updateStatus.textContent = 'جارٍ تثبيت التحديث…';
+      break;
+
+    case 'installed':
+      updateCheckBtn.hidden = true;
+      updateRestartBtn.hidden = false;
+      updateStatus.textContent = 'اكتمل التثبيت، التطبيق جاهز لإعادة التشغيل';
+      break;
+
+    case 'error':
+      updateStatus.classList.add('error');
+      updateStatus.textContent = data.message || 'حدث خطأ';
+      if (data.from === 'download') {
+        // Rust keeps the update pending → the download can simply be retried.
+        updateCheckBtn.hidden = true;
+        updateAvailable.hidden = false;
+      } else if (data.from === 'restart') {
+        updateCheckBtn.hidden = true;
+        updateRestartBtn.hidden = false;
+      }
+      // from 'check' (or unset): the check button is already visible + enabled.
+      break;
+  }
+}
+
+function setProgress(percent) {
+  if (percent == null) {
+    updateBar.classList.add('indeterminate');
+    updateBarFill.style.width = '';
+  } else {
+    updateBar.classList.remove('indeterminate');
+    updateBarFill.style.width = `${percent}%`;
+  }
+}
+
+const errMessage = (err, fallback) => (typeof err === 'string' && err ? err : fallback);
+
+// The one manual-check flow, shared by the About button and the tray menu.
+async function runUpdateCheck() {
+  if (updateBusy) return;
+  updateBusy = true;
+  renderUpdate('checking');
+  try {
+    const result = await api.checkForUpdate();
+    if (result?.status === 'available') {
+      renderUpdate('available', { version: result.version, date: result.date, notes: result.notes });
+    } else if (result?.status === 'upToDate') {
+      renderUpdate('uptodate');
+    } else {
+      renderUpdate('error', { from: 'check', message: result?.message || 'تعذّر التحقق من التحديث.' });
+    }
+  } catch (err) {
+    renderUpdate('error', { from: 'check', message: errMessage(err, 'تعذّر التحقق من التحديث.') });
+  } finally {
+    updateBusy = false;
+  }
+}
+
+updateCheckBtn.addEventListener('click', runUpdateCheck);
+
+updateDownloadBtn.addEventListener('click', async () => {
+  if (updateBusy) return;
+  updateBusy = true;
+  setProgress(0);
+  renderUpdate('downloading');
+  try {
+    await api.downloadAndInstallUpdate();
+    // Resolves only after install completes; the `installed` event usually
+    // rendered this already — rendering again is idempotent and covers a
+    // missed event.
+    renderUpdate('installed');
+  } catch (err) {
+    renderUpdate('error', { from: 'download', message: errMessage(err, 'تعذّر تنزيل التحديث أو تثبيته.') });
+  } finally {
+    updateBusy = false;
+  }
+});
+
+updateRestartBtn.addEventListener('click', async () => {
+  if (updateBusy) return;
+  updateBusy = true;
+  try {
+    // On success the process relaunches and this webview is torn down — the
+    // promise never resolves. Only a refused/failed restart returns here.
+    await api.restartToUpdate();
+  } catch (err) {
+    renderUpdate('error', { from: 'restart', message: errMessage(err, 'تعذّر إعادة التشغيل.') });
+    updateBusy = false;
+  }
+});
+
+// Progress + lifecycle events from Rust. Registered once at module load (a tab
+// switch never re-runs this; a reopened window is a fresh document with fresh
+// listeners), so handlers cannot accumulate.
+on('raff://update/started', (event) => {
+  updateProgress.hidden = false;
+  setProgress(event?.payload?.total == null ? null : 0);
+});
+on('raff://update/progress', (event) => {
+  setProgress(event?.payload?.percent ?? null);
+});
+on('raff://update/installing', () => renderUpdate('installing'));
+on('raff://update/installed', () => renderUpdate('installed'));
+on('raff://update/error', (event) =>
+  renderUpdate('error', { from: 'download', message: event?.payload?.message || 'تعذّر تنزيل التحديث أو تثبيته.' })
+);
+
+// ─── Menu entry point «التحقق من وجود تحديثات…» ─────────────────────────────
+// The tray item routes here (via a consume-once Rust intent) instead of running
+// its own check. Always surface the About tab; only start a check when nothing
+// is already running and no install is staged awaiting restart.
+function goToAboutAndCheck() {
+  activateTab('about');
+  if (updateBusy || updatePhase === 'installing' || updatePhase === 'installed') return;
+  runUpdateCheck();
+}
+
+// The Rust flag is claimed by whichever path arrives first for a given menu
+// click — the fresh window's load poll (below) or this event on an already-open
+// window — so the check runs exactly once and is never lost.
+async function claimMenuIntent() {
+  try {
+    if (await api.consumeUpdateIntent()) goToAboutAndCheck();
+  } catch (err) {
+    console.error('raff: update-intent claim failed', err);
+  }
+}
+on('raff://open-updates', claimMenuIntent);
+claimMenuIntent();
 
 // First load: retry briefly (IPC can lag right after window creation) so a
 // transient failure never leaves the window showing default values.

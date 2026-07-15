@@ -159,11 +159,32 @@
         <div class="about">
           <img class="about-icon" src="assets/app-icon.png" alt="أيقونة رفّ" width="72" height="72" />
           <div class="about-name">رفّ</div>
-          <div class="about-version" id="about-version">الإصدار ١.٢.١</div>
+          <div class="about-version" id="about-version">الإصدار ١.٣.٠</div>
           <p class="about-desc">
             مدير الحافظة الشخصي والخاص لنظام macOS.<br />
             لا سحابة. لا حساب. كل شيء على جهازك.
           </p>
+
+          <!-- التحديثات -->
+          <div class="update">
+            <button class="btn update-check" id="update-check">التحقق من وجود تحديثات</button>
+
+            <div class="update-available" id="update-available" hidden>
+              <div class="update-new-version" id="update-new-version"></div>
+              <div class="update-date" id="update-date" hidden></div>
+              <div class="update-notes scroll-pane" id="update-notes" dir="auto" hidden></div>
+              <button class="btn btn-primary" id="update-download">تنزيل التحديث وتثبيته</button>
+            </div>
+
+            <div class="update-progress" id="update-progress" hidden>
+              <div class="update-bar" id="update-bar"><div class="update-bar-fill" id="update-bar-fill"></div></div>
+            </div>
+
+            <button class="btn btn-primary" id="update-restart" hidden>إعادة التشغيل لإكمال التحديث</button>
+
+            <div class="update-status" id="update-status">لم يتم التحقق بعد</div>
+          </div>
+
           <p class="about-credit">برمجة وتصميم سلطان</p>
         </div>
       </section>

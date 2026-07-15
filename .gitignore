@@ -10,3 +10,5 @@ DerivedData/
 xcuserdata/
 R/identity-extracted/
 R/icon-extracted/
+# Local-only design references (kept on disk, never tracked/distributed).
+/R/

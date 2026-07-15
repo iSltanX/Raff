@@ -86,6 +86,8 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
         .build(app)
         .or_else(|_| MenuItemBuilder::with_id("open", "فتح رفّ").build(app))?;
     let settings = MenuItemBuilder::with_id("settings", "الإعدادات…").build(app)?;
+    let check_updates =
+        MenuItemBuilder::with_id("check-updates", "التحقق من وجود تحديثات…").build(app)?;
     let quit = MenuItemBuilder::with_id("quit", "إنهاء")
         .accelerator("Cmd+Q")
         .build(app)?;
@@ -96,6 +98,7 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
         .item(&PredefinedMenuItem::separator(app)?)
         .item(&open)
         .item(&settings)
+        .item(&check_updates)
         .item(&PredefinedMenuItem::separator(app)?)
         .item(&quit)
         .build()
@@ -128,6 +131,7 @@ fn handle_menu_event(app: &AppHandle, id: &str) {
     match id {
         "open" => panel::toggle(app),
         "settings" => commands::open_settings_window(app),
+        "check-updates" => crate::updater::request_check_from_menu(app),
         "quit" => app.exit(0),
         "capture" => {
             let state = app.state::<AppState>();

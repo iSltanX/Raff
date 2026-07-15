@@ -24,6 +24,10 @@ export const api = {
   openAccessibilitySettings: () => invoke('open_accessibility_settings'),
   firstrunDone: () => invoke('firstrun_done'),
   listRunningApps: () => invoke('list_running_apps'),
+  checkForUpdate: () => invoke('check_for_update'),
+  downloadAndInstallUpdate: () => invoke('download_and_install_update'),
+  restartToUpdate: () => invoke('restart_to_update'),
+  consumeUpdateIntent: () => invoke('consume_update_intent'),
 };
 
 export const on = (event, handler) => listen(event, handler);

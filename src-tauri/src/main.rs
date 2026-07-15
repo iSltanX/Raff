@@ -9,6 +9,7 @@ mod panel;
 mod paste;
 mod storage;
 mod tray;
+mod updater;
 
 use std::sync::atomic::AtomicI64;
 use std::sync::Mutex;
@@ -45,6 +46,11 @@ fn main() {
             MacosLauncher::LaunchAgent,
             None,
         ))
+        // Official Tauri 2 auto-updater. Registered here so `app.updater()` is
+        // available to the app's own audited update commands (added later);
+        // the webview never talks to the plugin directly, so no `updater`
+        // capability is granted — the update flow stays Rust-side.
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             commands::get_state,
             commands::paste_item,
@@ -62,6 +68,10 @@ fn main() {
             commands::open_accessibility_settings,
             commands::firstrun_done,
             commands::list_running_apps,
+            updater::check_for_update,
+            updater::download_and_install_update,
+            updater::restart_to_update,
+            updater::consume_update_intent,
         ])
         // Keeps the Automatic app icon in sync while following the system
         // appearance (fires when a window's effective theme flips).
@@ -87,6 +97,7 @@ fn main() {
                 skip_change_count: AtomicI64::new(-1),
                 previous_app: Mutex::new(None),
             });
+            app.manage(updater::UpdaterState::new());
 
             let handle = app.handle().clone();
             panel::init(&handle)?;

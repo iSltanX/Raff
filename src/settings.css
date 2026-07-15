@@ -384,6 +384,101 @@ body {
   margin-top: 14px;
 }
 
+/* ─── Updates (داخل «حول») ──────────────────────────────────────────────── */
+
+.update {
+  align-self: stretch;
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.update .btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+  filter: none;
+}
+
+.update-available {
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+/* Author `display:flex` would otherwise defeat the UA `[hidden]` rule. */
+.update-available[hidden] {
+  display: none;
+}
+.update-new-version {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  font-family: var(--font-display);
+}
+.update-date {
+  font-size: 11px;
+  color: var(--secondary);
+}
+.update-notes {
+  align-self: stretch;
+  max-height: 140px;
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-row);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text);
+  text-align: start;
+  /* Release notes are untrusted text: rendered via textContent only, with
+     line breaks preserved safely (no HTML/Markdown parsing). */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.update-progress {
+  align-self: stretch;
+}
+.update-bar {
+  height: 6px;
+  background: var(--input-bg);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.update-bar-fill {
+  height: 100%;
+  width: 0%;
+  background: var(--accent);
+  border-radius: 3px;
+  transition: width 0.2s ease;
+}
+/* Unknown total → non-numeric motion instead of a fake percentage. */
+.update-bar.indeterminate .update-bar-fill {
+  width: 40%;
+  animation: update-indeterminate 1.1s ease-in-out infinite;
+}
+@keyframes update-indeterminate {
+  0% { margin-inline-start: -40%; }
+  100% { margin-inline-start: 100%; }
+}
+
+.update-status {
+  min-height: 1em;
+  font-size: 12px;
+  color: var(--secondary);
+  text-align: center;
+}
+.update-status.error {
+  color: var(--danger);
+}
+
 /* ─── Controlled relaunch notice ───────────────────────────────────────── */
 /* Covers the whole window: shows the message and blocks further clicks
    during the short grace period before رفّ quits and relaunches. */

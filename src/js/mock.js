@@ -77,6 +77,22 @@ export function mockInvoke(cmd, args = {}) {
       return Promise.resolve(null);
     case 'ax_status':
       return Promise.resolve(false);
+    // Design-review sample: shows the richest "update available" state. Events
+    // don't fire outside Tauri, so download resolves straight to "installed".
+    case 'check_for_update':
+      return Promise.resolve({
+        status: 'available',
+        currentVersion: '1.2.1',
+        version: '1.3.0',
+        date: '2026-07-15',
+        notes: 'تحسينات في الأداء وإصلاحات متفرّقة.\nدعم إعادة التشغيل بعد التحديث.',
+      });
+    case 'download_and_install_update':
+    case 'restart_to_update':
+      return Promise.resolve(null);
+    case 'consume_update_intent':
+      return Promise.resolve(false); // no tray in the browser
+
     default:
       return Promise.resolve(null);
   }
