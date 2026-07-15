@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "update-window",
+  "description": "The update window's «حسنًا» button dismisses itself via the window API, and the window resizes between two fixed tiers (compact / expanded) so simple states don't carry the empty space the richest state needs — the only window that needs either from JS.",
+  "windows": ["update"],
+  "permissions": ["core:window:allow-close", "core:window:allow-set-size"]
+}

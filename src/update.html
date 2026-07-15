@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <title>تحديث رفّ</title>
+  <script src="theme.js"></script>
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="update.css" />
+</head>
+<body>
+  <main class="update-window">
+    <img class="update-icon" src="assets/app-icon.png" alt="أيقونة رفّ" width="56" height="56" />
+    <div class="update-app-name">رفّ</div>
+
+    <div class="update-status" id="u-status">جارٍ التحقق من وجود تحديثات…</div>
+
+    <div class="update-available" id="u-available" hidden>
+      <div class="update-new-version" id="u-new-version"></div>
+      <div class="update-date" id="u-date" hidden></div>
+      <div class="update-notes scroll-pane" id="u-notes" dir="auto" hidden></div>
+    </div>
+
+    <div class="update-progress" id="u-progress" hidden>
+      <div class="update-bar" id="u-bar"><div class="update-bar-fill" id="u-bar-fill"></div></div>
+    </div>
+
+    <div class="update-actions">
+      <button class="btn" id="u-ok" hidden>حسنًا</button>
+      <button class="btn btn-primary" id="u-download" hidden>تنزيل التحديث وتثبيته</button>
+      <button class="btn btn-primary" id="u-restart" hidden>إعادة التشغيل</button>
+      <button class="btn" id="u-retry" hidden>إعادة المحاولة</button>
+    </div>
+  </main>
+  <script type="module" src="js/update.js"></script>
+</body>
+</html>

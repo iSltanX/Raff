@@ -3,6 +3,7 @@
 import { api, on } from './store.js';
 import { arabicDigits, metaLine, hotkeyDisplay, hotkeyFromEvent } from './logic.js';
 import { SUN_ICON, MOON_ICON } from './icons.js';
+import { createUpdateFlow } from './update-flow.js';
 
 let settings = null;
 
@@ -307,10 +308,11 @@ function showRelaunchNotice() {
 }
 
 // ─── Updates (تبويب «حول») ────────────────────────────────────────────────
-// Drives the three audited Rust commands (check → download+install → restart)
-// through the invoke bridge — never the updater plugin's JS API directly.
-// `renderUpdate` is the single source of truth for what the section shows, so
-// event-driven and click-driven transitions can never leave it inconsistent.
+// The manual check/download/restart flow is the shared `update-flow.js`
+// module (also used by the standalone update window) — this file only owns
+// the About-tab-specific rendering. The tray's «التحقق من وجود تحديثات…» no
+// longer targets this window at all (it opens its own small update window),
+// so there is no menu-intent handling here.
 
 const updateCheckBtn = el('update-check');
 const updateAvailable = el('update-available');
@@ -324,14 +326,17 @@ const updateBarFill = el('update-bar-fill');
 const updateRestartBtn = el('update-restart');
 const updateStatus = el('update-status');
 
-// Re-entry guard: blocks repeated clicks while a check/download/restart runs.
-let updateBusy = false;
-// Current update-section phase, so the menu entry point can tell whether an
-// operation is already underway (or an install is staged) and avoid a re-check.
-let updatePhase = 'idle';
+function setProgress(percent) {
+  if (percent == null) {
+    updateBar.classList.add('indeterminate');
+    updateBarFill.style.width = '';
+  } else {
+    updateBar.classList.remove('indeterminate');
+    updateBarFill.style.width = `${percent}%`;
+  }
+}
 
 function renderUpdate(state, data = {}) {
-  updatePhase = state;
   // Safe defaults; each state overrides only what it needs.
   updateCheckBtn.hidden = false;
   updateCheckBtn.disabled = false;
@@ -345,10 +350,6 @@ function renderUpdate(state, data = {}) {
   updateStatus.classList.remove('error');
 
   switch (state) {
-    case 'idle':
-      updateStatus.textContent = 'لم يتم التحقق بعد';
-      break;
-
     case 'checking':
       updateCheckBtn.disabled = true;
       updateStatus.textContent = 'جارٍ التحقق من وجود تحديثات…';
@@ -374,6 +375,7 @@ function renderUpdate(state, data = {}) {
       updateAvailable.hidden = false;
       updateDownloadBtn.hidden = true;
       updateProgress.hidden = false;
+      setProgress(data.percent ?? null);
       updateStatus.textContent = 'جارٍ تنزيل التحديث…';
       break;
 
@@ -405,113 +407,17 @@ function renderUpdate(state, data = {}) {
       }
       // from 'check' (or unset): the check button is already visible + enabled.
       break;
+
+    default:
+      updateStatus.textContent = 'لم يتم التحقق بعد';
   }
 }
 
-function setProgress(percent) {
-  if (percent == null) {
-    updateBar.classList.add('indeterminate');
-    updateBarFill.style.width = '';
-  } else {
-    updateBar.classList.remove('indeterminate');
-    updateBarFill.style.width = `${percent}%`;
-  }
-}
+const updateFlow = createUpdateFlow({ onChange: renderUpdate });
 
-const errMessage = (err, fallback) => (typeof err === 'string' && err ? err : fallback);
-
-// The one manual-check flow, shared by the About button and the tray menu.
-async function runUpdateCheck() {
-  if (updateBusy) return;
-  updateBusy = true;
-  renderUpdate('checking');
-  try {
-    const result = await api.checkForUpdate();
-    if (result?.status === 'available') {
-      renderUpdate('available', { version: result.version, date: result.date, notes: result.notes });
-    } else if (result?.status === 'upToDate') {
-      renderUpdate('uptodate');
-    } else {
-      renderUpdate('error', { from: 'check', message: result?.message || 'تعذّر التحقق من التحديث.' });
-    }
-  } catch (err) {
-    renderUpdate('error', { from: 'check', message: errMessage(err, 'تعذّر التحقق من التحديث.') });
-  } finally {
-    updateBusy = false;
-  }
-}
-
-updateCheckBtn.addEventListener('click', runUpdateCheck);
-
-updateDownloadBtn.addEventListener('click', async () => {
-  if (updateBusy) return;
-  updateBusy = true;
-  setProgress(0);
-  renderUpdate('downloading');
-  try {
-    await api.downloadAndInstallUpdate();
-    // Resolves only after install completes; the `installed` event usually
-    // rendered this already — rendering again is idempotent and covers a
-    // missed event.
-    renderUpdate('installed');
-  } catch (err) {
-    renderUpdate('error', { from: 'download', message: errMessage(err, 'تعذّر تنزيل التحديث أو تثبيته.') });
-  } finally {
-    updateBusy = false;
-  }
-});
-
-updateRestartBtn.addEventListener('click', async () => {
-  if (updateBusy) return;
-  updateBusy = true;
-  try {
-    // On success the process relaunches and this webview is torn down — the
-    // promise never resolves. Only a refused/failed restart returns here.
-    await api.restartToUpdate();
-  } catch (err) {
-    renderUpdate('error', { from: 'restart', message: errMessage(err, 'تعذّر إعادة التشغيل.') });
-    updateBusy = false;
-  }
-});
-
-// Progress + lifecycle events from Rust. Registered once at module load (a tab
-// switch never re-runs this; a reopened window is a fresh document with fresh
-// listeners), so handlers cannot accumulate.
-on('raff://update/started', (event) => {
-  updateProgress.hidden = false;
-  setProgress(event?.payload?.total == null ? null : 0);
-});
-on('raff://update/progress', (event) => {
-  setProgress(event?.payload?.percent ?? null);
-});
-on('raff://update/installing', () => renderUpdate('installing'));
-on('raff://update/installed', () => renderUpdate('installed'));
-on('raff://update/error', (event) =>
-  renderUpdate('error', { from: 'download', message: event?.payload?.message || 'تعذّر تنزيل التحديث أو تثبيته.' })
-);
-
-// ─── Menu entry point «التحقق من وجود تحديثات…» ─────────────────────────────
-// The tray item routes here (via a consume-once Rust intent) instead of running
-// its own check. Always surface the About tab; only start a check when nothing
-// is already running and no install is staged awaiting restart.
-function goToAboutAndCheck() {
-  activateTab('about');
-  if (updateBusy || updatePhase === 'installing' || updatePhase === 'installed') return;
-  runUpdateCheck();
-}
-
-// The Rust flag is claimed by whichever path arrives first for a given menu
-// click — the fresh window's load poll (below) or this event on an already-open
-// window — so the check runs exactly once and is never lost.
-async function claimMenuIntent() {
-  try {
-    if (await api.consumeUpdateIntent()) goToAboutAndCheck();
-  } catch (err) {
-    console.error('raff: update-intent claim failed', err);
-  }
-}
-on('raff://open-updates', claimMenuIntent);
-claimMenuIntent();
+updateCheckBtn.addEventListener('click', () => updateFlow.check());
+updateDownloadBtn.addEventListener('click', () => updateFlow.download());
+updateRestartBtn.addEventListener('click', () => updateFlow.restart());
 
 // First load: retry briefly (IPC can lag right after window creation) so a
 // transient failure never leaves the window showing default values.

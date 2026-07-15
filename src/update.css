@@ -1,0 +1,116 @@
+/* Standalone update window — small, no tabs, identity-consistent. */
+
+body {
+  background: var(--canvas);
+}
+
+.update-window {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  height: 100vh;
+  padding: 28px 24px 20px;
+  text-align: center;
+}
+
+.update-icon {
+  border-radius: 14px;
+  margin-bottom: 6px;
+}
+
+.update-app-name {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--text);
+  font-family: var(--font-display);
+}
+
+.update-status {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--secondary);
+  min-height: 1.4em;
+}
+.update-status.error {
+  color: var(--danger);
+}
+
+.update-available {
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+}
+.update-available[hidden] {
+  display: none;
+}
+.update-new-version {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  font-family: var(--font-display);
+}
+.update-date {
+  font-size: 11px;
+  color: var(--secondary);
+}
+.update-notes {
+  align-self: stretch;
+  max-height: 120px;
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-row);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text);
+  text-align: start;
+  /* Release notes are untrusted text: textContent only, line breaks kept
+     visually via pre-wrap — never HTML/Markdown. */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.update-progress {
+  align-self: stretch;
+  margin-top: 10px;
+}
+.update-bar {
+  height: 6px;
+  background: var(--input-bg);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.update-bar-fill {
+  height: 100%;
+  width: 0%;
+  background: var(--accent);
+  border-radius: 3px;
+  transition: width 0.2s ease;
+}
+/* Unknown total → non-numeric motion instead of a fake percentage. */
+.update-bar.indeterminate .update-bar-fill {
+  width: 40%;
+  animation: update-indeterminate 1.1s ease-in-out infinite;
+}
+@keyframes update-indeterminate {
+  0% { margin-inline-start: -40%; }
+  100% { margin-inline-start: 100%; }
+}
+
+.update-actions {
+  margin-top: auto;
+  padding-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-self: stretch;
+}
+.update-actions .btn {
+  width: 100%;
+}

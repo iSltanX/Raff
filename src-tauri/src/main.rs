@@ -73,12 +73,21 @@ fn main() {
             updater::restart_to_update,
             updater::consume_update_intent,
         ])
-        // Keeps the Automatic app icon in sync while following the system
-        // appearance (fires when a window's effective theme flips).
-        .on_window_event(|window, event| {
-            if let tauri::WindowEvent::ThemeChanged(_) = event {
+        .on_window_event(|window, event| match event {
+            // Keeps the Automatic app icon in sync while following the system
+            // appearance (fires when a window's effective theme flips).
+            tauri::WindowEvent::ThemeChanged(_) => {
                 commands::apply_app_icon(window.app_handle());
             }
+            // The update window is a singleton the tray reopens repeatedly —
+            // hide instead of destroy so its in-progress state (or a staged
+            // "restart" prompt) survives being closed and reshown, exactly
+            // like the requirement to show the current operation on reopen.
+            tauri::WindowEvent::CloseRequested { api, .. } if window.label() == "update" => {
+                api.prevent_close();
+                let _ = window.hide();
+            }
+            _ => {}
         })
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;

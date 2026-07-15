@@ -390,29 +390,30 @@ pub fn restart_to_update(app: AppHandle) -> Result<(), String> {
 // ─── Menu entry point ─────────────────────────────────────────────────────────
 //
 // The tray's «التحقق من وجود تحديثات…» must run the *same* manual check the
-// About-tab button runs — never a parallel path. So the menu doesn't touch the
-// updater API at all: it opens/focuses the settings window and asks the About
-// tab to run its own check. Delivery is reliable without any arbitrary delay:
-// a consume-once flag is claimed by whichever arrives first — the settings
-// page's on-load poll (freshly created window) or the event (already-open
-// window) — so the request is never lost and the check never runs twice.
+// update window's flow runs — never a parallel path, and it no longer opens
+// Settings at all. It opens/focuses the small standalone "update" window and
+// asks it to run its own check. Delivery is reliable without any arbitrary
+// delay: a consume-once flag is claimed by whichever arrives first — the
+// update window's on-load poll (freshly created window) or the event
+// (already-open window) — so the request is never lost and the check never
+// runs twice.
 
 /// Set while a menu-driven "check for updates" is pending delivery to the
-/// settings window. Cleared by the first `consume_update_intent` caller.
+/// update window. Cleared by the first `consume_update_intent` caller.
 static PENDING_MENU_CHECK: AtomicBool = AtomicBool::new(false);
 
-/// Tray menu handler: route the request to the existing About-tab flow.
+/// Tray menu handler: route the request to the standalone update window.
 pub fn request_check_from_menu(app: &AppHandle) {
     PENDING_MENU_CHECK.store(true, Ordering::SeqCst);
-    // Create-or-focus the settings window (existing helper; never duplicates).
-    crate::commands::open_settings_window(app);
+    // Create-or-focus the update window (existing helper; never duplicates).
+    crate::commands::open_update_window(app);
     // Covers the already-open case (a live listener receives this). For a
     // freshly created window the event lands before the listener exists and is
     // simply dropped — the on-load poll below claims the flag instead.
     let _ = app.emit("raff://open-updates", ());
 }
 
-/// Claimed once by the settings window (on load, and on `raff://open-updates`).
+/// Claimed once by the update window (on load, and on `raff://open-updates`).
 /// Returns true to exactly one caller; every later caller gets false, so the
 /// menu can never trigger two checks.
 #[tauri::command]

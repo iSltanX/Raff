@@ -563,6 +563,31 @@ pub fn open_firstrun_window(app: &AppHandle) {
     open_window_when_ready(app, "firstrun", "firstrun.html", "رفّ", (480.0, 620.0));
 }
 
+/// Small, tab-less window dedicated to the update cycle (opened by the tray's
+/// «التحقق من وجود تحديثات…»). Unlike settings/firstrun, this window is
+/// hidden — not destroyed — when the user closes it (see main.rs's
+/// `CloseRequested` handler), so "exists but hidden" here usually means "the
+/// user closed it earlier", not "still loading". Reusing
+/// `open_window_when_ready`'s existing-window branch as-is would leave it
+/// hidden forever in that case (it only re-focuses *visible* windows), so an
+/// existing window is shown + focused unconditionally instead.
+///
+/// Built at the *compact* height: the window always opens on the brief
+/// "جارٍ التحقق…" state, and `update.js` grows it once (to the taller
+/// "available/downloading" size) only if that turns out to be needed —
+/// matching this same 280px default avoids a visible resize on first paint.
+pub fn open_update_window(app: &AppHandle) {
+    let handle = app.clone();
+    let _ = app.run_on_main_thread(move || {
+        if let Some(w) = handle.get_webview_window("update") {
+            let _ = w.show();
+            let _ = w.set_focus();
+            return;
+        }
+        open_window_when_ready(&handle, "update", "update.html", "تحديث رفّ", (360.0, 280.0));
+    });
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

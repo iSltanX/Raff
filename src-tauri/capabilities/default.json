@@ -2,6 +2,6 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Least-privilege capabilities for Raff windows: core events/state only. All behavior goes through the app's own audited commands.",
-  "windows": ["panel", "settings", "firstrun"],
+  "windows": ["panel", "settings", "firstrun", "update"],
   "permissions": ["core:default"]
 }
