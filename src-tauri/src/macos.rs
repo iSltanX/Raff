@@ -281,9 +281,8 @@ pub fn open_accessibility_pane() {
 #[link(name = "ApplicationServices", kind = "framework")]
 extern "C" {
     fn AXIsProcessTrusted() -> bool;
-    fn AXIsProcessTrustedWithOptions(
-        options: core_foundation::dictionary::CFDictionaryRef,
-    ) -> bool;
+    fn AXIsProcessTrustedWithOptions(options: core_foundation::dictionary::CFDictionaryRef)
+        -> bool;
     static kAXTrustedCheckOptionPrompt: core_foundation::string::CFStringRef;
 }
 

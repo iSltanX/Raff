@@ -12,3 +12,8 @@ R/identity-extracted/
 R/icon-extracted/
 # Local-only design references (kept on disk, never tracked/distributed).
 /R/
+
+# Reference identity bundles — kept on disk, never tracked or distributed.
+/RAFF-Identity-System-v2.zip
+/Sultan-Visual-Identity.zip
+*.zip

@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 128 128" fill="none">
+  <title>Raff macOS app icon dark master</title>
+  <defs>
+    <linearGradient id="bgd" x1="19" y1="13" x2="108" y2="117" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#7B430E"/><stop offset=".52" stop-color="#9B5814"/><stop offset="1" stop-color="#522807"/>
+    </linearGradient>
+    <linearGradient id="raild" x1="38" y1="37" x2="89" y2="92" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFDF8"/><stop offset="1" stop-color="#F7D788"/>
+    </linearGradient>
+  </defs>
+  <rect x="5" y="5" width="118" height="118" rx="28" fill="url(#bgd)"/>
+  <path d="M15 43c8-18 23-28 48-30 22-2 40 5 51 20" stroke="#fff" stroke-width="2" opacity=".18"/>
+  <rect x="24" y="25" width="80" height="78" rx="22" fill="#fff" opacity=".07"/>
+  <path d="M35 45h58a5 5 0 0 1 5 5v3a5 5 0 0 1-5 5H35a5 5 0 0 1-5-5v-3a5 5 0 0 1 5-5Z" fill="url(#raild)"/>
+  <path d="M88 58v17c0 9-5 14-14 14H47c-6 0-10-4-10-10V67" stroke="url(#raild)" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" opacity=".78"/>
+  <path d="M50 72h27" stroke="url(#raild)" stroke-width="8" stroke-linecap="round" opacity=".38"/>
+  <rect x="58" y="33" width="12" height="12" rx="4" fill="#FFFDF8"/>
+  <rect x="6.5" y="6.5" width="115" height="115" rx="26.5" stroke="#fff" stroke-opacity=".18"/>
+</svg>
+

@@ -10,7 +10,7 @@ use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial, NSVisualEffectStat
 use crate::{macos, AppState};
 
 pub const PANEL_LABEL: &str = "panel";
-const PANEL_WIDTH: f64 = 640.0;
+const PANEL_WIDTH: f64 = 392.0;
 /// NSWindowStyleMaskNonActivatingPanel — the panel can become key (receive
 /// keyboard) without activating the app that owns it.
 const STYLE_MASK_NON_ACTIVATING_PANEL: i32 = 1 << 7;
@@ -40,7 +40,9 @@ pub fn init(app: &AppHandle) -> tauri::Result<()> {
     );
     panel.set_hides_on_deactivate(false);
 
-    let delegate = panel_delegate!(RaffPanelDelegate { window_did_resign_key });
+    let delegate = panel_delegate!(RaffPanelDelegate {
+        window_did_resign_key
+    });
     let handle = app.clone();
     delegate.set_listener(Box::new(move |delegate_name: String| {
         if delegate_name.as_str() == "window_did_resign_key" {
@@ -86,13 +88,11 @@ pub fn hide(app: &AppHandle) {
 
 pub fn toggle(app: &AppHandle) {
     let handle = app.clone();
-    let _ = app.run_on_main_thread(move || {
-        match handle.get_webview_panel(PANEL_LABEL) {
-            Ok(panel) if panel.is_visible() => {
-                panel.order_out(None);
-            }
-            _ => show(&handle),
+    let _ = app.run_on_main_thread(move || match handle.get_webview_panel(PANEL_LABEL) {
+        Ok(panel) if panel.is_visible() => {
+            panel.order_out(None);
         }
+        _ => show(&handle),
     });
 }
 

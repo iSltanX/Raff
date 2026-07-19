@@ -20,10 +20,8 @@ body {
 }
 
 .update-app-name {
-  font-size: 17px;
-  font-weight: 600;
+  font: 800 17px/24px var(--font-display);
   color: var(--text);
-  font-family: var(--font-display);
 }
 
 .update-status {
@@ -48,10 +46,8 @@ body {
   display: none;
 }
 .update-new-version {
-  font-size: 14px;
-  font-weight: 600;
+  font: 700 14px/21px var(--font-display);
   color: var(--text);
-  font-family: var(--font-display);
 }
 .update-date {
   font-size: 11px;

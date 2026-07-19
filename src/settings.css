@@ -137,12 +137,12 @@ body {
   height: 56px;
 }
 .preview-light {
-  background: #f6f3ee;
-  border: 1px solid #e6e0d7;
+  background: #f7f5f1;
+  border: 1px solid #d8d4cc;
 }
 .preview-dark {
-  background: #1b1917;
-  border: 1px solid #38332d;
+  background: #100e0c;
+  border: 1px solid #403b36;
 }
 .pv-search,
 .pv-row {
@@ -158,26 +158,26 @@ body {
   width: 100%;
 }
 .preview-light .pv-search {
-  background: rgba(32, 28, 22, 0.08);
+  background: #faf9f7;
 }
 .preview-light .pv-row {
   background: #ffffff;
-  border: 1px solid #e6e0d7;
+  border: 1px solid #d8d4cc;
 }
 .preview-light .pv-accent {
-  background: rgba(216, 145, 60, 0.18);
-  border: 1px solid #d8913c;
+  background: #fff0cd;
+  border: 1px solid #96540f;
 }
 .preview-dark .pv-search {
-  background: rgba(242, 237, 230, 0.1);
+  background: #24201c;
 }
 .preview-dark .pv-row {
-  background: #262320;
-  border: 1px solid #38332d;
+  background: #1b1815;
+  border: 1px solid #403b36;
 }
 .preview-dark .pv-accent {
-  background: rgba(232, 178, 103, 0.2);
-  border: 1px solid #e8b267;
+  background: #4e270b;
+  border: 1px solid #ecb751;
 }
 
 .card-label {
@@ -358,30 +358,59 @@ body {
   text-align: center;
 }
 .about-icon {
-  border-radius: 16px;
-  margin-bottom: 8px;
+  border-radius: 20px;
+  margin-bottom: var(--s-3);
 }
+/* title2 — Almarai 800 22/30 */
 .about-name {
-  font-size: 22px;
-  font-weight: 600;
+  font: 800 22px/30px var(--font-display);
   color: var(--text);
-  font-family: var(--font-display);
+}
+.about-latin {
+  font: 500 13px/21px var(--font-body);
+  color: var(--muted);
+  direction: ltr;
+  unicode-bidi: isolate;
+  letter-spacing: 0.02em;
 }
 .about-version {
-  font-size: 13px;
+  font: 500 13px/21px var(--font-body);
   color: var(--secondary);
+  margin-top: var(--s-1);
 }
 .about-desc {
-  font-size: 12px;
-  color: var(--secondary);
-  margin-top: 8px;
-  line-height: 1.6;
+  font: 400 13px/21px var(--font-body);
+  color: var(--muted);
+  margin-top: var(--s-2);
 }
+
+/* ─── Rights signature (Sultan Visual Identity) ────────────────────
+   Closing element of «حول». Rendered from the official asset at 300px —
+   above the 180px minimum for the composite signature, and two steps below
+   the product name so it never competes with the رفّ mark. */
 .about-credit {
-  font-size: 11px;
-  color: var(--secondary);
-  /* No opacity: 0.75 × --secondary lands at 3.0:1 on the canvas (below AA). */
-  margin-top: 14px;
+  margin-top: var(--s-8);
+  padding-top: var(--s-5);
+  border-top: var(--b-default) solid var(--separator);
+  align-self: stretch;
+  display: flex;
+  justify-content: center;
+  /* safe area — no element may enter this margin */
+  padding-bottom: var(--s-6);
+}
+.rights-mark {
+  display: block;
+  width: 300px;
+  height: auto;
+}
+.rights-dark {
+  display: none;
+}
+:root[data-appearance='dark'] .rights-light {
+  display: none;
+}
+:root[data-appearance='dark'] .rights-dark {
+  display: block;
 }
 
 /* ─── Updates (داخل «حول») ──────────────────────────────────────────────── */
@@ -415,10 +444,8 @@ body {
   display: none;
 }
 .update-new-version {
-  font-size: 14px;
-  font-weight: 600;
+  font: 700 14px/21px var(--font-display);
   color: var(--text);
-  font-family: var(--font-display);
 }
 .update-date {
   font-size: 11px;

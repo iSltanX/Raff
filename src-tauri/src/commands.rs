@@ -491,9 +491,7 @@ fn begin_relaunch(app: &AppHandle) {
 
 pub fn register_hotkey(app: &AppHandle, accel: &str) -> Result<(), String> {
     use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
-    let shortcut: Shortcut = accel
-        .parse()
-        .map_err(|e| format!("اختصار غير صالح: {e}"))?;
+    let shortcut: Shortcut = accel.parse().map_err(|e| format!("اختصار غير صالح: {e}"))?;
     let gs = app.global_shortcut();
     gs.unregister_all().map_err(|e| e.to_string())?;
     gs.on_shortcut(shortcut, move |app, _shortcut, event| {
@@ -555,7 +553,14 @@ pub fn open_settings_window(app: &AppHandle) {
     // inside the tray-menu callback (see open_window_when_ready).
     let handle = app.clone();
     let _ = app.run_on_main_thread(move || {
-        open_window_when_ready(&handle, "settings", "settings.html", "إعدادات رفّ", (560.0, 540.0));
+        open_window_when_ready(
+            &handle,
+            "settings",
+            "settings.html",
+            "إعدادات رفّ",
+            // component.settings.width / minHeight from the identity tokens.
+            (720.0, 560.0),
+        );
     });
 }
 
@@ -612,14 +617,26 @@ mod tests {
 
     #[test]
     fn auto_follows_explicit_appearance_when_not_following_system() {
-        assert_eq!(icon_variant(AppIconPref::Auto, false, true, false), ICON_DARK);
-        assert_eq!(icon_variant(AppIconPref::Auto, false, false, true), ICON_LIGHT);
+        assert_eq!(
+            icon_variant(AppIconPref::Auto, false, true, false),
+            ICON_DARK
+        );
+        assert_eq!(
+            icon_variant(AppIconPref::Auto, false, false, true),
+            ICON_LIGHT
+        );
     }
 
     #[test]
     fn auto_follows_system_when_following_system() {
-        assert_eq!(icon_variant(AppIconPref::Auto, true, false, true), ICON_DARK);
-        assert_eq!(icon_variant(AppIconPref::Auto, true, true, false), ICON_LIGHT);
+        assert_eq!(
+            icon_variant(AppIconPref::Auto, true, false, true),
+            ICON_DARK
+        );
+        assert_eq!(
+            icon_variant(AppIconPref::Auto, true, true, false),
+            ICON_LIGHT
+        );
     }
 
     #[test]

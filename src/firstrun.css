@@ -28,11 +28,9 @@ body {
 }
 
 .title {
-  font-size: 20px;
-  font-weight: 600;
+  font: 800 22px/30px var(--font-display);
   color: var(--text);
   margin-bottom: 10px;
-  font-family: var(--font-display);
 }
 
 .body-text {

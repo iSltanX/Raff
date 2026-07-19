@@ -149,9 +149,28 @@ pub fn detect_kind(text: &str) -> ItemKind {
 
     let mut score = 0u32;
     const STARTERS: [&str; 22] = [
-        "const ", "let ", "var ", "function ", "fn ", "def ", "class ", "import ", "export ",
-        "#include", "<?php", "select ", "insert ", "update ", "delete from", "package ", "use ",
-        "pub ", "async ", "public ", "private ", "#!/",
+        "const ",
+        "let ",
+        "var ",
+        "function ",
+        "fn ",
+        "def ",
+        "class ",
+        "import ",
+        "export ",
+        "#include",
+        "<?php",
+        "select ",
+        "insert ",
+        "update ",
+        "delete from",
+        "package ",
+        "use ",
+        "pub ",
+        "async ",
+        "public ",
+        "private ",
+        "#!/",
     ];
     let lower = t.to_lowercase();
     if STARTERS.iter().any(|s| lower.starts_with(s)) {
@@ -189,9 +208,10 @@ fn load_json<T: serde::de::DeserializeOwned + Default>(path: &Path) -> T {
     if !path.exists() {
         return T::default();
     }
-    match fs::read_to_string(path).map_err(|e| e.to_string()).and_then(|s| {
-        serde_json::from_str::<T>(&s).map_err(|e| e.to_string())
-    }) {
+    match fs::read_to_string(path)
+        .map_err(|e| e.to_string())
+        .and_then(|s| serde_json::from_str::<T>(&s).map_err(|e| e.to_string()))
+    {
         Ok(v) => v,
         Err(err) => {
             // Never destroy user data silently: keep the unreadable file aside.
@@ -211,7 +231,10 @@ fn save_json<T: Serialize>(path: &Path, value: &T) {
     let tmp = path.with_extension("json.tmp");
     match serde_json::to_vec_pretty(value) {
         Ok(bytes) => {
-            if fs::write(&tmp, bytes).and_then(|_| fs::rename(&tmp, path)).is_err() {
+            if fs::write(&tmp, bytes)
+                .and_then(|_| fs::rename(&tmp, path))
+                .is_err()
+            {
                 eprintln!("raff: failed writing {}", path.display());
             }
         }

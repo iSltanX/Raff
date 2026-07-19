@@ -1,196 +1,283 @@
-/* رفّ — design tokens + shared styles, ported 1:1 from R/ visual identity.
-   Warm paper & wood · honey accent · calm & precise. */
+/* رفّ — Design tokens + shared styles.
+   Ported 1:1 from RAFF-Identity-System-v2 (design-tokens/raff.tokens.json
+   and src/design-system/tokens.ts). Values are the approved semantic tokens;
+   do not hand-tune them here. */
 
 /* ─── Fonts ─────────────────────────────────────────────────────────────────
-   Cairo → display/headings/wordmark · Almarai → body/UI labels.
-   unicode-range limits them to Arabic script so Latin text and digits fall
-   through to the system font (SF Pro), per the identity spec. */
+   Identity families per RAFF-Identity-System-v2:
+     Almarai 800/700 → display, headings, controls, labels
+     Cairo   500/400 → body, fields, messages, metadata
+   Both families carry Latin, so no unicode-range split: the identity fonts
+   own Latin text too (per BRAND-GUIDELINES «لا يحل محل عائلتي الهوية»).
+   Only keycaps and code fall through to the system faces, as in the
+   reference component library. */
 
-@font-face {
-  font-family: 'Cairo';
-  src: url('fonts/Cairo-Light.ttf') format('truetype');
-  font-weight: 300;
-  font-display: block;
-  unicode-range: U+0600-06FF, U+0750-077F, U+08A0-08FF, U+FB50-FDFF, U+FE70-FEFF;
-}
-@font-face {
-  font-family: 'Cairo';
-  src: url('fonts/Cairo-Regular.ttf') format('truetype');
-  font-weight: 400;
-  font-display: block;
-  unicode-range: U+0600-06FF, U+0750-077F, U+08A0-08FF, U+FB50-FDFF, U+FE70-FEFF;
-}
-@font-face {
-  font-family: 'Cairo';
-  src: url('fonts/Cairo-Medium.ttf') format('truetype');
-  font-weight: 500;
-  font-display: block;
-  unicode-range: U+0600-06FF, U+0750-077F, U+08A0-08FF, U+FB50-FDFF, U+FE70-FEFF;
-}
-@font-face {
-  font-family: 'Cairo';
-  src: url('fonts/Cairo-SemiBold.ttf') format('truetype');
-  font-weight: 600;
-  font-display: block;
-  unicode-range: U+0600-06FF, U+0750-077F, U+08A0-08FF, U+FB50-FDFF, U+FE70-FEFF;
-}
-@font-face {
-  font-family: 'Cairo';
-  src: url('fonts/Cairo-Bold.ttf') format('truetype');
-  font-weight: 700;
-  font-display: block;
-  unicode-range: U+0600-06FF, U+0750-077F, U+08A0-08FF, U+FB50-FDFF, U+FE70-FEFF;
-}
-@font-face {
-  font-family: 'Cairo';
-  src: url('fonts/Cairo-ExtraBold.ttf') format('truetype');
-  font-weight: 800;
-  font-display: block;
-  unicode-range: U+0600-06FF, U+0750-077F, U+08A0-08FF, U+FB50-FDFF, U+FE70-FEFF;
-}
-@font-face {
-  font-family: 'Cairo';
-  src: url('fonts/Cairo-Black.ttf') format('truetype');
-  font-weight: 900;
-  font-display: block;
-  unicode-range: U+0600-06FF, U+0750-077F, U+08A0-08FF, U+FB50-FDFF, U+FE70-FEFF;
-}
-@font-face {
-  font-family: 'Almarai';
-  src: url('fonts/Almarai-Light.ttf') format('truetype');
-  font-weight: 300;
-  font-display: block;
-  unicode-range: U+0600-06FF, U+0750-077F, U+08A0-08FF, U+FB50-FDFF, U+FE70-FEFF;
-}
 @font-face {
   font-family: 'Almarai';
   src: url('fonts/Almarai-Regular.ttf') format('truetype');
   font-weight: 400;
   font-display: block;
-  unicode-range: U+0600-06FF, U+0750-077F, U+08A0-08FF, U+FB50-FDFF, U+FE70-FEFF;
 }
 @font-face {
   font-family: 'Almarai';
   src: url('fonts/Almarai-Bold.ttf') format('truetype');
   font-weight: 700;
   font-display: block;
-  unicode-range: U+0600-06FF, U+0750-077F, U+08A0-08FF, U+FB50-FDFF, U+FE70-FEFF;
 }
 @font-face {
   font-family: 'Almarai';
   src: url('fonts/Almarai-ExtraBold.ttf') format('truetype');
   font-weight: 800;
   font-display: block;
-  unicode-range: U+0600-06FF, U+0750-077F, U+08A0-08FF, U+FB50-FDFF, U+FE70-FEFF;
+}
+@font-face {
+  font-family: 'Cairo';
+  src: url('fonts/Cairo-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-display: block;
+}
+@font-face {
+  font-family: 'Cairo';
+  src: url('fonts/Cairo-Medium.ttf') format('truetype');
+  font-weight: 500;
+  font-display: block;
+}
+@font-face {
+  font-family: 'Cairo';
+  src: url('fonts/Cairo-SemiBold.ttf') format('truetype');
+  font-weight: 600;
+  font-display: block;
+}
+@font-face {
+  font-family: 'Cairo';
+  src: url('fonts/Cairo-Bold.ttf') format('truetype');
+  font-weight: 700;
+  font-display: block;
 }
 
-/* ─── Tokens ───────────────────────────────────────────────────────────── */
+/* ─── Semantic tokens · Light ──────────────────────────────────────────── */
 
 :root {
   color-scheme: light;
 
-  --canvas: #F6F3EE;
-  --surface: #FFFFFF;
-  --text: #201C16;
-  --secondary: #736A5E;
-  /* Darker secondary for small text on tinted fills (esc chip, selected row)
-     where plain --secondary falls just below AA. */
-  --secondary-strong: #675F54;
-  --border: #E6E0D7;
-  --accent: #D8913C;
-  --accent-hover: #C7822F;
-  /* Darkened honey for small accent-colored text (WCAG AA ≥ 4.5:1). */
-  --accent-text: #8F5B14;
+  --canvas: #f7f5f1;
+  --canvas-subtle: #f0ede7;
+  --surface: #ffffff;
+  --surface-raised: #faf9f7;
+  --surface-floating: rgba(255, 255, 255, 0.94);
+  --surface-overlay: rgba(16, 14, 12, 0.52);
+  --surface-code: #f1f3f2;
+  --surface-image: #eeeae3;
 
-  --selected-bg: rgba(216, 145, 60, 0.12);
-  --selected-edge: #D8913C;
-  --hover-bg: rgba(32, 28, 22, 0.04);
-  --input-bg: rgba(32, 28, 22, 0.06);
-  /* Reference grey #A09589 is 2.65:1 — placeholder text must still meet AA. */
-  --placeholder: #736A5E;
-  --key-hint: #736A5E;
+  --border: #d8d4cc;
+  --border-strong: #a49e94;
+  --separator: #e4e1da;
 
-  --glass-bg: rgba(246, 243, 238, 0.82);
+  --text: #211d19;
+  --secondary: #5c5650;
+  --secondary-strong: #5c5650;
+  --muted: #716b63;
+  --disabled: #9b958c;
+  --icon-primary: #403b36;
+  --icon-secondary: #716b63;
+
+  --accent: #96540f; /* brandPrimary */
+  --accent-hover: #713b0c; /* amber.700 */
+  --accent-text: #96540f;
+  --on-brand: #ffffff;
+  --accent-secondary: #bb7418;
+
+  --selected-bg: #fff0cd;
+  --selected-strong: #f7d788;
+  --selected-edge: #96540f;
+  --on-selection: #5c300a;
+  --focus-ring: #a55f12;
+
+  --hover-bg: rgba(113, 59, 12, 0.075);
+  --pressed-bg: rgba(113, 59, 12, 0.14);
+  --input-bg: #faf9f7;
+
+  --placeholder: #716b63;
+  --key-hint: #716b63;
+
+  --success: #16643f;
+  --success-bg: #eaf7f0;
+  --warning: #815006;
+  --warning-bg: #fff5d8;
+  --danger: #a12828;
+  --danger-bg: #fdecec;
+  --info: #1f5e9c;
+  --info-bg: #eaf3ff;
+
+  --pinned: #96540f;
+  --search-match: #ffe39b;
+  --update: #1f5e9c;
+
+  --glass-bg: rgba(255, 255, 255, 0.94);
+  --dropdown-bg: rgba(255, 255, 255, 0.94);
+  --toolbar-bg: rgba(250, 249, 247, 0.94);
   --hairline: inset 0 0 0 1px rgba(255, 255, 255, 0.55);
-  --dropdown-bg: rgba(246, 243, 238, 0.95);
-  --toolbar-bg: rgba(246, 243, 238, 0.92);
 
-  --btn-bg: rgba(32, 28, 22, 0.06);
-  --btn-primary: #D8913C;
-  /* White on honey is 2.61:1; dark text (as dark mode already does) passes. */
-  --btn-primary-text: #201C16;
-  --danger: #A93A3A;
-  --danger-bg: rgba(169, 58, 58, 0.08);
+  --btn-bg: #faf9f7;
+  --btn-primary: #96540f;
+  --btn-primary-text: #ffffff;
 
-  --icon-bg: rgba(216, 145, 60, 0.10);
-  --privacy-bg: rgba(216, 145, 60, 0.06);
-  --privacy-border: rgba(216, 145, 60, 0.20);
+  --link-chip-bg: #faf9f7;
+  --link-chip-bg-selected: #f7d788;
 
-  --link-chip-bg: rgba(0, 0, 0, 0.06);
-  --link-chip-bg-selected: rgba(216, 145, 60, 0.15);
+  --tab-active: #211d19;
+  --tab-inactive: #716b63;
+  --toggle-track: #d8d4cc;
 
-  --tab-active: #201C16;
-  --tab-inactive: #736A5E;
-  --toggle-track: #E6E0D7;
-
-  --scrollbar-thumb: rgba(0, 0, 0, 0.15);
-
-  --r-panel: 14px;
-  --r-window: 12px;
-  --r-row: 8px;
-  --r-btn: 7px;
-  --r-chip: 6px;
-
-  --font-display: 'Cairo', 'Almarai', -apple-system, 'SF Arabic', 'Geeza Pro', system-ui, sans-serif;
-  --font-body: 'Almarai', -apple-system, 'SF Arabic', 'Geeza Pro', system-ui, sans-serif;
-  --font-mono: 'SF Mono', ui-monospace, 'Menlo', 'Monaco', monospace;
+  --scrollbar-thumb: rgba(32, 28, 22, 0.18);
 }
+
+/* ─── Semantic tokens · Dark ───────────────────────────────────────────── */
 
 :root[data-appearance='dark'] {
   color-scheme: dark;
 
-  --canvas: #1B1917;
-  --surface: #262320;
-  --text: #F2EDE6;
-  --secondary: #A79D90;
-  --secondary-strong: #A79D90;
-  --border: #38332D;
-  --accent: #E8B267;
-  --accent-hover: #F0BE78;
-  --accent-text: #E8B267;
+  --canvas: #100e0c;
+  --canvas-subtle: #171310;
+  --surface: #1b1815;
+  --surface-raised: #24201c;
+  --surface-floating: rgba(36, 32, 28, 0.94);
+  --surface-overlay: rgba(0, 0, 0, 0.68);
+  --surface-code: #141817;
+  --surface-image: #211d19;
 
-  --selected-bg: rgba(232, 178, 103, 0.16);
-  --selected-edge: #E8B267;
-  --hover-bg: rgba(242, 237, 230, 0.05);
-  --input-bg: rgba(242, 237, 230, 0.06);
-  /* #736A5E is 3.30:1 on the dark glass — below AA for placeholder text. */
-  --placeholder: #A79D90;
-  --key-hint: #A79D90;
+  --border: #403b36;
+  --border-strong: #6b645c;
+  --separator: #292521;
 
-  --glass-bg: rgba(27, 25, 23, 0.88);
+  --text: #f3f1ed;
+  --secondary: #cbc6bd;
+  --secondary-strong: #cbc6bd;
+  --muted: #a49e94;
+  --disabled: #6f6962;
+  --icon-primary: #e4e1da;
+  --icon-secondary: #a49e94;
+
+  --accent: #ecb751; /* brandPrimary */
+  --accent-hover: #f7d788; /* amber.200 */
+  --accent-text: #ecb751;
+  --on-brand: #241303;
+  --accent-secondary: #d9962e;
+
+  --selected-bg: #4e270b;
+  --selected-strong: #713b0c;
+  --selected-edge: #ecb751;
+  --on-selection: #fcebc5;
+  --focus-ring: #f7d788;
+
+  --hover-bg: rgba(247, 215, 136, 0.07);
+  --pressed-bg: rgba(247, 215, 136, 0.13);
+  --input-bg: #24201c;
+
+  --placeholder: #a49e94;
+  --key-hint: #a49e94;
+
+  --success: #72d6a1;
+  --success-bg: #123324;
+  --warning: #f6ca62;
+  --warning-bg: #3a290b;
+  --danger: #ff9595;
+  --danger-bg: #441b1b;
+  --info: #8ac2ff;
+  --info-bg: #18314d;
+
+  --pinned: #ecb751;
+  --search-match: #6a4611;
+  --update: #8ac2ff;
+
+  --glass-bg: rgba(36, 32, 28, 0.94);
+  --dropdown-bg: rgba(36, 32, 28, 0.96);
+  --toolbar-bg: rgba(27, 24, 21, 0.95);
   --hairline: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
-  --dropdown-bg: rgba(38, 35, 32, 0.96);
-  --toolbar-bg: rgba(27, 25, 23, 0.95);
 
-  --btn-bg: rgba(242, 237, 230, 0.08);
-  --btn-primary: #E8B267;
-  --btn-primary-text: #201C16;
-  --danger: #E4716F;
-  --danger-bg: rgba(228, 113, 111, 0.10);
+  --btn-bg: #24201c;
+  --btn-primary: #ecb751;
+  --btn-primary-text: #241303;
 
-  --icon-bg: rgba(232, 178, 103, 0.10);
-  --privacy-bg: rgba(232, 178, 103, 0.06);
-  --privacy-border: rgba(232, 178, 103, 0.18);
+  --link-chip-bg: #24201c;
+  --link-chip-bg-selected: #713b0c;
 
-  --link-chip-bg: rgba(255, 255, 255, 0.07);
-  --link-chip-bg-selected: rgba(232, 178, 103, 0.18);
+  --tab-active: #f3f1ed;
+  --tab-inactive: #a49e94;
+  --toggle-track: #403b36;
 
-  --tab-active: #F2EDE6;
-  /* #736A5E was 3.30:1 on the dark toolbar — below AA for the tab labels. */
-  --tab-inactive: #A79D90;
-  --toggle-track: #38332D;
+  --scrollbar-thumb: rgba(255, 255, 255, 0.14);
+}
 
-  --scrollbar-thumb: rgba(255, 255, 255, 0.12);
+/* ─── Scale tokens (theme-independent) ─────────────────────────────────── */
+
+:root {
+  /* radius */
+  --r-xs: 4px;
+  --r-sm: 6px;
+  --r-md: 8px;
+  --r-lg: 12px;
+  --r-xl: 16px;
+  --r-panel: 18px;
+  --r-round: 999px;
+  /* legacy aliases kept so component sheets stay stable */
+  --r-window: 12px;
+  --r-row: 8px;
+  --r-btn: 6px;
+  --r-chip: 4px;
+
+  /* border */
+  --b-hairline: 0.5px;
+  --b-default: 1px;
+  --b-strong: 1.5px;
+  --b-focus: 2px;
+
+  /* spacing */
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 20px;
+  --s-6: 24px;
+  --s-8: 32px;
+  --s-10: 40px;
+  --s-12: 48px;
+
+  /* blur */
+  --blur-floating: 28px;
+  --blur-popover: 20px;
+  --blur-overlay: 8px;
+
+  /* elevation */
+  --shadow-low: 0 1px 2px rgba(16, 14, 12, 0.08);
+  --shadow-medium: 0 8px 24px rgba(16, 14, 12, 0.16);
+  --shadow-high: 0 24px 70px rgba(16, 14, 12, 0.32);
+
+  /* motion */
+  --t-instant: 0ms;
+  --t-fast: 90ms;
+  --t-base: 150ms;
+  --t-slow: 220ms;
+  --t-deliberate: 320ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-enter: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-exit: cubic-bezier(0.4, 0, 1, 1);
+
+  /* control sizing */
+  --ctl-s: 28px;
+  --ctl-m: 32px;
+  --ctl-l: 38px;
+
+  /* brand-tinted surfaces (resolve per theme through the semantic tokens) */
+  --privacy-bg: var(--selected-bg);
+  --privacy-border: var(--selected-strong);
+  --icon-bg: var(--selected-bg);
+
+  /* families */
+  --font-display: 'Almarai', -apple-system, 'SF Arabic', system-ui, sans-serif;
+  --font-body: 'Cairo', -apple-system, 'SF Arabic', system-ui, sans-serif;
+  --font-mono: ui-monospace, 'SFMono-Regular', 'SF Mono', Menlo, monospace;
+  --font-system: -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
 /* ─── Base ─────────────────────────────────────────────────────────────── */
@@ -208,6 +295,7 @@ body {
 
 body {
   font-family: var(--font-body);
+  font-weight: 400;
   color: var(--text);
   -webkit-font-smoothing: antialiased;
   user-select: none;
@@ -236,20 +324,21 @@ body {
 
 .divider {
   height: 1px;
-  background: var(--border);
+  background: var(--separator);
   flex-shrink: 0;
 }
 
-/* ─── Shared components (toggle · buttons · section labels) ───────────── */
+/* ─── Shared components ───────────────────────────────────────────────── */
 
+/* switch — 36×20, knob 14, per component library */
 .toggle {
   width: 36px;
   height: 20px;
-  border-radius: 10px;
+  border-radius: var(--r-round);
   background: var(--toggle-track);
   position: relative;
   flex-shrink: 0;
-  transition: background 0.2s;
+  transition: background var(--t-base) var(--ease-standard);
   border: none;
   cursor: pointer;
   padding: 0;
@@ -258,38 +347,45 @@ body {
   content: '';
   position: absolute;
   top: 3px;
-  left: 3px;
+  inset-inline-start: 3px;
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  background: #fff;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
-  transition: left 0.2s;
+  background: var(--surface);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.24);
+  transition: inset-inline-start var(--t-base) var(--ease-standard);
 }
 .toggle[aria-checked='true'] {
   background: var(--accent);
 }
 .toggle[aria-checked='true']::after {
-  left: 19px;
+  inset-inline-start: 19px;
 }
 
+/* button — Almarai 700 13/18, medium height 32 */
 .btn {
-  padding: 5px 12px;
-  border-radius: var(--r-btn);
-  border: none;
+  min-height: var(--ctl-m);
+  padding: 0 14px;
+  border-radius: var(--r-sm);
+  border: var(--b-default) solid var(--border);
   cursor: pointer;
-  font-size: 13px;
-  font-family: var(--font-body);
+  font: 700 13px/18px var(--font-display);
   background: var(--btn-bg);
   color: var(--text);
+  transition:
+    background var(--t-fast) var(--ease-standard),
+    border-color var(--t-fast) var(--ease-standard);
 }
 .btn:hover {
-  filter: brightness(0.97);
+  background: var(--hover-bg);
+}
+.btn:active {
+  background: var(--pressed-bg);
 }
 .btn-primary {
   background: var(--btn-primary);
   color: var(--btn-primary-text);
-  font-weight: 500;
+  border-color: transparent;
 }
 .btn-primary:hover {
   background: var(--accent-hover);
@@ -297,32 +393,45 @@ body {
 .btn-danger {
   background: var(--danger-bg);
   color: var(--danger);
+  border-color: transparent;
 }
 
+/* label — Almarai 700 12/18 */
 .section-label {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--secondary);
-  letter-spacing: 0.04em;
-  padding: 16px 0 6px;
-  font-family: var(--font-display);
+  font: 700 12px/18px var(--font-display);
+  color: var(--muted);
+  padding: var(--s-4) 0 var(--s-2);
 }
 
+/* keycap — system face, as in the reference component library */
 kbd,
 .kbd {
-  font-family: inherit;
-  font-size: 13px;
-  background: var(--btn-bg);
-  color: var(--text);
-  border-radius: var(--r-chip);
-  padding: 4px 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  font: 500 11px/1 var(--font-system);
+  background: var(--surface-raised);
+  color: var(--muted);
+  border: var(--b-default) solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  white-space: nowrap;
   direction: ltr; /* keep ⇧⌘V in shortcut order inside RTL layout */
   unicode-bidi: isolate;
 }
 
+/* Focus Visible = 2px ring + 2px gap, per DEVELOPER-HANDOFF. */
 :focus-visible {
-  /* --accent is 2.36:1 against the light canvas — below the 3:1 required of
-     focus indicators; the text-grade honey passes in both themes. */
-  outline: 2px solid var(--accent-text);
-  outline-offset: 1px;
+  outline: var(--b-focus) solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
 }

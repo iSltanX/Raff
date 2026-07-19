@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="280" height="104" viewBox="0 0 280 104" fill="none">
+  <title>رفّ Raff — bilingual lockup for dark backgrounds</title>
+  <g transform="translate(219 24)">
+    <path d="M6 9.5h28a2 2 0 0 1 2 2v1.3a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-1.3a2 2 0 0 1 2-2Z" fill="#ECB751"/>
+    <path d="M31.5 14.8v8.7c0 4.2-2.6 6.8-6.8 6.8H12.2a3.8 3.8 0 0 1-3.8-3.8v-6.2" stroke="#ECB751" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round" opacity=".62"/>
+    <path d="M14.2 21.2h11.6" stroke="#ECB751" stroke-width="3.6" stroke-linecap="round" opacity=".3"/>
+    <rect x="17" y="4.5" width="6" height="5" rx="2" fill="#ECB751"/>
+  </g>
+  <text x="200" y="59" text-anchor="end" fill="#F3F1ED" font-family="Almarai, sans-serif" font-size="48" font-weight="800">رفّ</text>
+  <text x="199" y="78" text-anchor="end" fill="#A49E94" font-family="Almarai, sans-serif" font-size="12" font-weight="700" letter-spacing="3">RAFF</text>
+  <rect x="125" y="65" width="34" height="3" rx="1.5" fill="#F3F1ED" opacity=".4"/>
+</svg>
+

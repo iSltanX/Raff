@@ -9,7 +9,17 @@
 </head>
 <body>
   <main class="panel" id="panel">
-    <div class="search-row">
+    <div class="panel-titlebar">
+      <div class="panel-brand">
+        <img class="panel-mark" src="assets/brand/raff-mark.svg" alt="" width="23" height="23" aria-hidden="true" />
+        <strong>رفّ</strong>
+      </div>
+      <div class="panel-title-actions">
+        <span class="privacy-chip" id="privacy-chip" title="كل شيء على جهازك">محلي</span>
+      </div>
+    </div>
+
+    <div class="search-field" id="search-field">
       <span class="search-icon" id="search-icon" aria-hidden="true"></span>
       <input
         id="search"
@@ -22,18 +32,18 @@
         aria-label="ابحث في رفّك"
       />
       <span class="esc-chip" id="esc-chip" hidden>esc</span>
+      <kbd class="search-kbd" aria-hidden="true">⌘F</kbd>
     </div>
-    <div class="divider"></div>
+
     <div class="list scroll-pane" id="list" role="listbox" aria-label="عناصر الحافظة"></div>
-    <div class="divider"></div>
+
     <footer class="footer">
       <!-- .keys isolates each shortcut so the bidi algorithm can't flip
            ⌥P into P⌥ inside the RTL line. -->
-      <span class="hint"><span class="keys">↑↓</span> تنقّل</span>
-      <span class="hint"><span class="keys">⏎</span> لصق</span>
-      <span class="hint"><span class="keys">⌥P</span> تثبيت</span>
-      <span class="hint"><span class="keys">⌘F</span> بحث</span>
-      <span class="hint"><span class="keys">esc</span> إغلاق</span>
+      <span class="hint"><kbd class="keys">↑↓</kbd> تنقّل</span>
+      <span class="hint"><kbd class="keys">⏎</kbd> لصق</span>
+      <span class="hint"><kbd class="keys">⌥P</kbd> تثبيت</span>
+      <i class="footer-spacer"></i>
       <span class="toast" id="toast" hidden></span>
     </footer>
   </main>
