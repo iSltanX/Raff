@@ -162,7 +162,7 @@
           <img class="about-icon" src="assets/app-icon/raff-app-icon-master.svg" alt="أيقونة رفّ" width="88" height="88" />
           <div class="about-name">رفّ</div>
           <div class="about-latin">Raff</div>
-          <div class="about-version" id="about-version">الإصدار ٢٫٠٫٠</div>
+          <div class="about-version" id="about-version">الإصدار ٢٫١٫٠</div>
           <p class="about-desc">
             مدير الحافظة الشخصي والخاص لنظام macOS.<br />
             لا سحابة. لا حساب. كل شيء على جهازك.
@@ -190,21 +190,28 @@
 
           <!-- Rights signature — Sultan Visual Identity, assets/rights/rights-bilingual.svg
                («برمجة وتصميم: سلطان · Design & Development»). Closing element of
-               «حول»: nothing follows it. Light/dark are the official colourways. -->
+               «حول»: nothing follows it. Light/dark are the official colourways.
+               The viewBox is cropped to the artwork's own content bbox (was
+               360x64 with dead canvas past the text, which threw the centered
+               block visibly off to one side) and the fonts are embedded as
+               subsets so Almarai/Cairo actually render instead of silently
+               falling back to Arial — an <img>-referenced SVG can't see the
+               page's @font-face. Same paths, same colours, same on-screen
+               scale (206/247.17 = 300/360, unchanged). -->
           <p class="about-credit">
             <img
               class="rights-mark rights-light"
               src="assets/rights/rights-bilingual-light.svg"
               alt="برمجة وتصميم: سلطان"
-              width="300"
-              height="53"
+              width="206"
+              height="52.5"
             />
             <img
               class="rights-mark rights-dark"
               src="assets/rights/rights-bilingual-dark.svg"
               alt="برمجة وتصميم: سلطان"
-              width="300"
-              height="53"
+              width="206"
+              height="52.5"
               aria-hidden="true"
             />
           </p>

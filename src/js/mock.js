@@ -84,9 +84,9 @@ export function mockInvoke(cmd, args = {}) {
     case 'check_for_update':
       return Promise.resolve({
         status: 'available',
-        currentVersion: '1.2.1',
-        version: '1.3.0',
-        date: '2026-07-15',
+        currentVersion: '2.1.0',
+        version: '2.2.0',
+        date: '2026-07-19',
         notes: 'تحسينات في الأداء وإصلاحات متفرّقة.\nدعم إعادة التشغيل بعد التحديث.',
       });
     case 'download_and_install_update':

@@ -6,7 +6,7 @@
 
 كل ما نسخته يبقى قريبًا، مرتبًا، وخاصًا.
 
-[![الإصدار](https://img.shields.io/badge/%D8%A7%D9%84%D8%A5%D8%B5%D8%AF%D8%A7%D8%B1-v2.0.0-96540F?style=flat-square)](https://github.com/iSltanX/Raff-releases/releases/latest)
+[![الإصدار](https://img.shields.io/badge/%D8%A7%D9%84%D8%A5%D8%B5%D8%AF%D8%A7%D8%B1-v2.1.0-96540F?style=flat-square)](https://github.com/iSltanX/Raff-releases/releases/latest)
 [![macOS](https://img.shields.io/badge/macOS-12%2B%20·%20Apple%20Silicon-211D19?style=flat-square)](https://github.com/iSltanX/Raff-releases/releases/latest)
 [![محلي بالكامل](https://img.shields.io/badge/%D9%85%D8%AD%D9%84%D9%8A%20%D8%A8%D8%A7%D9%84%D9%83%D8%A7%D9%85%D9%84-%D8%A8%D9%84%D8%A7%20%D8%B4%D8%A8%D9%83%D8%A9-16643F?style=flat-square)](#الخصوصية--local-first)
 
@@ -108,7 +108,7 @@
 
 ## التثبيت
 
-1. نزّل `Raff_2.0.0_aarch64.dmg` من
+1. نزّل `Raff_2.1.0_aarch64.dmg` من
    [صفحة الإصدارات](https://github.com/iSltanX/Raff-releases/releases/latest).
 2. افتح الملف واسحب **Raff** إلى مجلد التطبيقات.
 3. شغّل رفّ. ستجده في **شريط القائمة** — لا تبحث عنه في Dock، فهو تطبيق
@@ -143,7 +143,7 @@
 
 ---
 
-## لقطات من الإصدار v2.0.0
+## لقطات من الإصدار v2.1.0
 
 <div align="center">
 
@@ -157,7 +157,7 @@
 
 </div>
 
-> اللقطات مأخوذة من واجهة الإصدار v2.0.0 نفسها — الملفات المضمَّنة داخل
+> اللقطات مأخوذة من واجهة الإصدار v2.1.0 نفسها — الملفات المضمَّنة داخل
 > `Raff.app` — وبيانات العناصر فيها عيّنة عرض لا محتوى حقيقي.
 
 ---
@@ -166,14 +166,15 @@
 
 | | |
 | --- | --- |
-| الإصدار الحالي | **v2.0.0** |
+| الإصدار الحالي | **v2.1.0** |
 | المعمارية | macOS arm64 (Apple Silicon) |
 | التوقيع | ad-hoc — غير موثَّق من Apple |
 | قناة التحديث | Tauri Updater عبر Raff-releases |
 | سجل التغييرات | [CHANGELOG.md](CHANGELOG.md) |
 
-جوهر الإصدار v2.0.0 هو اعتماد نظام هوية «رفّ» البصري v2 على كامل الواجهة:
-الألوان، الخطوط، الأيقونات، اللوحة العائمة، الإعدادات، ونافذة «حول».
+v2.1.0 إصدار إصلاحات: يصحّح تنفيذ توقيع «برمجة وتصميم سلطان» في نافذة «حول»
+(التمركز والخط)، فوق أساس هوية «رفّ» البصري v2 المعتمد في v2.0.0 — الألوان
+والخطوط والأيقونات واللوحة العائمة والإعدادات ونافذة «حول».
 
 ---
 
@@ -228,7 +229,7 @@ src-tauri/           خلفية Rust
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/sultan-rights-dark.svg" />
-  <img src="docs/assets/sultan-rights-light.svg" alt="برمجة وتصميم: سلطان — Sultan · Design & Development" width="300" />
+  <img src="docs/assets/sultan-rights-light.svg" alt="برمجة وتصميم: سلطان — Sultan · Design & Development" width="206" />
 </picture>
 
 </div>
