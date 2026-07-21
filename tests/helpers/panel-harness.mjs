@@ -50,11 +50,16 @@ export function createFakeTauri(initialState, { failTimes = 0 } = {}) {
   let remainingFailures = failTimes;
   const listeners = new Map();
   const listenCalls = new Map();
+  const deletedIds = [];
   let getStateCalls = 0;
+
+  const notify = (event, payload = null) => {
+    for (const handler of [...(listeners.get(event) ?? [])]) handler({ event, payload });
+  };
 
   const tauri = {
     core: {
-      invoke: (cmd) => {
+      invoke: (cmd, args) => {
         if (cmd === 'get_state') {
           getStateCalls++;
           if (remainingFailures === Infinity || remainingFailures > 0) {
@@ -64,6 +69,23 @@ export function createFakeTauri(initialState, { failTimes = 0 } = {}) {
           return Promise.resolve(structuredClone(state));
         }
         if (cmd === 'get_image') return Promise.resolve('data:image/png;base64,AAAA');
+        if (cmd === 'delete_item') {
+          // Mirrors the real `delete_item` command: mutate the store, persist
+          // (there is no disk here, but the mutation is permanent within this
+          // fake's `state`), then notify — so a later get_state (a refresh)
+          // never brings the deleted item back.
+          const id = args?.id;
+          deletedIds.push(id);
+          state = {
+            ...state,
+            pinned: state.pinned.filter((i) => i.id !== id),
+            history: state.history.filter((i) => i.id !== id),
+          };
+          return Promise.resolve(null).then((result) => {
+            notify('raff://changed');
+            return result;
+          });
+        }
         return Promise.resolve(null);
       },
     },
@@ -80,16 +102,22 @@ export function createFakeTauri(initialState, { failTimes = 0 } = {}) {
   return {
     tauri,
     emit(event, payload) {
-      for (const handler of [...(listeners.get(event) ?? [])]) handler({ event, payload });
+      notify(event, payload);
     },
     setState(next) {
       state = next;
+    },
+    getState() {
+      return structuredClone(state);
     },
     failForever() {
       remainingFailures = Infinity;
     },
     stopFailing() {
       remainingFailures = 0;
+    },
+    deletedIds() {
+      return [...deletedIds];
     },
     listenCallCount(event) {
       return listenCalls.get(event) ?? 0;

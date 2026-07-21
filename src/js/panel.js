@@ -449,6 +449,10 @@ window.addEventListener('keydown', (e) => {
     return;
   }
   if (e.metaKey && e.key === 'Backspace') {
+    // A text field (the search input) owns ⌘⌫ for its own native editing —
+    // delete-to-start-of-line, or a no-op when empty. Item deletion must
+    // never steal that away while the user is typing.
+    if (isWritable(document.activeElement)) return;
     e.preventDefault();
     if (selectedId) {
       // Keep the selection at the same list position instead of snapping
