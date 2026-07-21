@@ -6,11 +6,11 @@
 
 كل ما نسخته يبقى قريبًا، مرتبًا، وخاصًا.
 
-[![الإصدار](https://img.shields.io/badge/%D8%A7%D9%84%D8%A5%D8%B5%D8%AF%D8%A7%D8%B1-v2.1.2-96540F?style=flat-square)](https://github.com/iSltanX/Raff-releases/releases/latest)
-[![macOS](https://img.shields.io/badge/macOS-12%2B%20·%20Apple%20Silicon-211D19?style=flat-square)](https://github.com/iSltanX/Raff-releases/releases/latest)
+[![الإصدار](https://img.shields.io/badge/%D8%A7%D9%84%D8%A5%D8%B5%D8%AF%D8%A7%D8%B1-v2.1.2-96540F?style=flat-square)](https://github.com/iSltanX/Raff/releases/latest)
+[![macOS](https://img.shields.io/badge/macOS-12%2B%20·%20Apple%20Silicon-211D19?style=flat-square)](https://github.com/iSltanX/Raff/releases/latest)
 [![محلي بالكامل](https://img.shields.io/badge/%D9%85%D8%AD%D9%84%D9%8A%20%D8%A8%D8%A7%D9%84%D9%83%D8%A7%D9%85%D9%84-%D8%A8%D9%84%D8%A7%20%D8%B4%D8%A8%D9%83%D8%A9-16643F?style=flat-square)](#الخصوصية--local-first)
 
-### [⬇︎ تنزيل أحدث إصدار](https://github.com/iSltanX/Raff-releases/releases/latest)
+### [⬇︎ تنزيل أحدث إصدار](https://github.com/iSltanX/Raff/releases/latest)
 
 </div>
 
@@ -109,7 +109,7 @@
 ## التثبيت
 
 1. نزّل `Raff_2.1.2_aarch64.dmg` من
-   [صفحة الإصدارات](https://github.com/iSltanX/Raff-releases/releases/latest).
+   [صفحة الإصدارات](https://github.com/iSltanX/Raff/releases/latest).
 2. افتح الملف واسحب **Raff** إلى مجلد التطبيقات.
 3. شغّل رفّ. ستجده في **شريط القائمة** — لا تبحث عنه في Dock، فهو تطبيق
    خلفية بلا أيقونة Dock.
@@ -132,8 +132,8 @@
 ## التحديث
 
 يتحقق رفّ من التحديثات عبر قناة موقّعة على
-[Raff-releases](https://github.com/iSltanX/Raff-releases). كل حزمة تحديث موقّعة
-بمفتاح خاص، ويرفض التطبيق أي حزمة لا يتطابق توقيعها.
+[صفحة إصدارات رفّ](https://github.com/iSltanX/Raff/releases). كل حزمة تحديث
+موقّعة بمفتاح خاص، ويرفض التطبيق أي حزمة لا يتطابق توقيعها.
 
 للتحديث يدويًا: **الإعدادات ← حول ← التحقق من وجود تحديثات**.
 
@@ -169,7 +169,7 @@
 | الإصدار الحالي | **v2.1.2** |
 | المعمارية | macOS arm64 (Apple Silicon) |
 | التوقيع | ad-hoc — غير موثَّق من Apple |
-| قناة التحديث | Tauri Updater عبر Raff-releases |
+| قناة التحديث | Tauri Updater عبر إصدارات هذا المستودع |
 | سجل التغييرات | [CHANGELOG.md](CHANGELOG.md) |
 
 v2.1.2 إصلاح وظيفي: نافذة «رفّ» كانت تظهر فارغة عند إعادة فتحها بعد نسخ عنصر
@@ -219,6 +219,17 @@ src-tauri/           خلفية Rust
   src/macos.rs       حدود AppKit
   src/commands.rs    واجهة IPC بأقل صلاحية
 ```
+
+---
+
+## الإبلاغ عن المشكلات
+
+للإبلاغ عن خلل أو اقتراح تحسين، افتح مسألة جديدة على
+[صفحة المسائل](https://github.com/iSltanX/Raff/issues).
+
+يفيد إرفاق: إصدار رفّ (من **الإعدادات ← حول**)، وإصدار macOS، وخطوات إعادة
+إنتاج المشكلة. لا ترفق محتوى حافظة تعتبره خاصًا — رفّ لا يرسل شيئًا تلقائيًا،
+وما تكتبه في المسألة يصير علنيًا.
 
 ---
 

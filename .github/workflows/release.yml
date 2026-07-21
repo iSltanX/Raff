@@ -1,0 +1,75 @@
+# يبني «رفّ» وينشر حزمه في إصدارات هذا المستودع نفسه — لا مستودع إصدارات منفصل.
+#
+# التشغيل: ادفع وسمًا بصيغة vX.Y.Z (مطابقًا للنسخة في package.json و tauri.conf.json)،
+# أو شغّل التدفّق يدويًا من تبويب Actions.
+#
+# المُخرَجات المرفوعة إلى الإصدار:
+#   Raff_<version>_aarch64.dmg   حزمة التثبيت
+#   Raff.app.tar.gz              حزمة التحديث التلقائي
+#   Raff.app.tar.gz.sig          توقيع minisign للحزمة
+#   latest.json                  بيان التحديث الذي يقرأه التطبيق
+#
+# يُنشأ الإصدار كمسودّة عمدًا: ملاحظات الإصدار تُكتب بلغة المستخدم قبل النشر،
+# ولا يبدأ التحديث التلقائي بالوصول إلى المستخدمين إلا بعد نشر المسودّة يدويًا.
+#
+# الأسرار المطلوبة في إعدادات المستودع (Settings ← Secrets ← Actions):
+#   TAURI_SIGNING_PRIVATE_KEY            محتوى مفتاح التوقيع الخاص (~/.tauri/raff.key)
+#   TAURI_SIGNING_PRIVATE_KEY_PASSWORD   كلمة مروره — اتركه فارغًا إن لم يكن للمفتاح كلمة مرور
+#
+# المفتاح العام مثبَّت في tauri.conf.json ولا يتغيّر؛ أي تدوير له يُبطل التحديث
+# التلقائي لكل نسخة مثبَّتة سلفًا.
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    # Apple Silicon runner — رفّ يُبنى لـ aarch64 فقط.
+    runs-on: macos-14
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: تثبيت الاعتماديات
+        run: npm ci
+
+      - name: اختبارات الواجهة
+        run: npm test
+
+      - name: اختبارات الخلفية
+        run: cargo test --manifest-path src-tauri/Cargo.toml
+
+      - name: البناء والنشر
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: رفّ ${{ github.ref_name }}
+          releaseBody: اكتب ملاحظات الإصدار بلغة المستخدم قبل النشر.
+          releaseDraft: true
+          prerelease: false
+          includeUpdaterJson: true
+          args: --target aarch64-apple-darwin
