@@ -246,10 +246,86 @@ function confirmButton(id, action) {
   });
 }
 
-confirmButton('clear-history', () => api.clearHistory());
 confirmButton('clear-learning', async () => {
   await api.clearLearning();
   if (!el('learning-view').hidden) renderLearning();
+});
+
+// ─── Confirmation dialog ──────────────────────────────────────────────────
+// Wiped clipboard content is unrecoverable, so «مسح سجل الحافظة» gets an
+// explicit dialog that names the consequence — not the two-tap arming above,
+// which is fine for the reversible-in-practice learning signals but too easy
+// to trigger by accident for permanent deletion.
+
+const confirmOverlay = el('confirm-overlay');
+const confirmCancel = el('confirm-cancel');
+const confirmAccept = el('confirm-accept');
+
+let settleConfirm = null;
+
+/** Opens the modal and resolves true only when the user confirms. */
+function askConfirm() {
+  if (settleConfirm) return Promise.resolve(false); // already open
+  return new Promise((resolve) => {
+    const restoreFocus = document.activeElement;
+    settleConfirm = (result) => {
+      settleConfirm = null;
+      confirmOverlay.hidden = true;
+      document.removeEventListener('keydown', onKeydown, true);
+      restoreFocus?.focus?.();
+      resolve(result);
+    };
+    document.addEventListener('keydown', onKeydown, true);
+    confirmOverlay.hidden = false;
+    // Cancel is focused first: the destructive button must never be the
+    // default target of a stray Return.
+    confirmCancel.focus();
+  });
+}
+
+// Escape cancels; Tab cycles between the two buttons so focus cannot reach
+// the settings behind the overlay while it is open.
+function onKeydown(e) {
+  if (!settleConfirm) return;
+  if (e.key === 'Escape') {
+    e.preventDefault();
+    settleConfirm(false);
+    return;
+  }
+  if (e.key !== 'Tab') return;
+  e.preventDefault();
+  const next = document.activeElement === confirmCancel ? confirmAccept : confirmCancel;
+  next.focus();
+}
+
+confirmCancel.addEventListener('click', () => settleConfirm?.(false));
+confirmAccept.addEventListener('click', () => settleConfirm?.(true));
+// A click on the backdrop (never on the dialog itself) cancels.
+confirmOverlay.addEventListener('mousedown', (e) => {
+  if (e.target === confirmOverlay) settleConfirm?.(false);
+});
+
+// ─── «مسح سجل الحافظة» ────────────────────────────────────────────────────
+
+const dataStatus = el('data-status');
+let dataStatusTimer = null;
+
+function showDataStatus(message) {
+  dataStatus.textContent = message;
+  dataStatus.hidden = false;
+  clearTimeout(dataStatusTimer);
+  dataStatusTimer = setTimeout(() => {
+    dataStatus.hidden = true;
+  }, 4000);
+}
+
+el('clear-history').addEventListener('click', async () => {
+  if (!(await askConfirm())) return;
+  await api.clearHistory();
+  // The learning summary is drawn from the same items, so a visible one would
+  // otherwise keep showing rows that no longer exist.
+  if (!el('learning-view').hidden) await renderLearning();
+  showDataStatus('تم مسح سجل الحافظة.');
 });
 
 // ─── "عرض ما تعلّمه رفّ" ─────────────────────────────────────────────────

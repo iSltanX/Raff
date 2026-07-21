@@ -132,9 +132,13 @@
 
         <div class="section-label">البيانات</div>
         <div class="setting-row">
-          <div class="setting-title danger">مسح السجل كاملًا</div>
-          <button class="btn btn-danger confirm-btn" id="clear-history" data-label="مسح الآن…" data-confirm="متأكد؟ اضغط للتأكيد">مسح الآن…</button>
+          <div>
+            <div class="setting-title danger">مسح سجل الحافظة</div>
+            <div class="setting-sub">يحذف العناصر غير المثبّتة نهائيًا — تبقى العناصر المثبّتة كما هي</div>
+          </div>
+          <button class="btn btn-danger" id="clear-history">مسح سجل الحافظة…</button>
         </div>
+        <div class="setting-note" id="data-status" role="status" hidden></div>
       </section>
 
       <!-- التعلّم -->
@@ -162,7 +166,7 @@
           <img class="about-icon" src="assets/app-icon/raff-app-icon-master.svg" alt="أيقونة رفّ" width="88" height="88" />
           <div class="about-name">رفّ</div>
           <div class="about-latin">Raff</div>
-          <div class="about-version" id="about-version">الإصدار ٢٫١٫١</div>
+          <div class="about-version" id="about-version">الإصدار ٢٫١٫٢</div>
           <p class="about-desc">
             مدير الحافظة الشخصي والخاص لنظام macOS.<br />
             لا سحابة. لا حساب. كل شيء على جهازك.
@@ -218,6 +222,30 @@
       </section>
     </div>
   </div>
+
+  <!-- Destructive-action confirmation. A plain overlay (not <dialog>), matching
+       .relaunch-overlay: <dialog>.showModal() needs Safari 15.4+, and the
+       bundle still supports macOS 12.0 whose shipping WebKit predates it. -->
+  <div class="confirm-overlay" id="confirm-overlay" hidden>
+    <div
+      class="confirm-dialog"
+      role="alertdialog"
+      aria-modal="true"
+      aria-labelledby="confirm-title"
+      aria-describedby="confirm-text"
+    >
+      <div class="confirm-title" id="confirm-title">مسح سجل الحافظة؟</div>
+      <p class="confirm-text" id="confirm-text">
+        سيتم حذف جميع العناصر غير المثبّتة من سجل الحافظة نهائيًا. لا يمكن
+        التراجع عن هذه العملية.
+      </p>
+      <div class="confirm-actions">
+        <button class="btn" id="confirm-cancel">إلغاء</button>
+        <button class="btn btn-danger" id="confirm-accept">مسح السجل</button>
+      </div>
+    </div>
+  </div>
+
   <script type="module" src="js/settings.js"></script>
 </body>
 </html>

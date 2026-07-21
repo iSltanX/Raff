@@ -566,6 +566,54 @@ mod tests {
         assert_eq!(s.settings.app_icon, AppIconPref::Auto);
     }
 
+    /// «مسح سجل الحافظة» must empty the recent layer only — the pinned shelf
+    /// is the user's deliberate keep-list and survives the wipe untouched.
+    #[test]
+    fn clear_history_keeps_pinned() {
+        let mut s = store();
+        capture_text(&mut s, "throwaway");
+        capture_text(&mut s, "keep me");
+        capture_text(&mut s, "another");
+        let pinned_id = s
+            .history
+            .iter()
+            .find(|i| i.text == "keep me")
+            .unwrap()
+            .id
+            .clone();
+        assert!(s.toggle_pin(&pinned_id));
+        assert_eq!(s.pinned.len(), 1);
+        assert_eq!(s.history.len(), 2);
+
+        s.clear_history();
+
+        assert!(s.history.is_empty(), "recent items are gone");
+        assert_eq!(s.pinned.len(), 1, "pinned shelf survives");
+        assert_eq!(s.pinned[0].text, "keep me");
+        assert!(s.pinned[0].is_pinned);
+        // The kept item is still addressable (no dangling/ghost entries).
+        assert!(s.find(&pinned_id).is_some());
+    }
+
+    /// Settings and learning signals are separate concerns from the history
+    /// wipe: clearing the shelf must not silently reset either.
+    #[test]
+    fn clear_history_leaves_settings_and_pinned_signals_alone() {
+        let mut s = store();
+        s.settings.hotkey = "shift+super+r".into();
+        s.settings.history_limit = 42;
+        capture_text(&mut s, "pin me");
+        let id = s.history[0].id.clone();
+        s.toggle_pin(&id);
+        s.find_mut(&id).unwrap().paste_count = 7;
+
+        s.clear_history();
+
+        assert_eq!(s.settings.hotkey, "shift+super+r");
+        assert_eq!(s.settings.history_limit, 42);
+        assert_eq!(s.find(&id).unwrap().paste_count, 7);
+    }
+
     #[test]
     fn clear_learning_resets_signals() {
         let mut s = store();

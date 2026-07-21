@@ -538,3 +538,63 @@ body {
   from { opacity: 0; }
   to { opacity: 1; }
 }
+
+/* ─── Destructive-action confirmation ──────────────────────────────────── */
+/* Same overlay language as the relaunch notice, with an actionable dialog. */
+
+.confirm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 110;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: var(--glass-bg);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  animation: relaunch-fade 0.18s ease-out;
+}
+.confirm-overlay[hidden] {
+  display: none;
+}
+
+.confirm-dialog {
+  width: 100%;
+  max-width: 380px;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--r-window);
+  padding: 20px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
+}
+
+.confirm-title {
+  font: 700 15px/22px var(--font-display);
+  color: var(--text);
+}
+
+.confirm-text {
+  margin: 8px 0 0;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--secondary-strong);
+}
+
+.confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+/* Quiet confirmation after a destructive action completes. */
+.setting-note {
+  padding: 10px 0 0;
+  font-size: 12px;
+  color: var(--secondary-strong);
+}
+.setting-note[hidden] {
+  display: none;
+}

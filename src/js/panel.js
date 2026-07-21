@@ -194,8 +194,23 @@ function moveSelection(delta) {
   render();
 }
 
+// Bumped on every refresh() call so a slower in-flight request can never
+// clobber a fresher one, and a failed request just leaves this refresh a
+// no-op instead of corrupting `state` — the next trigger (panel://shown,
+// raff://changed, window focus) retries cleanly.
+let refreshToken = 0;
+
 async function refresh() {
-  state = await api.getState();
+  const token = ++refreshToken;
+  let next;
+  try {
+    next = await api.getState();
+  } catch (err) {
+    console.error('raff: refresh failed', err);
+    return;
+  }
+  if (token !== refreshToken) return; // a newer refresh already won this race
+  state = next;
   render();
 }
 
@@ -288,7 +303,14 @@ on('panel://shown', async () => {
   searchEl.focus();
 });
 
-window.addEventListener('focus', () => searchEl.focus());
+// Belt-and-suspenders alongside panel://shown: if the panel ever regains
+// focus without that IPC event landing (native window activation is a more
+// reliable signal than a webview message), this still resyncs the list
+// through the same guarded refresh() path — without resetting the search.
+window.addEventListener('focus', () => {
+  searchEl.focus();
+  refresh();
+});
 
 // Keep relative times fresh while the panel is open.
 setInterval(() => {
