@@ -4,6 +4,9 @@
 import { api } from './store.js';
 import { ACCESSIBILITY_ICON, SHIELD_ICON } from './icons.js';
 
+// The native WKWebView menu is English ("Reload") — never shown in Raff.
+window.addEventListener('contextmenu', (e) => e.preventDefault());
+
 document.getElementById('figure').innerHTML = ACCESSIBILITY_ICON;
 document.getElementById('shield').innerHTML = SHIELD_ICON;
 

@@ -5,6 +5,9 @@ import { arabicDigits, metaLine, hotkeyDisplay, hotkeyFromEvent } from './logic.
 import { SUN_ICON, MOON_ICON } from './icons.js';
 import { createUpdateFlow } from './update-flow.js';
 
+// The native WKWebView menu is English ("Reload") — never shown in Raff.
+window.addEventListener('contextmenu', (e) => e.preventDefault());
+
 let settings = null;
 
 const el = (id) => document.getElementById(id);

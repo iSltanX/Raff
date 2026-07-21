@@ -7,6 +7,9 @@ import { api, on } from './store.js';
 import { arabicDigits } from './logic.js';
 import { createUpdateFlow } from './update-flow.js';
 
+// The native WKWebView menu is English ("Reload") — never shown in Raff.
+window.addEventListener('contextmenu', (e) => e.preventDefault());
+
 const el = (id) => document.getElementById(id);
 const statusEl = el('u-status');
 const availableEl = el('u-available');

@@ -1,6 +1,6 @@
 [package]
 name = "raff"
-version = "2.1.3"
+version = "2.1.4"
 description = "رفّ — personal, local-only, keyboard-first clipboard manager for macOS"
 authors = ["Raff"]
 edition = "2021"

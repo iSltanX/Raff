@@ -10,13 +10,21 @@ import {
   SEARCH_ICON,
   EMPTY_ICON,
   NO_RESULTS_ICON,
+  REFRESH_ICON,
+  BROKEN_ICON,
 } from './icons.js';
+import { diag, installGlobalTraps } from './diag.js';
+
+diag('module:start');
 
 const searchEl = document.getElementById('search');
 const listEl = document.getElementById('list');
 const escChip = document.getElementById('esc-chip');
 const toastEl = document.getElementById('toast');
+const panelEl = document.getElementById('panel');
+const refreshBtn = document.getElementById('refresh-btn');
 document.getElementById('search-icon').innerHTML = SEARCH_ICON;
+refreshBtn.innerHTML = REFRESH_ICON; // static SVG constant
 
 let state = { pinned: [], history: [], settings: null, axTrusted: false };
 let query = '';
@@ -24,6 +32,13 @@ let selectedId = null;
 let visible = []; // flat filtered list, pinned first
 const thumbs = new Map(); // id → data URL
 let toastTimer = null;
+
+// The list area has three distinct states and they must never be confused:
+//   'loading' — the first fetch has not answered yet
+//   'ready'   — data is in hand (which may legitimately be zero items)
+//   'error'   — data could not be fetched, or rendering threw
+// Only 'ready' + zero items is the natural «رفّك فارغ» empty shelf.
+let phase = 'loading';
 
 // ─── Rendering ────────────────────────────────────────────────────────────
 
@@ -42,6 +57,25 @@ function stateView(icon, title, sub, extraClass = '') {
   subEl.textContent = sub;
   textWrap.append(titleEl, subEl);
   view.append(box, textWrap);
+  return view;
+}
+
+/** The Arabic failure state — shown instead of a silently blank list.
+ *  Deliberately carries no technical detail; the cause goes to `diag` only. */
+function failureView() {
+  const view = stateView(
+    BROKEN_ICON,
+    'تعذّر عرض محتوى رَفّ',
+    'حدث خلل مؤقت في عرض العناصر. يمكنك إعادة تحميل الواجهة دون فقدان محتواك.',
+    'failure'
+  );
+  const action = document.createElement('button');
+  action.type = 'button';
+  action.className = 'state-action';
+  action.id = 'failure-reload';
+  action.textContent = 'إعادة تحميل الواجهة';
+  action.addEventListener('click', () => hardReload('failure-view'));
+  view.append(action);
   return view;
 }
 
@@ -117,7 +151,20 @@ function buildRow(item) {
   return row;
 }
 
-function render() {
+function renderList() {
+  if (phase === 'loading') {
+    listEl.replaceChildren(stateView(EMPTY_ICON, 'جارٍ التحميل…', 'لحظة من فضلك', 'loading'));
+    escChip.hidden = true;
+    visible = [];
+    return;
+  }
+  if (phase === 'error') {
+    listEl.replaceChildren(failureView());
+    escChip.hidden = true;
+    visible = [];
+    return;
+  }
+
   const pinned = filterItems(state.pinned, query);
   const recent = filterItems(state.history, query);
   visible = [...pinned, ...recent];
@@ -133,6 +180,7 @@ function render() {
     if (query) {
       listEl.append(stateView(NO_RESULTS_ICON, 'لا نتائج', 'جرّب كلمة أخرى', 'no-results'));
     } else {
+      // Genuinely nothing saved yet — never shown for a failed fetch.
       listEl.append(stateView(EMPTY_ICON, 'رفّك فارغ', 'انسخ أي شيء ليظهر هنا'));
     }
     return;
@@ -149,6 +197,29 @@ function render() {
   }
   listEl.append(fragment);
   scrollSelectedIntoView();
+}
+
+/**
+ * The error boundary. `renderList` clears the list before refilling it, so a
+ * throw partway through would otherwise leave the panel permanently blank
+ * with no way back — exactly the silent-blank-screen failure we must never
+ * ship. Catching here converts any render fault into the Arabic failure
+ * state, and the technical cause goes to `diag` only.
+ */
+function render() {
+  try {
+    renderList();
+  } catch (err) {
+    diag('render:threw', err);
+    if (phase === 'error') return; // already showing the failure state
+    phase = 'error';
+    try {
+      listEl.replaceChildren(failureView());
+    } catch {
+      // Last resort: the failure view itself could not be built.
+      listEl.textContent = 'تعذّر عرض محتوى رَفّ';
+    }
+  }
 }
 
 async function loadThumb(id, img) {
@@ -200,19 +271,136 @@ function moveSelection(delta) {
 // raff://changed, window focus) retries cleanly.
 let refreshToken = 0;
 
-async function refresh() {
+/** Two retries, then stop. Bounded on purpose — never a reload loop. */
+const RETRY_DELAYS_MS = [250, 750];
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Fetches state and re-renders. With `retry`, a failed fetch is attempted up
+ * to two more times with a short backoff before the failure state is
+ * considered.
+ *
+ * Resolves to one of:
+ *   'ok'         — fresh data landed and was rendered
+ *   'superseded' — a newer refresh took over; that one owns the outcome
+ *   'failed'     — every attempt failed
+ * 'superseded' must stay distinct from 'failed': a `panel://shown` arriving
+ * mid-refresh is a normal race, not a fault, and must never be mistaken for
+ * one and answered with a reload.
+ */
+async function refresh({ retry = false } = {}) {
   const token = ++refreshToken;
-  let next;
-  try {
-    next = await api.getState();
-  } catch (err) {
-    console.error('raff: refresh failed', err);
-    return;
+  const attempts = retry ? RETRY_DELAYS_MS.length + 1 : 1;
+
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    if (attempt > 0) {
+      await sleep(RETRY_DELAYS_MS[attempt - 1]);
+      if (token !== refreshToken) return 'superseded'; // superseded while backing off
+      diag('refresh:retry', attempt);
+    }
+    try {
+      const next = await api.getState();
+      if (token !== refreshToken) return 'superseded'; // a newer refresh already won
+      state = next;
+      phase = 'ready';
+      diag('refresh:ok', {
+        items: (next?.pinned?.length ?? 0) + (next?.history?.length ?? 0),
+      });
+      render();
+      return 'ok';
+    } catch (err) {
+      if (token !== refreshToken) return 'superseded';
+      diag('refresh:failed', err);
+    }
   }
-  if (token !== refreshToken) return; // a newer refresh already won this race
-  state = next;
-  render();
+
+  if (token !== refreshToken) return 'superseded';
+  // Only escalate to the failure state when there is nothing on screen. If an
+  // earlier fetch succeeded, keep the last good list rather than blanking a
+  // working panel over a transient hiccup.
+  if (phase !== 'ready') {
+    phase = 'error';
+    render();
+  }
+  return 'failed';
 }
+
+/**
+ * Forces WebKit to emit a fresh layer-tree update.
+ *
+ * While the panel is hidden macOS suspends its WebContent process: the layer
+ * tree is frozen, rendering resources are destroyed and the layer backing
+ * stores are marked volatile (all visible in
+ * `log show --predicate 'process == "raff"'`). On the way back the UI process
+ * keeps the old content hidden until the resumed web process delivers a new
+ * layer-tree update — so when that update is slow, or the volatile backing
+ * stores were purged under memory pressure, the panel is presented blank.
+ * Dirtying a compositing property guarantees the update lands. This is the
+ * repaint a manual reload was incidentally forcing.
+ */
+function forceRepaint() {
+  if (!panelEl) return;
+  panelEl.style.opacity = '0.999';
+  void panelEl.offsetHeight; // synchronous layout flush
+  const restore = () => {
+    panelEl.style.opacity = '';
+  };
+  // rAF fires on the first frame after the web process resumes — exactly when
+  // the repaint is due. Falling back to a timer keeps this safe in any host
+  // without rAF; either way the worst case is opacity stuck at 0.999, which is
+  // visually identical to 1.
+  if (typeof window.requestAnimationFrame === 'function') window.requestAnimationFrame(restore);
+  else setTimeout(restore, 0);
+  diag('repaint');
+}
+
+/** Full frontend reload — the fallback, never the primary cure. */
+function hardReload(reason) {
+  diag('reload:manual', reason);
+  window.location.reload();
+}
+
+// ─── Manual «تحديث رَفّ» ───────────────────────────────────────────────────
+
+let refreshBusy = false;
+
+async function manualRefresh() {
+  if (refreshBusy) return; // short busy state blocks double-clicks
+  refreshBusy = true;
+  refreshBtn.disabled = true;
+  refreshBtn.classList.add('busy');
+  refreshBtn.title = 'جارٍ تحديث رَفّ…';
+  diag('manual-refresh:start');
+
+  try {
+    // 1) Re-initialise data and view state in place. Nothing is written, the
+    //    database is untouched, and saved items cannot be lost.
+    const outcome = await refresh({ retry: true });
+    if (outcome !== 'failed') {
+      // 'superseded' means a concurrent refresh is already delivering fresh
+      // data — recovered either way, so no reload.
+      forceRepaint();
+      diag('manual-refresh:soft-ok', outcome);
+      return;
+    }
+    // 2) In-place recovery failed — reload the frontend as the fallback.
+    diag('manual-refresh:fallback-reload');
+    try {
+      hardReload('manual-fallback');
+    } catch (err) {
+      diag('manual-refresh:reload-failed', err);
+      showToast('تعذّر تحديث رَفّ. حاول مرة أخرى.');
+    }
+  } finally {
+    refreshBusy = false;
+    refreshBtn.disabled = false;
+    refreshBtn.classList.remove('busy');
+    refreshBtn.title = 'تحديث رَفّ';
+  }
+}
+
+refreshBtn.addEventListener('click', manualRefresh);
 
 // ─── Keyboard (full control — mouse optional) ─────────────────────────────
 
@@ -294,14 +482,27 @@ searchEl.addEventListener('input', () => {
 
 // ─── Events from Rust ─────────────────────────────────────────────────────
 
-on('raff://changed', refresh);
+on('raff://changed', () => refresh()).catch((err) => diag('listen:failed', err));
 on('panel://shown', async () => {
+  diag('event:panel-shown');
   query = '';
   searchEl.value = '';
   selectedId = null;
-  await refresh();
+  // Repaint before and after the fetch: the first invalidates whatever frozen
+  // frame the suspended web process left behind, the second guarantees the
+  // freshly rendered list is actually composited.
+  forceRepaint();
+  await refresh({ retry: true });
+  forceRepaint();
   searchEl.focus();
-});
+  // Measured on this app: `panel://shown` is delivered ~30ms BEFORE WebKit
+  // marks the view visible ("UIProcess is taking a foreground assertion
+  // because the view is visible"). A repaint that lands entirely inside that
+  // window leaves the layer tree clean again just as WebKit unhides it and
+  // waits for an update that never comes. One bounded, one-shot nudge after
+  // the gap closes covers that — it is not a timer loop.
+  setTimeout(forceRepaint, 120);
+}).catch((err) => diag('listen:failed', err));
 
 // Belt-and-suspenders alongside panel://shown: if the panel ever regains
 // focus without that IPC event landing (native window activation is a more
@@ -309,6 +510,7 @@ on('panel://shown', async () => {
 // through the same guarded refresh() path — without resetting the search.
 window.addEventListener('focus', () => {
   searchEl.focus();
+  forceRepaint();
   refresh();
 });
 
@@ -317,4 +519,38 @@ setInterval(() => {
   if (document.visibilityState === 'visible' && visible.length > 0) render();
 }, 30000);
 
-refresh().then(() => searchEl.focus());
+// The native WKWebView page menu is English and offers a technical reload that
+// has no place in an Arabic panel — the titlebar button is the supported way
+// to refresh. But it is suppressed ONLY over inert areas: inside a writable
+// field, or when text is selected, WebKit shows the editing menu (cut / copy /
+// paste / select) instead, and that must keep working normally.
+function isWritable(node) {
+  // nodeType 1 = element; text nodes are asked via their parent. Checked by
+  // nodeType rather than `instanceof Element` so this never depends on a
+  // global that only exists inside a browser realm.
+  const el = node?.nodeType === 1 ? node : node?.parentElement;
+  return !!el?.closest('input, textarea, [contenteditable=""], [contenteditable="true"]');
+}
+
+window.addEventListener('contextmenu', (e) => {
+  if (isWritable(e.target)) return; // editing menu — leave it alone
+  const selection = window.getSelection?.();
+  if (selection && !selection.isCollapsed) return; // text is selected → allow copy
+  e.preventDefault();
+});
+
+// Anything that escapes every local handler must not leave a silent blank
+// window. Only escalate when nothing is on screen — a stray rejection (a
+// decorative thumbnail, say) must not tear down a working list.
+installGlobalTraps(() => {
+  if (phase === 'ready') return;
+  phase = 'error';
+  render();
+});
+
+diag('mount:ok');
+
+refresh({ retry: true }).then(() => {
+  forceRepaint();
+  searchEl.focus();
+});

@@ -52,6 +52,57 @@ body {
   gap: 7px;
 }
 
+/* Small, quiet titlebar affordance — sits opposite the «رفّ» lockup beside
+   the «محلي» chip. Deliberately lower contrast than search and the list so it
+   never competes with the identity or the content. */
+.refresh-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* 28×28 hit area; the glyph itself stays 13px so the control reads quiet. */
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--icon-secondary);
+  cursor: pointer;
+  opacity: 0.7;
+  transition:
+    opacity var(--t-fast) var(--ease-standard),
+    background var(--t-fast) var(--ease-standard);
+}
+.refresh-btn:hover {
+  opacity: 1;
+  background: var(--selected-bg);
+}
+.refresh-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  opacity: 1;
+}
+.refresh-btn:disabled {
+  cursor: default;
+}
+.refresh-btn.busy {
+  opacity: 1;
+  color: var(--accent);
+}
+.refresh-btn.busy svg {
+  animation: raff-spin 0.8s linear infinite;
+}
+@keyframes raff-spin {
+  to {
+    transform: rotate(-360deg); /* RTL-natural direction */
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .refresh-btn.busy svg {
+    animation: none;
+  }
+}
+
 .privacy-chip {
   display: inline-flex;
   align-items: center;
@@ -314,6 +365,36 @@ body {
   font: 400 13px/21px var(--font-body);
   color: var(--muted);
   max-width: 250px;
+}
+
+/* Failure and loading states reuse .state-view but stay quieter than the
+   empty shelf — this is a fault, not an invitation. */
+.state-view.failure .state-icon-box,
+.state-view.loading .state-icon-box {
+  /* Neutral raised surface, not the accent tint the empty shelf uses: a fault
+     must not borrow the brand's warmth, nor echo the «محلي» chip. */
+  background: var(--surface-raised);
+  border: var(--b-default) solid var(--border);
+  color: var(--muted);
+}
+.state-view .state-action {
+  margin-top: 2px;
+  padding: 0 var(--s-3);
+  height: 30px;
+  border: var(--b-default) solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: var(--text);
+  font: 500 12px/18px var(--font-body);
+  cursor: pointer;
+  transition: background var(--t-fast) var(--ease-standard);
+}
+.state-view .state-action:hover {
+  background: var(--selected-bg);
+}
+.state-view .state-action:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 /* ─── Footer ───────────────────────────────────────────────────────────── */
