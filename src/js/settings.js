@@ -441,7 +441,7 @@ function renderUpdate(state, data = {}) {
     case 'available':
       updateCheckBtn.hidden = true;
       updateAvailable.hidden = false;
-      updateNewVersion.textContent = `الإصدار الجديد ${arabicDigits(data.version)}`;
+      updateNewVersion.textContent = `الإصدار ${arabicDigits(data.version)}`;
       updateDate.hidden = !data.date;
       if (data.date) updateDate.textContent = `تاريخ النشر: ${arabicDigits(data.date)}`;
       updateNotes.hidden = !data.notes;

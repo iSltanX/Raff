@@ -90,7 +90,7 @@ function render(state, data = {}) {
     case 'available':
       statusEl.textContent = '';
       availableEl.hidden = false;
-      newVersionEl.textContent = `الإصدار الجديد ${arabicDigits(data.version)}`;
+      newVersionEl.textContent = `الإصدار ${arabicDigits(data.version)}`;
       dateEl.hidden = !data.date;
       if (data.date) dateEl.textContent = `تاريخ النشر: ${arabicDigits(data.date)}`;
       notesEl.hidden = !data.notes;
