@@ -1,11 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="240" height="88" viewBox="0 0 240 88" fill="none">
   <title>رفّ — Arabic primary lockup</title>
-  <g transform="translate(179 24) scale(1)">
-    <rect x="4" y="17.8" width="14" height="4.4" rx="2.2" fill="#96540F"/>
-    <circle cx="24" cy="20" r="8.8" stroke="#96540F" stroke-width="4.4"/>
-    <circle cx="29.5" cy="25" r="5.2" stroke="#96540F" stroke-width="2.2" opacity=".55"/>
-    <circle cx="27.3" cy="19.7" r="2" fill="#96540F"/>
+  <g transform="translate(180 20) scale(1.5)">
+    <path d="M22 6.5 L7.5 6.5 L7.5 25.5 L22 25.5" stroke="#96540F" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="12" y="12.2" width="9" height="2.8" rx="1.4" fill="#96540F"/>
+    <rect x="12" y="17.6" width="6" height="2.8" rx="1.4" fill="#96540F" opacity=".5"/>
   </g>
-  <text x="162" y="55" text-anchor="end" fill="#211D19" font-family="Almarai, sans-serif" font-size="48" font-weight="800">رفّ</text>
-  <rect x="89" y="62" width="34" height="3" rx="1.5" fill="#211D19" opacity=".45"/>
+  <text x="175" y="55" text-anchor="end" fill="#211D19" font-family="Almarai, sans-serif" font-size="48" font-weight="800">رفّ</text>
+  <rect x="141" y="62" width="34" height="3" rx="1.5" fill="#211D19" opacity=".45"/>
 </svg>

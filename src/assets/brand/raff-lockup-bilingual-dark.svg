@@ -1,12 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="280" height="104" viewBox="0 0 280 104" fill="none">
   <title>رفّ Raff — bilingual lockup for dark backgrounds</title>
-  <g transform="translate(217 28) scale(1)">
-    <rect x="4" y="17.8" width="14" height="4.4" rx="2.2" fill="#ECB751"/>
-    <circle cx="24" cy="20" r="8.8" stroke="#ECB751" stroke-width="4.4"/>
-    <circle cx="29.5" cy="25" r="5.2" stroke="#ECB751" stroke-width="2.2" opacity=".55"/>
-    <circle cx="27.3" cy="19.7" r="2" fill="#ECB751"/>
+  <g transform="translate(215 24) scale(1.5)">
+    <path d="M22 6.5 L7.5 6.5 L7.5 25.5 L22 25.5" stroke="#ECB751" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="12" y="12.2" width="9" height="2.8" rx="1.4" fill="#ECB751"/>
+    <rect x="12" y="17.6" width="6" height="2.8" rx="1.4" fill="#ECB751" opacity=".5"/>
   </g>
-  <text x="200" y="59" text-anchor="end" fill="#F3F1ED" font-family="Almarai, sans-serif" font-size="48" font-weight="800">رفّ</text>
-  <text x="199" y="78" text-anchor="end" fill="#A49E94" font-family="Almarai, sans-serif" font-size="12" font-weight="700" letter-spacing="3">RAFF</text>
-  <rect x="125" y="65" width="34" height="3" rx="1.5" fill="#F3F1ED" opacity=".4"/>
+  <text x="210" y="59" text-anchor="end" fill="#F3F1ED" font-family="Almarai, sans-serif" font-size="48" font-weight="800">رفّ</text>
+  <text x="209" y="78" text-anchor="end" fill="#A49E94" font-family="Almarai, sans-serif" font-size="12" font-weight="700" letter-spacing="3">RAFF</text>
+  <rect x="176" y="65" width="34" height="3" rx="1.5" fill="#F3F1ED" opacity=".4"/>
 </svg>
