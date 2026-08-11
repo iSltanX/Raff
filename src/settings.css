@@ -138,11 +138,11 @@ body {
 }
 .preview-light {
   background: #f7f5f1;
-  border: 1px solid #d8d4cc;
+  border: 1px solid #e2ddd5;
 }
 .preview-dark {
   background: #100e0c;
-  border: 1px solid #403b36;
+  border: 1px solid #2d2822;
 }
 .pv-search,
 .pv-row {
@@ -158,22 +158,22 @@ body {
   width: 100%;
 }
 .preview-light .pv-search {
-  background: #faf9f7;
+  background: #ffffff;
 }
 .preview-light .pv-row {
   background: #ffffff;
-  border: 1px solid #d8d4cc;
+  border: 1px solid #e2ddd5;
 }
 .preview-light .pv-accent {
   background: #fff0cd;
   border: 1px solid #96540f;
 }
 .preview-dark .pv-search {
-  background: #24201c;
+  background: #26221e;
 }
 .preview-dark .pv-row {
   background: #1b1815;
-  border: 1px solid #403b36;
+  border: 1px solid #2d2822;
 }
 .preview-dark .pv-accent {
   background: #4e270b;

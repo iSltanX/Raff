@@ -1,15 +1,15 @@
-// Builds the bundled icon assets from the OFFICIAL RAFF-Identity-System-v2
+// Builds the bundled icon assets from the approved "Retrieval Rail" identity
 // sources vendored in src/assets/app-icon/. Nothing here redraws or restyles
-// the identity — every size is rendered from the official master SVGs.
+// the identity — every size is rendered from the master SVGs (ported from the
+// رف Figma file's Logo System / App Icon & Menu-Bar pages).
 //
-// NOTE: the identity package also ships Raff.iconset / raff-app-icon-1024.png,
-// but those rasters were exported flattened onto an opaque white background
-// (corner pixel #FFFFFF, alpha 255, at every size). Using them produces a white
-// square app icon in Finder, the Dock and the DMG, because macOS does not mask
-// app icons. The masters are the ground truth: root is fill="none" and the
-// artwork is an inset rounded rect (5/128 margin, rx 28) with a drop shadow
-// that requires alpha. So we render from the vectors — same paths, same
-// gradients, same geometry, correct transparency.
+// NOTE: pre-flattened icon rasters exported onto an opaque white background
+// (corner pixel #FFFFFF, alpha 255) produce a white square app icon in
+// Finder, the Dock and the DMG, because macOS does not mask app icons. The
+// masters are the ground truth: root is fill="none" and the artwork is an
+// inset rounded rect (5/128 margin, rx 28) with a drop shadow that requires
+// alpha. So we always render from the vectors — same paths, same gradients,
+// same geometry, correct transparency.
 //   npm i --no-save @resvg/resvg-js && node scripts/gen-icons.mjs
 import { Resvg } from '@resvg/resvg-js';
 import { execFileSync } from 'node:child_process';

@@ -18,16 +18,18 @@ export const PIN_ICON_FILLED = `<svg width="14" height="14" viewBox="0 0 16 16" 
 
 export const SEARCH_ICON = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="7" cy="7" r="4.5" ${stroke}/><path d="M10.5 10.5L13.5 13.5" ${stroke}/></svg>`;
 
-export const EMPTY_ICON = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><rect x="4" y="8" width="16" height="12" rx="2" ${stroke}/><path d="M8 8V6a4 4 0 0 1 8 0v2" ${stroke}/></svg>`;
+// Echoes the brand mark's ring + rail language for the empty shelf.
+export const EMPTY_ICON = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M3 12h4" ${stroke}/><circle cx="13.5" cy="12" r="5" ${stroke}/><circle cx="16.5" cy="15" r="3" stroke="currentColor" stroke-width="1.5" opacity="0.5"/></svg>`;
 
 // Small circular arrow for the titlebar «تحديث رَفّ» button. Sized to sit
 // beside the «محلي» chip without competing with it.
 export const REFRESH_ICON = `<svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9" ${stroke} stroke-linecap="round"/><path d="M13.5 2.6v3.1h-3.1" ${stroke} stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 
-// Shown by the failure state — deliberately quiet, no alarm colours.
-export const BROKEN_ICON = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><rect x="4" y="6" width="16" height="13" rx="2" ${stroke}/><path d="M4 12.5h5l1.5 2.5h3L15 12.5h5" ${stroke} stroke-linejoin="round"/></svg>`;
+// Shown by the failure state — deliberately quiet, no alarm colours. The
+// ring reads as "broken" via the gap in its stroke, not a new metaphor.
+export const BROKEN_ICON = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M3 12h4" ${stroke}/><path d="M17.5 8a5 5 0 1 1-6.5 7.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M9 12a5 5 0 0 1 1-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" opacity="0.4"/></svg>`;
 
-export const NO_RESULTS_ICON = `<svg width="32" height="32" viewBox="0 0 32 32" fill="none"><circle cx="15" cy="15" r="9" ${stroke}/><path d="M22 22L28 28" ${stroke}/><path d="M12 15h6M15 12v6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" opacity="0.35"/></svg>`;
+export const NO_RESULTS_ICON = `<svg width="32" height="32" viewBox="0 0 32 32" fill="none"><path d="M4 16h6" ${stroke}/><circle cx="17" cy="16" r="7" ${stroke}/><path d="M24 23l5 5" ${stroke}/></svg>`;
 
 export const SHIELD_ICON = `<svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M10 2.5L3.5 5.5V10c0 4 3.5 6.5 6.5 7.5 3-1 6.5-3.5 6.5-7.5V5.5L10 2.5z" ${stroke} stroke-linejoin="round"/><path d="M7 10l2 2 4-4" ${stroke} stroke-linejoin="round"/></svg>`;
 

@@ -103,13 +103,15 @@ body {
   }
 }
 
+/* "محلي" — deliberately green: a local/secure signal, distinct from the
+   brand's amber (per the component library's privacy-pill spec). */
 .privacy-chip {
   display: inline-flex;
   align-items: center;
   gap: 4px;
   font: 500 11px/16px var(--font-body);
-  color: var(--muted);
-  background: var(--privacy-bg);
+  color: var(--success);
+  background: var(--success-bg);
   border-radius: var(--r-round);
   padding: 2px 9px;
 }
@@ -130,8 +132,9 @@ body {
   transition: border-color var(--t-fast) var(--ease-standard);
 }
 .search-field:focus-within {
+  border-width: var(--b-focus);
   border-color: var(--focus-ring);
-  box-shadow: 0 0 0 var(--b-focus) var(--focus-ring);
+  padding: 0 10px; /* compensate the extra border px so content doesn't shift */
 }
 
 .search-icon {

@@ -1,7 +1,11 @@
 /* رفّ — Design tokens + shared styles.
-   Ported 1:1 from RAFF-Identity-System-v2 (design-tokens/raff.tokens.json
-   and src/design-system/tokens.ts). Values are the approved semantic tokens;
-   do not hand-tune them here. */
+   Ported from the approved "Retrieval Rail" identity system (Figma —
+   رف, node 2:213 onward: Logo System, App Icon & Menu-Bar, Foundations,
+   Components). Values are the approved semantic tokens; do not hand-tune
+   them here — update the Figma source and re-port instead.
+   Dark-theme neutrals (secondary/muted/danger) intentionally keep their
+   already AA-audited values where the Figma dark mockups disagreed with
+   each other (see docs/RAFF_AUDIT_AND_FIXES_AR.md history) — noted inline. */
 
 /* ─── Fonts ─────────────────────────────────────────────────────────────────
    Identity families per RAFF-Identity-System-v2:
@@ -69,20 +73,21 @@
   --surface-code: #f1f3f2;
   --surface-image: #eeeae3;
 
-  --border: #d8d4cc;
+  --border: #e2ddd5;
   --border-strong: #a49e94;
   --separator: #e4e1da;
 
   --text: #211d19;
-  --secondary: #5c5650;
+  --secondary: #7a7268;
   --secondary-strong: #5c5650;
-  --muted: #716b63;
-  --disabled: #9b958c;
+  --muted: #9a9184;
+  --disabled: #b7ada0;
   --icon-primary: #403b36;
-  --icon-secondary: #716b63;
+  --icon-secondary: #9a9184;
 
   --accent: #96540f; /* brandPrimary */
-  --accent-hover: #713b0c; /* amber.700 */
+  --accent-hover: #aa6216;
+  --accent-active: #7e430b;
   --accent-text: #96540f;
   --on-brand: #ffffff;
   --accent-secondary: #bb7418;
@@ -91,43 +96,52 @@
   --selected-strong: #f7d788;
   --selected-edge: #96540f;
   --on-selection: #5c300a;
-  --focus-ring: #a55f12;
+  --focus-ring: #96540f;
 
   --hover-bg: rgba(113, 59, 12, 0.075);
   --pressed-bg: rgba(113, 59, 12, 0.14);
-  --input-bg: #faf9f7;
+  --input-bg: #ffffff;
 
-  --placeholder: #716b63;
-  --key-hint: #716b63;
+  --placeholder: #9a9184;
+  --key-hint: #9a9184;
 
-  --success: #16643f;
-  --success-bg: #eaf7f0;
-  --warning: #815006;
-  --warning-bg: #fff5d8;
-  --danger: #a12828;
-  --danger-bg: #fdecec;
-  --info: #1f5e9c;
-  --info-bg: #eaf3ff;
+  --success: #1e5c31;
+  --success-bg: #eaf3ee;
+  --warning: #a66e0a;
+  --warning-bg: #fbf1e2;
+  --danger: #ba2512;
+  --danger-bg: #fceceb;
+  --info: #1c4e80;
+  --info-bg: #eaf0f7;
 
   --pinned: #96540f;
   --search-match: #ffe39b;
-  --update: #1f5e9c;
+  --update: #96540f;
 
   --glass-bg: rgba(255, 255, 255, 0.94);
   --dropdown-bg: rgba(255, 255, 255, 0.94);
   --toolbar-bg: rgba(250, 249, 247, 0.94);
   --hairline: inset 0 0 0 1px rgba(255, 255, 255, 0.55);
 
-  --btn-bg: #faf9f7;
+  --btn-bg: #faf9f6;
   --btn-primary: #96540f;
   --btn-primary-text: #ffffff;
+  --btn-secondary-hover: #f5f3ef;
+  --btn-secondary-active: #ece8e1;
+  --btn-tertiary-hover: #efece6;
+  --btn-tertiary-active: #e4dec8;
+  --btn-danger: #ba2512;
+  --btn-danger-hover: #a01d0c;
+  --btn-danger-active: #7a1305;
+  --btn-danger-text: #ffffff;
+  --btn-danger-disabled-bg: #f5c6c2;
 
   --link-chip-bg: #faf9f7;
   --link-chip-bg-selected: #f7d788;
 
-  --tab-active: #211d19;
-  --tab-inactive: #716b63;
-  --toggle-track: #d8d4cc;
+  --tab-active: #96540f;
+  --tab-inactive: #7a7268;
+  --toggle-track: #e2ddd5;
 
   --scrollbar-thumb: rgba(32, 28, 22, 0.18);
 }
@@ -146,9 +160,9 @@
   --surface-code: #141817;
   --surface-image: #211d19;
 
-  --border: #403b36;
+  --border: #2d2822;
   --border-strong: #6b645c;
-  --separator: #292521;
+  --separator: #241f1a;
 
   --text: #f3f1ed;
   --secondary: #cbc6bd;
@@ -160,6 +174,7 @@
 
   --accent: #ecb751; /* brandPrimary */
   --accent-hover: #f7d788; /* amber.200 */
+  --accent-active: #d9962e;
   --accent-text: #ecb751;
   --on-brand: #241303;
   --accent-secondary: #d9962e;
@@ -168,11 +183,11 @@
   --selected-strong: #713b0c;
   --selected-edge: #ecb751;
   --on-selection: #fcebc5;
-  --focus-ring: #f7d788;
+  --focus-ring: #ecb751;
 
   --hover-bg: rgba(247, 215, 136, 0.07);
   --pressed-bg: rgba(247, 215, 136, 0.13);
-  --input-bg: #24201c;
+  --input-bg: #26221e;
 
   --placeholder: #a49e94;
   --key-hint: #a49e94;
@@ -188,7 +203,7 @@
 
   --pinned: #ecb751;
   --search-match: #6a4611;
-  --update: #8ac2ff;
+  --update: #ecb751;
 
   --glass-bg: rgba(36, 32, 28, 0.94);
   --dropdown-bg: rgba(36, 32, 28, 0.96);
@@ -198,11 +213,20 @@
   --btn-bg: #24201c;
   --btn-primary: #ecb751;
   --btn-primary-text: #241303;
+  --btn-secondary-hover: #2a251f;
+  --btn-secondary-active: #332d26;
+  --btn-tertiary-hover: #2c2721;
+  --btn-tertiary-active: #362f26;
+  --btn-danger: #c2453a;
+  --btn-danger-hover: #d65a4e;
+  --btn-danger-active: #a83a30;
+  --btn-danger-text: #ffffff;
+  --btn-danger-disabled-bg: #4a2b28;
 
   --link-chip-bg: #24201c;
   --link-chip-bg-selected: #713b0c;
 
-  --tab-active: #f3f1ed;
+  --tab-active: #ecb751;
   --tab-inactive: #a49e94;
   --toggle-track: #403b36;
 
@@ -362,7 +386,9 @@ body {
   inset-inline-start: 19px;
 }
 
-/* button — Almarai 700 13/18, medium height 32 */
+/* button — Almarai 700 13/18, medium height 32. Base = Tertiary treatment;
+   .btn-primary / .btn-danger layer on top. Focus = a thicker brand-colored
+   border, not a glow ring (per the component library's Buttons spec). */
 .btn {
   min-height: var(--ctl-m);
   padding: 0 14px;
@@ -377,10 +403,19 @@ body {
     border-color var(--t-fast) var(--ease-standard);
 }
 .btn:hover {
-  background: var(--hover-bg);
+  background: var(--btn-tertiary-hover);
 }
 .btn:active {
-  background: var(--pressed-bg);
+  background: var(--btn-tertiary-active);
+}
+.btn:focus-visible {
+  outline: none;
+  border-width: var(--b-focus);
+  border-color: var(--accent);
+}
+.btn:disabled {
+  cursor: default;
+  opacity: 0.45;
 }
 .btn-primary {
   background: var(--btn-primary);
@@ -390,10 +425,55 @@ body {
 .btn-primary:hover {
   background: var(--accent-hover);
 }
-.btn-danger {
-  background: var(--danger-bg);
-  color: var(--danger);
+.btn-primary:active {
+  background: var(--accent-active);
+}
+.btn-primary:focus-visible {
+  border-color: var(--text);
+}
+.btn-secondary {
+  background: var(--surface);
+  border-color: var(--border);
+}
+.btn-secondary:hover {
+  background: var(--btn-secondary-hover);
+}
+.btn-secondary:active {
+  background: var(--btn-secondary-active);
+}
+.btn-ghost {
+  min-height: var(--ctl-s);
+  padding: 0 12px;
+  border-radius: var(--r-xs);
   border-color: transparent;
+  background: transparent;
+  color: var(--secondary);
+  font-size: 12px;
+}
+.btn-ghost:hover {
+  background: var(--btn-tertiary-hover);
+}
+.btn-ghost:focus-visible {
+  border-color: var(--secondary);
+  border-width: var(--b-strong);
+}
+.btn-danger {
+  background: var(--btn-danger);
+  color: var(--btn-danger-text);
+  border-color: transparent;
+}
+.btn-danger:hover {
+  background: var(--btn-danger-hover);
+}
+.btn-danger:active {
+  background: var(--btn-danger-active);
+}
+.btn-danger:focus-visible {
+  border-color: var(--text);
+}
+.btn-danger:disabled {
+  background: var(--btn-danger-disabled-bg);
+  color: var(--btn-danger-text);
 }
 
 /* label — Almarai 700 12/18 */
