@@ -1,6 +1,13 @@
-/* The floating panel — RAFF-Identity-System-v2.
-   Width 392 (component.panel.width) · radius 18 · blur 28 · RTL, keyboard-first. */
+/* ===========================================================================
+   The floating panel — Figma «08 — Product Screens» (page 2:9)
+     screen ١  macOS-Panel-Shell  2:7684   360 × 580
+     screen ٢  search active      2:7791
+     screen ٣  empty shelf        2:7880
+   Every value here comes from those nodes; colours resolve through tokens.css.
+   =========================================================================== */
 
+/* The NSPanel is transparent so the 16px corners are not clipped by a square
+   opaque backing; macOS draws the window shadow around what we paint. */
 body {
   background: transparent;
 }
@@ -8,427 +15,579 @@ body {
 .panel {
   display: flex;
   flex-direction: column;
-  height: 100vh;
-  border-radius: var(--r-panel);
-  border: var(--b-default) solid var(--border);
-  background: var(--surface-floating);
-  -webkit-backdrop-filter: blur(var(--blur-floating));
-  backdrop-filter: blur(var(--blur-floating));
-  box-shadow: var(--shadow-high);
+  height: 100%;
   overflow: hidden;
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-xl);
 }
 
-/* ─── Titlebar ─────────────────────────────────────────────────────────── */
+/* ─── Header (2:7685) ─────────────────────────────────────────────────────── */
 
-.panel-titlebar {
+.panel-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 48px;
-  padding: 0 var(--s-3);
-  border-bottom: var(--b-default) solid var(--separator);
-  flex-shrink: 0;
+  padding: 14px 16px 12px;
+  border-bottom: 1px solid var(--color-border-default);
+  /* Physical order: traffic lights left, brand centre, gear right. macOS
+     window chrome does not mirror — «10 — RTL & Accessibility». */
+  direction: ltr;
+  flex: none;
 }
 
-.panel-brand {
+.window-controls {
   display: flex;
   align-items: center;
-  gap: 7px;
-  color: var(--accent);
+  gap: 8px;
 }
-.panel-mark {
-  width: 23px;
-  height: 23px;
+
+.dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex: none;
+}
+
+.dot-close {
+  background: var(--color-stoplight-close);
+}
+.dot-min {
+  background: var(--color-stoplight-min);
+}
+.dot-zoom {
+  background: var(--color-stoplight-zoom);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  direction: rtl;
+}
+
+.brand-name {
+  font-family: var(--font-ar);
+  font-weight: 800;
+  font-size: 16px;
+  line-height: normal;
+  color: var(--color-interactive-primary);
+}
+
+.brand-mark {
+  display: flex;
+  padding: 2px;
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-selected);
+  color: var(--color-interactive-primary);
+}
+
+.brand-mark svg {
+  width: 14px;
+  height: 14px;
   display: block;
 }
-.panel-brand strong {
-  font: 800 13px/1 var(--font-display);
-  color: var(--text);
-}
 
-.panel-title-actions {
+.header-actions {
   display: flex;
   align-items: center;
-  gap: 7px;
 }
 
-/* Small, quiet titlebar affordance — sits opposite the «رفّ» lockup beside
-   the «محلي» chip. Deliberately lower contrast than search and the list so it
-   never competes with the identity or the content. */
-.refresh-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  /* 28×28 hit area; the glyph itself stays 13px so the control reads quiet. */
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  border: none;
-  border-radius: var(--r-sm);
-  background: transparent;
-  color: var(--icon-secondary);
-  cursor: pointer;
-  opacity: 0.7;
-  transition:
-    opacity var(--t-fast) var(--ease-standard),
-    background var(--t-fast) var(--ease-standard);
-}
-.refresh-btn:hover {
-  opacity: 1;
-  background: var(--selected-bg);
-}
-.refresh-btn:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
-  opacity: 1;
-}
-.refresh-btn:disabled {
-  cursor: default;
-}
-.refresh-btn.busy {
-  opacity: 1;
-  color: var(--accent);
-}
-.refresh-btn.busy svg {
-  animation: raff-spin 0.8s linear infinite;
-}
-@keyframes raff-spin {
-  to {
-    transform: rotate(-360deg); /* RTL-natural direction */
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .refresh-btn.busy svg {
-    animation: none;
-  }
+.action-btn {
+  display: flex;
+  padding: 4px;
+  border-radius: var(--radius-control);
+  background: var(--color-fill-subtle);
+  color: var(--color-text-primary);
+  transition: background var(--t-fast) var(--ease-standard);
 }
 
-/* "محلي" — deliberately green: a local/secure signal, distinct from the
-   brand's amber (per the component library's privacy-pill spec). */
-.privacy-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font: 500 11px/16px var(--font-body);
-  color: var(--success);
-  background: var(--success-bg);
-  border-radius: var(--r-round);
-  padding: 2px 9px;
+.action-btn:hover {
+  background: var(--color-bg-selected);
+  color: var(--color-interactive-primary);
 }
 
-/* ─── Search ───────────────────────────────────────────────────────────── */
+.action-btn svg {
+  width: 14px;
+  height: 14px;
+  display: block;
+}
 
+/* ─── Search (2:7700) ─────────────────────────────────────────────────────── */
+
+.search-container {
+  padding: 8px 14px;
+  flex: none;
+}
+
+/* RTL reading order — magnifier trailing (right), clear control leading (left)
+   — «06 — Components», Search Bar. */
 .search-field {
   display: flex;
   align-items: center;
-  gap: var(--s-2);
-  height: 34px;
-  margin: 10px var(--s-3) 6px;
-  padding: 0 11px;
-  border: var(--b-default) solid var(--border);
-  border-radius: var(--r-md);
-  background: var(--surface-raised);
-  flex-shrink: 0;
-  transition: border-color var(--t-fast) var(--ease-standard);
-}
-.search-field:focus-within {
-  border-width: var(--b-focus);
-  border-color: var(--focus-ring);
-  padding: 0 10px; /* compensate the extra border px so content doesn't shift */
+  gap: 6px;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: var(--radius-control);
+  background: var(--color-bg-field);
+  border: 1px solid var(--color-border-default);
+  transition:
+    border-color var(--t-fast) var(--ease-standard),
+    background var(--t-fast) var(--ease-standard);
 }
 
-.search-icon {
+.search-field:focus-within {
+  background: var(--color-bg-primary);
+  border-color: var(--color-interactive-primary);
+}
+
+.search-glyph {
   display: flex;
-  color: var(--icon-secondary);
-  flex-shrink: 0;
+  color: var(--color-text-secondary);
+  flex: none;
+  order: 1; /* RTL leading edge — the magnifier sits on the right */
+}
+
+.search-field:focus-within .search-glyph {
+  color: var(--color-interactive-primary);
+}
+
+.search-glyph svg {
+  width: 14px;
+  height: 14px;
+  display: block;
 }
 
 .search-input {
+  order: 2;
   flex: 1;
   min-width: 0;
-  background: transparent;
-  border: none;
+  border: 0;
+  background: none;
   outline: none;
-  font: 500 14px/21px var(--font-body);
-  color: var(--text);
-  direction: rtl;
-  /* Latin/code queries lay out LTR while the Arabic placeholder stays RTL. */
+  font-family: var(--font-ar);
+  font-size: var(--text-body);
+  line-height: 18px;
+  color: var(--color-text-primary);
+  /* Let a pasted Latin query read left-to-right without flipping the field. */
   unicode-bidi: plaintext;
+  -webkit-user-select: text;
+  user-select: text;
 }
+
 .search-input::placeholder {
-  color: var(--placeholder);
+  color: var(--color-text-secondary);
+  opacity: 1;
 }
 
-.search-kbd {
-  flex-shrink: 0;
+.search-clear {
+  order: 3; /* RTL trailing edge — the clear control sits on the left */
+  display: flex;
+  color: var(--color-text-tertiary);
+  flex: none;
 }
 
-.esc-chip {
-  font: 500 11px/16px var(--font-body);
-  color: var(--muted);
-  background: var(--canvas-subtle);
-  border-radius: var(--r-xs);
-  padding: 1px 5px;
-  flex-shrink: 0;
+.search-clear:hover {
+  color: var(--color-text-secondary);
 }
 
-/* ─── List ─────────────────────────────────────────────────────────────── */
+.search-clear[hidden] {
+  display: none;
+}
 
-.list {
+.search-clear svg {
+  width: 12px;
+  height: 12px;
+  display: block;
+}
+
+/* ─── Filters (2:7710) ────────────────────────────────────────────────────── */
+
+.filters {
+  display: flex;
+  justify-content: center;
+  gap: var(--space-xs);
+  padding: 4px 14px 10px;
+  flex: none;
+}
+
+.segment {
+  padding: 4px 10px;
+  border-radius: var(--radius-control);
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border-default);
+  font-family: var(--font-ar);
+  font-weight: 500;
+  font-size: var(--text-caption);
+  line-height: normal;
+  color: var(--color-text-primary);
+  white-space: nowrap;
+  transition:
+    background var(--t-fast) var(--ease-standard),
+    color var(--t-fast) var(--ease-standard);
+}
+
+.segment:hover:not(.is-active) {
+  background: var(--color-bg-selected);
+  color: var(--color-interactive-primary);
+}
+
+.segment.is-active {
+  background: var(--color-interactive-primary);
+  border-color: var(--color-interactive-primary);
+  font-weight: 700;
+  color: var(--color-text-on-accent);
+}
+
+/* ─── Items list (2:7721) ─────────────────────────────────────────────────── */
+
+.items-list {
   flex: 1;
   min-height: 0;
-  padding: 2px 7px var(--s-2);
-}
-
-.section-header {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--s-2) var(--s-2) var(--s-1);
-  font: 700 12px/18px var(--font-display);
-  color: var(--muted);
+  flex-direction: column;
+  gap: var(--space-xs);
+  padding-bottom: var(--space-md);
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
+.items-list::-webkit-scrollbar {
+  width: 4px;
+}
+.items-list::-webkit-scrollbar-thumb {
+  background: var(--color-border-default);
+  border-radius: 2px;
+}
+.items-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Clipboard-Row (2:7722). Physical order: timestamp left, preview centre,
+   source right — the row's own geometry is LTR, its text is not. */
 .row {
+  direction: ltr;
   display: flex;
   align-items: center;
-  gap: 9px;
-  padding: var(--s-2);
-  min-height: 54px;
-  border-radius: var(--r-md);
-  border: var(--b-default) solid transparent;
-  cursor: pointer;
-  transition: background var(--t-fast) var(--ease-standard);
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  border-bottom: 1px solid transparent;
+  background: transparent;
+  flex: none;
+  transition:
+    background var(--t-fast) var(--ease-standard),
+    border-color var(--t-fast) var(--ease-standard);
 }
-.row:hover {
-  background: var(--hover-bg);
+
+.row:hover:not(.selected) {
+  background: var(--color-bg-selected);
 }
-.row:active {
-  background: var(--pressed-bg);
-}
+
 .row.selected {
-  background: var(--selected-bg);
-  border-color: var(--accent);
-  /* leading rail — inline-start so it stays on the right in RTL */
-  box-shadow: inset 3px 0 0 var(--accent);
-}
-[dir='rtl'] .row.selected {
-  box-shadow: inset -3px 0 0 var(--accent);
+  background: var(--color-bg-selected);
+  border-bottom-color: var(--color-border-selected-soft);
 }
 
-/* type badge — 28×28, radius md */
-.row-icon {
-  flex-shrink: 0;
-  width: 28px;
-  height: 28px;
-  border-radius: var(--r-md);
-  background: var(--surface-raised);
+.row-time {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--icon-secondary);
-}
-.row.selected .row-icon {
-  background: var(--selected-strong);
-  color: var(--accent);
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-xs);
+  flex: none;
 }
 
-.row-content {
-  flex: 1;
-  min-width: 0;
-}
-
-.row-title {
-  font: 500 13px/21px var(--font-body);
-  color: var(--text);
-  overflow: hidden;
-  text-overflow: ellipsis;
+.time {
+  font-family: var(--font-ar);
+  font-weight: 400;
+  font-size: 10px;
+  line-height: normal;
+  color: var(--color-text-tertiary);
   white-space: nowrap;
 }
-.row-title.code {
-  font: 400 12px/20px var(--font-mono);
+
+.pin-indicator {
+  display: flex;
+  padding: 2px;
+  color: var(--color-pinned);
+}
+
+.pin-indicator svg {
+  width: 10px;
+  height: 10px;
+  display: block;
+}
+
+.row-preview {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  text-align: right;
+}
+
+.preview-title {
+  font-family: var(--font-ar);
+  font-weight: 500;
+  font-size: 12px;
+  line-height: normal;
+  color: var(--color-text-primary);
+  width: 100%;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+.preview-title.is-link {
+  font-family: var(--font-latin);
+  font-weight: 400;
+  color: var(--color-interactive-primary);
+  direction: ltr;
+  text-align: left;
+  -webkit-line-clamp: 1;
+  word-break: break-all;
+}
+
+.preview-sub {
+  font-family: var(--font-latin);
+  font-weight: 400;
+  font-size: var(--text-caption);
+  line-height: normal;
+  color: var(--color-text-secondary);
+  width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 1px;
   direction: ltr;
   text-align: left;
 }
 
-.link-chip {
-  display: inline-block;
-  max-width: 100%;
+/* Image-Thumbnail (2:7760) — 100 × 44. */
+.preview-thumb {
+  width: 100px;
+  height: 44px;
+  border-radius: var(--radius-control);
+  border: 1px solid var(--color-border-default);
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  vertical-align: bottom;
-  background: var(--link-chip-bg);
-  border-radius: var(--r-xs);
-  padding: 1px 6px;
-  font: 500 12px/18px var(--font-body);
-  color: var(--info);
-  direction: ltr;
-  unicode-bidi: plaintext;
-}
-.row.selected .link-chip {
-  background: var(--link-chip-bg-selected);
+  background: var(--color-bg-primary);
+  flex: none;
 }
 
-.image-preview {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  max-width: 100%;
-}
-.image-thumb {
-  width: 28px;
-  height: 20px;
-  border-radius: var(--r-xs);
-  border: var(--b-default) solid var(--border);
-  background: var(--surface-image);
+.preview-thumb img {
+  width: 100%;
+  height: 100%;
   object-fit: cover;
-  flex-shrink: 0;
-}
-.image-label {
-  color: var(--muted);
-  font: 400 12px/18px var(--font-body);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  display: block;
 }
 
-/* metadata — Cairo 500 11/16, tracking .1 */
-.row-meta {
+.row-source {
   display: flex;
   align-items: center;
-  gap: var(--s-1);
-  font: 500 11px/16px var(--font-body);
-  letter-spacing: 0.1px;
-  color: var(--muted);
-  margin-top: 3px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  gap: var(--space-md);
+  flex: none;
+  direction: rtl;
 }
 
-.pin-btn {
-  flex-shrink: 0;
+.source-name {
+  font-family: var(--font-ar);
+  font-weight: 400;
+  font-size: 10px;
+  line-height: normal;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  max-width: 64px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Source-App-Icon (2:7731) — 18 × 18 chip holding a 14px glyph. */
+.source-icon {
+  width: 18px;
+  height: 18px;
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border-default);
   display: flex;
   align-items: center;
   justify-content: center;
-  width: var(--ctl-s);
-  height: var(--ctl-s);
-  border: none;
-  background: transparent;
-  border-radius: var(--r-sm);
-  cursor: pointer;
-  color: var(--icon-secondary);
-  opacity: 0;
-  transition: opacity var(--t-fast) var(--ease-standard);
-  padding: 0;
+  overflow: hidden;
+  flex: none;
+  font-family: var(--font-ar);
+  font-weight: 700;
+  font-size: 9px;
+  line-height: 1;
+  color: var(--color-text-secondary);
 }
+
+/* The row's pin control. Not drawn in «08» as a separate affordance — the
+   pinned state is shown by the indicator under the timestamp — so it stays a
+   keyboard action (⌥P) plus this quiet hover target. */
+.pin-btn {
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-tertiary);
+  opacity: 0;
+  flex: none;
+  transition: opacity var(--t-fast) var(--ease-standard);
+}
+
 .row:hover .pin-btn,
 .row.selected .pin-btn,
 .pin-btn:focus-visible {
   opacity: 1;
 }
-.pin-btn.pinned {
-  color: var(--pinned);
-  opacity: 1;
-}
+
 .pin-btn:hover {
-  background: var(--hover-bg);
-  color: var(--accent);
+  background: var(--color-bg-selected);
+  color: var(--color-interactive-primary);
 }
 
-/* ─── Empty / no-results states ────────────────────────────────────────── */
+/* The pinned state is carried by the indicator under the timestamp, exactly as
+   «08» draws it — this control only tints to show what a click would undo. */
+.pin-btn.is-pinned {
+  color: var(--color-pinned);
+}
+
+.pin-btn svg {
+  width: 12px;
+  height: 12px;
+  display: block;
+}
+
+/* End-of-results marker (2:7875) — only ever shown under an active query. */
+.results-end {
+  padding: 24px 14px;
+  text-align: center;
+  font-family: var(--font-ar);
+  font-weight: 400;
+  font-size: var(--text-body);
+  line-height: 1.6;
+  color: var(--color-text-secondary);
+  flex: none;
+}
+
+/* ─── Full-pane states (2:7906) ───────────────────────────────────────────── */
 
 .state-view {
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  height: 100%;
-  gap: var(--s-3);
-  padding: 30px;
+  gap: 20px;
+  padding: 24px;
   text-align: center;
 }
-.state-icon-box {
-  width: 78px;
-  height: 78px;
-  border-radius: var(--r-xl);
-  background: var(--selected-bg);
+
+.state-art {
+  color: var(--color-border-default);
+  display: flex;
+}
+
+.state-art svg {
+  width: 160px;
+  height: 32px;
+  display: block;
+}
+
+.state-view.is-failure .state-art {
+  color: var(--color-warning);
+}
+
+.state-view.is-failure .state-art svg {
+  width: 40px;
+  height: 40px;
+}
+
+.state-text {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.state-title {
+  font-family: var(--font-ar);
+  font-weight: 800;
+  font-size: 18px;
+  line-height: normal;
+  color: var(--color-interactive-primary);
+}
+
+.state-view.is-failure .state-title {
+  color: var(--color-text-primary);
+}
+
+.state-sub {
+  font-family: var(--font-ar);
+  font-weight: 400;
+  font-size: var(--text-body);
+  line-height: normal;
+  color: var(--color-text-secondary);
+  max-width: 220px;
+}
+
+.state-action {
+  padding: 4px 16px;
+  height: 24px;
+  border-radius: var(--radius-control);
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border-default);
+  font-family: var(--font-ar);
+  font-weight: 500;
+  font-size: var(--text-caption);
+  color: var(--color-text-primary);
+}
+
+.state-action:hover {
+  background: var(--color-bg-selected);
+  color: var(--color-interactive-primary);
+}
+
+/* ─── Footer (2:7787) ─────────────────────────────────────────────────────── */
+
+.panel-footer {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--accent);
-}
-.state-title {
-  font: 700 18px/27px var(--font-display);
-  color: var(--text);
-  margin-bottom: 6px;
-}
-.state-sub {
-  font: 400 13px/21px var(--font-body);
-  color: var(--muted);
-  max-width: 250px;
+  padding: 10px;
+  background: var(--color-bg-primary);
+  border-top: 1px solid var(--color-border-default);
+  flex: none;
+  min-height: 41px;
 }
 
-/* Failure and loading states reuse .state-view but stay quieter than the
-   empty shelf — this is a fault, not an invitation. */
-.state-view.failure .state-icon-box,
-.state-view.loading .state-icon-box {
-  /* Neutral raised surface, not the accent tint the empty shelf uses: a fault
-     must not borrow the brand's warmth, nor echo the «محلي» chip. */
-  background: var(--surface-raised);
-  border: var(--b-default) solid var(--border);
-  color: var(--muted);
-}
-.state-view .state-action {
-  margin-top: 2px;
-  padding: 0 var(--s-3);
-  height: 30px;
-  border: var(--b-default) solid var(--border);
-  border-radius: var(--r-sm);
-  background: var(--surface);
-  color: var(--text);
-  font: 500 12px/18px var(--font-body);
-  cursor: pointer;
-  transition: background var(--t-fast) var(--ease-standard);
-}
-.state-view .state-action:hover {
-  background: var(--selected-bg);
-}
-.state-view .state-action:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
-/* ─── Footer ───────────────────────────────────────────────────────────── */
-
-.footer {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  height: 38px;
-  padding: 0 var(--s-3);
-  border-top: var(--b-default) solid var(--separator);
-  flex-shrink: 0;
-  overflow: hidden;
-  white-space: nowrap;
-}
-.hint {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--s-1);
-  color: var(--muted);
-  font: 500 11px/16px var(--font-body);
-}
-.hint .keys {
-  direction: ltr;
-  unicode-bidi: isolate;
-}
-.footer-spacer {
-  flex: 1;
-}
+.footer-hint,
 .toast {
-  font: 500 11px/16px var(--font-body);
-  color: var(--accent-text);
-  white-space: nowrap;
+  font-family: var(--font-ar);
+  font-weight: 400;
+  font-size: var(--text-caption);
+  line-height: normal;
+  color: var(--color-text-secondary);
+}
+
+.footer-hint kbd {
+  font-family: var(--font-latin);
+  font-weight: 700;
+  font-size: var(--text-caption);
+  color: var(--color-text-primary);
+}
+
+.toast {
+  color: var(--color-interactive-primary);
+  font-weight: 500;
+}
+
+.toast[hidden],
+.footer-hint[hidden] {
+  display: none;
 }

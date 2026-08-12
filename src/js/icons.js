@@ -1,41 +1,47 @@
-// Static SVG markup from the identity's icon set (SF-Symbols style strokes).
-// These strings are constants — never mixed with clipboard content, which is
-// always rendered via textContent.
+// Raff v4.0.0 icon set.
+//
+// Every glyph below is the EXACT path data exported from the approved Figma
+// file (j3EzLpDw4tIHQQSRQm8ZDM) — nothing here was drawn by hand:
+//   • BRAND_MARK / SETTINGS / PIN  ← «08 — Product Screens» (2:8082, 2:8094, 2:8079)
+//   • SEARCH / X_CIRCLE / PIN_OFF / ALERT  ← «05 — Iconography» (4:7592, 4:7517,
+//     4:7520, 4:7577), the sanctioned Product Core Icon Library
+//   • SHELF  ← «08 — Product Screens» Shelf-Illustration (2:7907)
+//
+// Figma hardcodes a stroke colour on each export; here it is bound to
+// `currentColor` so the token layer drives it — the design itself specifies the
+// stroke as varying by state and appearance.
+//
+// These are injected with innerHTML, so they MUST stay static author-controlled
+// strings. Never interpolate clipboard data into them.
 
-const stroke = 'stroke="currentColor" stroke-width="1.5" stroke-linecap="round"';
+/** «08» panel header + menu-bar brand glyph — bar-chart-horizontal, 14×14. */
+export const BRAND_MARK = `<svg viewBox="0 0 14 14" fill="none" aria-hidden="true"><path d="M1.75 1.75V11.0833C1.75 11.3928 1.87292 11.6895 2.09171 11.9083C2.3105 12.1271 2.60725 12.25 2.91667 12.25H12.25M4.08333 9.33333H8.75M4.08333 6.41667H11.0833M4.08333 3.5H5.83333" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`;
 
-export const TYPE_ICONS = {
-  text: `<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 4h10M3 8h7M3 12h5" ${stroke}/></svg>`,
-  link: `<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M6.5 9.5a3.54 3.54 0 0 0 5 0l1.5-1.5a3.54 3.54 0 0 0-5-5L7.5 4" ${stroke}/><path d="M9.5 6.5a3.54 3.54 0 0 0-5 0L3 8a3.54 3.54 0 0 0 5 5l.5-.5" ${stroke}/></svg>`,
-  code: `<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M5.5 5L2.5 8l3 3M10.5 5l3 3-3 3M7 11l2-6" ${stroke} stroke-linejoin="round"/></svg>`,
-  image: `<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="12" height="10" rx="2" ${stroke}/><circle cx="6" cy="6.5" r="1.5" fill="currentColor" opacity="0.7"/><path d="M2 11l3.5-3.5 2.5 2.5 2-2 4 3" ${stroke} stroke-linejoin="round"/></svg>`,
-};
+/** «08» header action — settings gear, 14×14. */
+export const SETTINGS = `<svg viewBox="0 0 14 14" fill="none" aria-hidden="true"><path d="M5.64116 2.41323C5.6733 2.0751 5.83035 1.76109 6.08164 1.53256C6.33292 1.30403 6.66037 1.1774 7.00003 1.1774C7.33969 1.1774 7.66715 1.30403 7.91843 1.53256C8.16972 1.76109 8.32677 2.0751 8.35891 2.41323C8.37823 2.63167 8.44989 2.84223 8.56782 3.0271C8.68576 3.21197 8.84649 3.36571 9.03643 3.4753C9.22637 3.58489 9.43991 3.6471 9.65898 3.65668C9.87806 3.66626 10.0962 3.62291 10.295 3.53032C10.6036 3.39019 10.9534 3.36991 11.2762 3.47343C11.5989 3.57696 11.8716 3.79687 12.0412 4.09038C12.2108 4.38389 12.2651 4.72998 12.1935 5.06132C12.122 5.39265 11.9297 5.68551 11.6542 5.8829C11.4747 6.00881 11.3282 6.17609 11.2271 6.37058C11.126 6.56508 11.0732 6.78106 11.0732 7.00028C11.0732 7.21949 11.126 7.43548 11.2271 7.62997C11.3282 7.82446 11.4747 7.99174 11.6542 8.11765C11.9297 8.31504 12.122 8.6079 12.1935 8.93924C12.2651 9.27057 12.2108 9.61667 12.0412 9.91017C11.8716 10.2037 11.5989 10.4236 11.2762 10.5271C10.9534 10.6306 10.6036 10.6104 10.295 10.4702C10.0962 10.3776 9.87806 10.3343 9.65898 10.3439C9.43991 10.3535 9.22637 10.4157 9.03643 10.5253C8.84649 10.6348 8.68576 10.7886 8.56782 10.9735C8.44989 11.1583 8.37823 11.3689 8.35891 11.5873C8.32677 11.9255 8.16972 12.2395 7.91843 12.468C7.66715 12.6965 7.33969 12.8232 7.00003 12.8232C6.66037 12.8232 6.33292 12.6965 6.08164 12.468C5.83035 12.2395 5.6733 11.9255 5.64116 11.5873C5.62188 11.3688 5.55022 11.1582 5.43225 10.9732C5.31428 10.7883 5.15348 10.6345 4.96346 10.5249C4.77345 10.4153 4.55982 10.3531 4.34066 10.3436C4.12151 10.3341 3.90329 10.3775 3.70449 10.4702C3.39584 10.6104 3.0461 10.6306 2.72333 10.5271C2.40055 10.4236 2.12784 10.2037 1.95827 9.91017C1.78871 9.61667 1.73441 9.27057 1.80595 8.93924C1.8775 8.6079 2.06976 8.31504 2.34533 8.11765C2.52477 7.99174 2.67125 7.82446 2.77238 7.62997C2.8735 7.43548 2.9263 7.21949 2.9263 7.00028C2.9263 6.78106 2.8735 6.56508 2.77238 6.37058C2.67125 6.17609 2.52477 6.00881 2.34533 5.8829C2.07015 5.68541 1.87822 5.39266 1.80685 5.06156C1.73548 4.73045 1.78976 4.38463 1.95915 4.09132C2.12854 3.798 2.40093 3.57814 2.72338 3.47446C3.04583 3.37078 3.39532 3.39069 3.70391 3.53032C3.90268 3.62291 4.12084 3.66626 4.33992 3.65668C4.55899 3.6471 4.77254 3.58489 4.96247 3.4753C5.15241 3.36571 5.31315 3.21197 5.43108 3.0271C5.54902 2.84223 5.62067 2.63167 5.63999 2.41323M8.74957 7.00048C8.74957 7.96698 7.96606 8.75048 6.99957 8.75048C6.03307 8.75048 5.24957 7.96698 5.24957 7.00048C5.24957 6.03398 6.03307 5.25048 6.99957 5.25048C7.96606 5.25048 8.74957 6.03398 8.74957 7.00048Z" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`;
 
-const PIN_PATH = 'M10 2L14 6l-2 2-4-1-3 3v2l2-2 1 4 3-3 1 1 2-2L10 2z';
+/** «08» pinned-row indicator, 10×10. */
+export const PIN = `<svg viewBox="0 0 10 10" fill="none" aria-hidden="true"><path d="M5 7.0835V9.167M3.74986 4.48329C3.74977 4.63834 3.70644 4.79029 3.62473 4.92206C3.54301 5.05383 3.42616 5.16019 3.2873 5.22918L2.54555 5.60421C2.4067 5.67321 2.28984 5.77957 2.20813 5.91134C2.12642 6.04311 2.08308 6.19506 2.083 6.35011V6.6668C2.083 6.77732 2.1269 6.8833 2.20505 6.96145C2.2832 7.0396 2.38919 7.0835 2.49971 7.0835H7.50029C7.61081 7.0835 7.7168 7.0396 7.79495 6.96145C7.8731 6.8833 7.917 6.77732 7.917 6.6668V6.35011C7.91692 6.19506 7.87358 6.04311 7.79187 5.91134C7.71015 5.77957 7.5933 5.67321 7.45445 5.60421L6.7127 5.22918C6.57384 5.16019 6.45699 5.05383 6.37527 4.92206C6.29356 4.79029 6.25023 4.63834 6.25014 4.48329V2.9165C6.25014 2.80598 6.29405 2.69999 6.3722 2.62185C6.45034 2.5437 6.55634 2.4998 6.66686 2.4998C6.8879 2.4998 7.09988 2.412 7.25618 2.2557C7.41248 2.09941 7.50029 1.88743 7.50029 1.6664C7.50029 1.44537 7.41248 1.23339 7.25618 1.0771C7.09988 0.920804 6.8879 0.833 6.66686 0.833H3.33314C3.1121 0.833 2.90012 0.920804 2.74382 1.0771C2.58752 1.23339 2.49971 1.44537 2.49971 1.6664C2.49971 1.88743 2.58752 2.09941 2.74382 2.2557C2.90012 2.412 3.1121 2.4998 3.33314 2.4998C3.44366 2.4998 3.54966 2.5437 3.6278 2.62185C3.70595 2.69999 3.74986 2.80598 3.74986 2.9165V4.48329Z" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`;
 
-export const PIN_ICON = `<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="${PIN_PATH}" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>`;
-export const PIN_ICON_FILLED = `<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="${PIN_PATH}" fill="currentColor"/></svg>`;
+/** «05» search — the field's magnifier. */
+export const SEARCH = `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M21.0002 21.0002L16.6602 16.6602M19 11C19 15.4183 15.4183 19 11 19C6.58172 19 3 15.4183 3 11C3 6.58172 6.58172 3 11 3C15.4183 3 19 6.58172 19 11Z" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`;
 
-export const SEARCH_ICON = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="7" cy="7" r="4.5" ${stroke}/><path d="M10.5 10.5L13.5 13.5" ${stroke}/></svg>`;
+/** «05» x-circle — the search field's clear control. */
+export const CLEAR = `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15.0002 8.99976L8.99976 15.0002M8.99976 8.99976L15.0002 15.0002M22.0008 12C22.0008 17.5233 17.5233 22.0008 12 22.0008C6.47671 22.0008 1.9992 17.5233 1.9992 12C1.9992 6.47671 6.47671 1.9992 12 1.9992C17.5233 1.9992 22.0008 6.47671 22.0008 12Z" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`;
 
-// Echoes the brand mark's containing-bracket language for the empty shelf —
-// the same open bracket holding two content bars, just unfilled.
-export const EMPTY_ICON = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M16.5 4.9L5.6 4.9L5.6 19.1L16.5 19.1" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><rect x="9" y="9.15" width="6.75" height="2.1" rx="1.05" fill="currentColor"/><rect x="9" y="13.2" width="4.5" height="2.1" rx="1.05" fill="currentColor" opacity="0.5"/></svg>`;
+/** «05» pin-off — the row's pin toggle. */
+export const PIN_TOGGLE = `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 17.0004V22.0008M14.9999 9.33979V6.9996C14.9999 6.73436 15.1053 6.47999 15.2928 6.29244C15.4804 6.10489 15.7347 5.99952 16 5.99952C16.5304 5.99952 17.0392 5.78879 17.4143 5.41369C17.7894 5.03858 18.0001 4.52984 18.0001 3.99936C18.0001 3.46888 17.7894 2.96014 17.4143 2.58503C17.0392 2.20993 16.5304 1.9992 16 1.9992H7.88932M1.9992 1.9992L22.0008 22.0008M8.99976 8.99976V10.7599C8.99956 11.132 8.89556 11.4967 8.69946 11.8129C8.50335 12.1292 8.22291 12.3845 7.88967 12.55L6.10953 13.4501C5.77629 13.6157 5.49585 13.871 5.29974 14.1872C5.10364 14.5035 4.99964 14.8681 4.99944 15.2403V16.0003C4.99944 16.2656 5.10481 16.5199 5.29236 16.7075C5.47991 16.895 5.73428 17.0004 5.99952 17.0004H17.0004" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`;
 
-// Small circular arrow for the titlebar «تحديث رَفّ» button. Sized to sit
-// beside the «محلي» chip without competing with it.
-export const REFRESH_ICON = `<svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9" ${stroke}/><path d="M13.5 2.6v3.1h-3.1" ${stroke} stroke-linejoin="round"/></svg>`;
+/** «05» alert-triangle — the recoverable-failure state. */
+export const ALERT = `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 8.99927V12.9993M12 16.9993H12.01M21.7304 17.9995L13.7304 3.9995C13.556 3.6917 13.303 3.43568 12.9973 3.25757C12.6916 3.07945 12.3442 2.9856 11.9904 2.9856C11.6366 2.9856 11.2892 3.07945 10.9835 3.25757C10.6778 3.43568 10.4248 3.6917 10.2504 3.9995L2.2504 17.9995C2.07408 18.3049 1.98162 18.6514 1.9824 19.004C1.98319 19.3566 2.07717 19.7027 2.25484 20.0073C2.43251 20.3119 2.68754 20.5641 2.99409 20.7383C3.30064 20.9126 3.6478 21.0027 4.0004 20.9995H20.0004C20.3513 20.9991 20.6959 20.9065 20.9997 20.7308C21.3034 20.5551 21.5556 20.3026 21.7309 19.9986C21.9062 19.6946 21.9984 19.3499 21.9983 18.999C21.9983 18.6481 21.9058 18.3034 21.7304 17.9995Z" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`;
 
-// Shown by the failure state — deliberately quiet, no alarm colours. The
-// bracket reads as "broken" via the gap in its stroke, not a new metaphor.
-export const BROKEN_ICON = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M16.5 4.9L5.6 4.9L5.6 12" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M5.6 14.4L5.6 19.1L16.5 19.1" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><rect x="9" y="9.15" width="6.75" height="2.1" rx="1.05" fill="currentColor"/><rect x="9" y="13.2" width="4.5" height="2.1" rx="1.05" fill="currentColor" opacity="0.4"/></svg>`;
+/** «05» keyboard — the first-run screen's subject: the Accessibility grant
+ *  exists so رفّ can press ⌘V for you. */
+export const KEYBOARD = `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9.99984 8.0004H10.0098M12 12H12.01M14.0002 8.0004H14.0102M16.0003 12H16.0103M18.0005 8.0004H18.0105M5.99952 8.0004H6.00952M6.9996 15.9996H17.0004M7.99968 12H8.00968M3.99936 4.0008H20.0006C21.1053 4.0008 22.0008 4.89614 22.0008 6.0006V17.9994C22.0008 19.1039 21.1053 19.9992 20.0006 19.9992H3.99936C2.8947 19.9992 1.9992 19.1039 1.9992 17.9994V6.0006C1.9992 4.89614 2.8947 4.0008 3.99936 4.0008Z" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`;
 
-export const NO_RESULTS_ICON = `<svg width="32" height="32" viewBox="0 0 32 32" fill="none"><path d="M20 7.3L9.5 7.3L9.5 24.7L18 24.7" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><rect x="13" y="13.2" width="6.5" height="2.6" rx="1.3" fill="currentColor" opacity="0.6"/><circle cx="23" cy="23" r="5" ${stroke}/><path d="M26.5 26.5l4 4" ${stroke}/></svg>`;
+/** «05» check-circle — success and reassurance. */
+export const CHECK = `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M21.8003 10.0002C22.257 12.2415 21.9315 14.5716 20.8781 16.602C19.8247 18.6324 18.1072 20.2403 16.0118 21.1575C13.9164 22.0748 11.5699 22.246 9.36356 21.6426C7.15723 21.0392 5.22445 19.6976 3.88753 17.8416C2.55062 15.9857 1.89038 13.7274 2.01692 11.4436C2.14346 9.15974 3.04914 6.9883 4.58291 5.29138C6.11668 3.59446 8.18584 2.47464 10.4453 2.11866C12.7048 1.76268 15.018 2.19207 16.9993 3.33521M8.99965 10.9997L11.9996 13.9997L21.9996 3.99973" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`;
 
-export const SHIELD_ICON = `<svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M10 2.5L3.5 5.5V10c0 4 3.5 6.5 6.5 7.5 3-1 6.5-3.5 6.5-7.5V5.5L10 2.5z" ${stroke} stroke-linejoin="round"/><path d="M7 10l2 2 4-4" ${stroke} stroke-linejoin="round"/></svg>`;
-
-export const SUN_ICON = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="3" ${stroke}/><path d="M8 1.2v1.9M8 12.9v1.9M1.2 8h1.9M12.9 8h1.9M3.2 3.2l1.35 1.35M11.45 11.45l1.35 1.35M12.8 3.2l-1.35 1.35M4.55 11.45L3.2 12.8" ${stroke}/></svg>`;
-
-export const MOON_ICON = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M13.6 9.8A5.9 5.9 0 0 1 6.2 2.4a5.9 5.9 0 1 0 7.4 7.4z" ${stroke} stroke-linejoin="round"/></svg>`;
-
-export const ACCESSIBILITY_ICON = `<svg width="56" height="56" viewBox="0 0 56 56" fill="none"><circle cx="28" cy="12" r="5" stroke="currentColor" stroke-width="2"/><path d="M16 22c0 0 4-3 12-3s12 3 12 3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M20 22v10l-4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M36 22v10l4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M24 32l-2 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M32 32l2 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`;
+/** «08» Shelf-Illustration (2:7907) — the empty shelf. Three tapering rules,
+ *  160 / 120 / 80 wide, 14px apart, centred. This is the empty-state art. */
+export const SHELF = `<svg viewBox="0 0 160 32" fill="none" aria-hidden="true"><path d="M1 1H159M21 15H139M41 29H119" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`;

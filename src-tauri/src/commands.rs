@@ -7,7 +7,7 @@ use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder
 use tauri_plugin_autostart::ManagerExt as AutostartExt;
 
 use crate::storage::{AppIconPref, Appearance, ItemKind, Settings};
-use crate::{macos, panel, paste, tray, AppState};
+use crate::{macos, panel, paste, AppState};
 
 const PREVIEW_MAX_CHARS: usize = 1000;
 
@@ -241,6 +241,61 @@ pub fn get_image(state: State<AppState>, id: String) -> Option<String> {
     ))
 }
 
+/// Source-app icons are immutable for the life of the process and every row in
+/// the list asks for one, so each bundle id is rendered at most once.
+static APP_ICON_CACHE: std::sync::OnceLock<
+    std::sync::Mutex<std::collections::HashMap<String, Option<String>>>,
+> = std::sync::OnceLock::new();
+
+/// The 32×32 icon of the app a clip came from, as a `data:` URL.
+/// Figma «08 — Product Screens» draws it in the row's trailing chip.
+/// `None` when the app is unknown or its icon cannot be rendered — the panel
+/// then keeps the app-initial fallback, so this is always decorative.
+#[tauri::command]
+pub fn source_app_icon(app: AppHandle, bundle_id: String) -> Option<String> {
+    let cache = APP_ICON_CACHE.get_or_init(Default::default);
+    if let Ok(map) = cache.lock() {
+        if let Some(hit) = map.get(&bundle_id) {
+            return hit.clone();
+        }
+    }
+
+    // NSWorkspace icon lookup is AppKit work; IPC handlers are off-main.
+    let (tx, rx) = std::sync::mpsc::channel();
+    let wanted = bundle_id.clone();
+    if app
+        .run_on_main_thread(move || {
+            let _ = tx.send(macos::app_icon_tiff(&wanted));
+        })
+        .is_err()
+    {
+        return None;
+    }
+    let tiff = rx
+        .recv_timeout(std::time::Duration::from_millis(1500))
+        .ok()
+        .flatten();
+
+    let data_url = tiff.and_then(|bytes| {
+        let decoded = image::load_from_memory_with_format(&bytes, image::ImageFormat::Tiff).ok()?;
+        let small = decoded.thumbnail(APP_ICON_PX, APP_ICON_PX);
+        let mut out = std::io::Cursor::new(Vec::new());
+        small.write_to(&mut out, image::ImageFormat::Png).ok()?;
+        Some(format!(
+            "data:image/png;base64,{}",
+            base64::engine::general_purpose::STANDARD.encode(out.into_inner())
+        ))
+    });
+
+    if let Ok(mut map) = cache.lock() {
+        map.insert(bundle_id, data_url.clone());
+    }
+    data_url
+}
+
+/// The row chip renders at 18pt; 32px covers it on a 2x display.
+const APP_ICON_PX: u32 = 32;
+
 #[tauri::command]
 pub fn hide_panel(app: AppHandle) {
     panel::hide(&app);
@@ -292,7 +347,6 @@ pub fn list_running_apps() -> Vec<RunningApp> {
 
 fn notify(app: &AppHandle) {
     let _ = app.emit("raff://changed", ());
-    tray::refresh(app);
 }
 
 /// The native theme override for a settings snapshot: `None` means "follow
@@ -510,7 +564,28 @@ const WINDOW_REVEAL_FALLBACK_MS: u64 = 1500;
 /// actually loaded. Showing at build time raced the WKWebView's first paint
 /// and could present a permanently white window (especially when triggered
 /// from the tray menu, whose tracking run loop is still unwinding).
-fn open_window_when_ready(app: &AppHandle, label: &str, page: &str, title: &str, size: (f64, f64)) {
+/// Whether a secondary window draws its own chrome.
+///
+/// Settings and About are designed in Figma with their own title bar — a warm
+/// surface, a 1px rule, a centred Cairo Bold title and the traffic lights on
+/// the left — inside a 16px rounded shell. A native macOS title bar would sit
+/// *above* all of that, so those windows are built undecorated and transparent
+/// and paint the whole window themselves. Windows with no designed chrome
+/// (first-run, update) keep the native frame.
+#[derive(Clone, Copy, PartialEq)]
+enum Chrome {
+    Native,
+    Designed,
+}
+
+fn open_window_when_ready(
+    app: &AppHandle,
+    label: &str,
+    page: &str,
+    title: &str,
+    size: (f64, f64),
+    chrome: Chrome,
+) {
     if let Some(w) = app.get_webview_window(label) {
         // Visible → just focus it. Hidden → it is still loading; the
         // page-load handler (or the watchdog below) will reveal it.
@@ -519,14 +594,18 @@ fn open_window_when_ready(app: &AppHandle, label: &str, page: &str, title: &str,
         }
         return;
     }
-    let result = WebviewWindowBuilder::new(app, label, WebviewUrl::App(page.into()))
+    let mut builder = WebviewWindowBuilder::new(app, label, WebviewUrl::App(page.into()))
         .title(title)
         .inner_size(size.0, size.1)
         .resizable(false)
         .maximizable(false)
         .minimizable(false)
         .center()
-        .visible(false)
+        .visible(false);
+    if chrome == Chrome::Designed {
+        builder = builder.decorations(false).transparent(true).shadow(true);
+    }
+    let result = builder
         .on_page_load(|window, payload| {
             if payload.event() == tauri::webview::PageLoadEvent::Finished {
                 let _ = window.show();
@@ -548,6 +627,25 @@ fn open_window_when_ready(app: &AppHandle, label: &str, page: &str, title: &str,
     }
 }
 
+/// Opens the official Raff repository in the user's browser. Takes no
+/// argument — the URL lives in Rust, so this can only ever open that one page.
+#[tauri::command]
+pub fn open_repository() {
+    macos::open_repository();
+}
+
+/// The panel header's gear (Figma «08», Header-Actions 2:7695).
+#[tauri::command]
+pub fn open_settings(app: AppHandle) {
+    open_settings_window(&app);
+}
+
+/// «عن رفّ» from the Settings window's own action.
+#[tauri::command]
+pub fn open_about(app: AppHandle) {
+    open_about_window(&app);
+}
+
 pub fn open_settings_window(app: &AppHandle) {
     // Deferred one event-loop tick: never build a webview synchronously
     // inside the tray-menu callback (see open_window_when_ready).
@@ -558,14 +656,41 @@ pub fn open_settings_window(app: &AppHandle) {
             "settings",
             "settings.html",
             "إعدادات رفّ",
-            // component.settings.width / minHeight from the identity tokens.
-            (720.0, 560.0),
+            // Figma «08 — Product Screens», screen ٥ (macOS-Settings-Window).
+            (480.0, 520.0),
+            Chrome::Designed,
+        );
+    });
+}
+
+/// «عن رفّ» — the About window from Figma «08 — Product Screens», screen ٦.
+/// Opened from the menu bar's contextual menu. Deferred to the main thread for
+/// the same reason as settings: never build a webview inside the menu's
+/// tracking run loop.
+pub fn open_about_window(app: &AppHandle) {
+    let handle = app.clone();
+    let _ = app.run_on_main_thread(move || {
+        open_window_when_ready(
+            &handle,
+            "about",
+            "about.html",
+            "عن رفّ",
+            // Figma «08 — Product Screens», screen ٦ (macOS-About-Window).
+            (320.0, 400.0),
+            Chrome::Designed,
         );
     });
 }
 
 pub fn open_firstrun_window(app: &AppHandle) {
-    open_window_when_ready(app, "firstrun", "firstrun.html", "رفّ", (480.0, 620.0));
+    open_window_when_ready(
+        app,
+        "firstrun",
+        "firstrun.html",
+        "رفّ",
+        (480.0, 620.0),
+        Chrome::Native,
+    );
 }
 
 /// Small, tab-less window dedicated to the update cycle (opened by the tray's
@@ -589,7 +714,14 @@ pub fn open_update_window(app: &AppHandle) {
             let _ = w.set_focus();
             return;
         }
-        open_window_when_ready(&handle, "update", "update.html", "تحديث رفّ", (360.0, 280.0));
+        open_window_when_ready(
+            &handle,
+            "update",
+            "update.html",
+            "تحديث رفّ",
+            (360.0, 280.0),
+            Chrome::Native,
+        );
     });
 }
 

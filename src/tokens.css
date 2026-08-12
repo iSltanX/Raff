@@ -1,0 +1,367 @@
+/* ===========================================================================
+   رفّ — Raff v4.0.0 design tokens
+   ---------------------------------------------------------------------------
+   Single source of truth for every visual value in the app. Generated from the
+   approved Figma system:
+
+     Figma file  j3EzLpDw4tIHQQSRQm8ZDM
+     «03 — Color & Typography»   (2:4)  — primitive ramps + type scale
+     «04 — Foundations & Variables» (2:5) — spacing / radius / elevation / tokens
+     «08 — Product Screens»      (2:9)  — the product surfaces
+     «09 — Light & Dark»         (2:10) — the light↔dark token pairs
+
+   The Figma file carries no bound Figma Variables — every value there is a
+   literal, so the token layer is authored here. Pages 04 and 09 define the
+   semantic light/dark pairs and agree with each other exactly; they are the
+   authority for colour. Page 08 is the authority for structure and is composed
+   from these same roles.
+
+   Nothing outside this file may declare a raw colour, radius, or spacing value.
+   =========================================================================== */
+
+/* ─── Typefaces ────────────────────────────────────────────────────────────
+   Cairo is the Arabic face (headings and all Arabic UI strings).
+   Almarai is the Latin/numeral face (English metadata, hex, numerals and the
+   macOS modifier glyphs ⌘ ⌥ ⇧ ⌫). At the 13px body size the two are used at
+   the same size and leading so mixed Ar/Latin lines stay optically level.
+   — «03 — Color & Typography», Font Pairing Specimen.                        */
+
+@font-face {
+  font-family: 'Cairo';
+  src: url('fonts/Cairo-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: block;
+}
+@font-face {
+  font-family: 'Cairo';
+  src: url('fonts/Cairo-Medium.ttf') format('truetype');
+  font-weight: 500;
+  font-style: normal;
+  font-display: block;
+}
+@font-face {
+  font-family: 'Cairo';
+  src: url('fonts/Cairo-SemiBold.ttf') format('truetype');
+  font-weight: 600;
+  font-style: normal;
+  font-display: block;
+}
+@font-face {
+  font-family: 'Cairo';
+  src: url('fonts/Cairo-Bold.ttf') format('truetype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: block;
+}
+@font-face {
+  font-family: 'Cairo';
+  src: url('fonts/Cairo-ExtraBold.ttf') format('truetype');
+  font-weight: 800;
+  font-style: normal;
+  font-display: block;
+}
+@font-face {
+  font-family: 'Cairo';
+  src: url('fonts/Cairo-Black.ttf') format('truetype');
+  font-weight: 900;
+  font-style: normal;
+  font-display: block;
+}
+@font-face {
+  font-family: 'Almarai';
+  src: url('fonts/Almarai-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: block;
+}
+@font-face {
+  font-family: 'Almarai';
+  src: url('fonts/Almarai-Bold.ttf') format('truetype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: block;
+}
+
+:root {
+  /* ─── Primitives — «03 — Color & Typography» ────────────────────────────
+     Raw values. Never referenced directly by a component; semantic aliases
+     below are what the UI uses.                                             */
+
+  /* Terracotta (brand) */
+  --terracotta-50: #fdf5f0;
+  --terracotta-100: #f9e6da;
+  --terracotta-200: #f0c9b0;
+  --terracotta-300: #e4a882;
+  --terracotta-400: #d4855a;
+  --terracotta-500: #c4704b; /* الأساسي — the brand colour */
+  --terracotta-600: #a85a3a;
+  --terracotta-700: #8a452d;
+  --terracotta-800: #6c3522;
+  --terracotta-900: #4e2619;
+  --terracotta-950: #2e160e;
+
+  /* Warm neutral (stone) */
+  --stone-0: #ffffff;
+  --stone-50: #faf8f5;
+  --stone-100: #f2ece4;
+  --stone-200: #e7ddd3;
+  --stone-300: #dacdc0;
+  --stone-400: #cbbbad;
+  --stone-500: #bca99b;
+  --stone-600: #9f8778;
+  --stone-700: #826d5e;
+  --stone-800: #665346;
+  --stone-900: #4d3b2f;
+  --stone-950: #34251b;
+  --stone-black: #110f0d;
+
+  /* Status */
+  --indigo-light: #f0f1f8;
+  --indigo-subtle: #b8bce1;
+  --indigo-primary: #4e56a0;
+  --indigo-dark: #171a2f;
+  --success-light: #5cb37a;
+  --success-primary: #2e7a4b;
+  --error-light: #d46b6b;
+  --error-primary: #a33c3c;
+  --warning-light: #d9a641;
+  --warning-primary: #a57724;
+
+  /* ─── Semantic colour — LIGHT ──────────────────────────────────────────
+     «04 — Foundations & Variables» semantic token table, confirmed value for
+     value by the «09 — Light & Dark» comparison table.                      */
+
+  --color-bg-primary: #ffffff; /* footer, raised chips, menus */
+  --color-bg-secondary: #faf8f6; /* the panel / window surface */
+  --color-bg-selected: #fdf5f0; /* selected row, accent-tinted fills */
+  --color-bg-field: #f2ece6; /* search field — «09», not in the token table */
+
+  --color-text-primary: #1e1a17;
+  --color-text-secondary: #6b6054;
+  /* Timestamps and copyright. «08 — Product Screens» is the only page that
+     defines a third text level; no page defines its dark counterpart, so the
+     dark value is set one step dimmer than text-secondary. */
+  --color-text-tertiary: #a5a19d;
+  --color-text-brand: #a85a3a; /* = terracotta-600 */
+  /* The author credit on the About window — «08 — Product Screens», 7:1609.
+     The only place the system uses this warm brown, and «09 — Light & Dark»
+     draws no dark counterpart for it, so dark reuses text-secondary. */
+  --color-text-credit: #4a382b;
+
+  --color-border-default: #e0dad2;
+  --color-border-divider: #f0eae1; /* hairline between header and list */
+  --color-border-selected: #c4704b;
+  /* The selected row's hairline is the accent at 20% — «08», Clipboard-Row
+     2:7722. Held as a literal because color-mix() postdates the WebKit that
+     ships with the macOS 12 floor this app supports. */
+  --color-border-selected-soft: rgba(196, 112, 75, 0.2);
+
+  /* Quiet chip fill behind icon-only buttons — «08» header action 2:7696. */
+  --color-fill-subtle: rgba(0, 0, 0, 0.04);
+
+  --color-interactive-primary: #c4704b;
+  /* The pinned indicator is the one accent element that does NOT swap in dark
+     — «09 — Light & Dark», map-pin 2:9063 / 2:9066. */
+  --color-pinned: #c4704b;
+  /* Label colour on top of a filled accent (the active filter segment 2:7710,
+     the About app-icon glyph 2:8066). `Labels/White #ffffff` in the macOS kit
+     — white in both appearances. */
+  --color-text-on-accent: #ffffff;
+
+  /* The app icon is the one place the brand appears as a gradient — «08»,
+     Logo-Graphic 2:8066, linear 180° from start to end. Both stops are
+     literals in Figma and do not swap in dark: this is the product mark, not
+     a themed surface. */
+  --color-appicon-start: #c4704b;
+  --color-appicon-end: #f58625;
+
+  --color-success: #3d9960;
+  --color-error: #a33c3c;
+  --color-warning: #a57724;
+
+  /* macOS traffic lights — identical in both appearances («09»). */
+  --color-stoplight-close: #ff5f56;
+  --color-stoplight-min: #ffbd2e;
+  --color-stoplight-zoom: #27c93f;
+
+  /* Native control tints from the embedded macOS 26 kit. */
+  --color-control-tint: #0d6fff;
+  --color-control-destructive: #ff383c;
+
+  /* ─── Spacing — «04», φ scale from a 13px base ─────────────────────────── */
+  --space-2xs: 2px;
+  --space-xs: 4px;
+  --space-sm: 6px;
+  --space-md: 8px;
+  --space-lg: 13px; /* الأساس — the base step */
+  --space-xl: 21px;
+  --space-2xl: 34px;
+  --space-3xl: 55px;
+  --space-4xl: 89px;
+
+  /* Purpose aliases — mode-invariant. */
+  --space-panel-padding: 13px;
+  --space-item-gap: 4px;
+  --space-section-gap: 21px;
+  --space-content-padding: 8px;
+
+  /* ─── Radius — «04» ───────────────────────────────────────────────────── */
+  --radius-none: 0px;
+  --radius-sm: 4px; /* controls / أزرار */
+  --radius-md: 8px; /* default / افتراضي */
+  --radius-lg: 12px; /* cards / بطاقات */
+  --radius-xl: 16px; /* panels / ألواح */
+  --radius-2xl: 20px; /* sheets / الحوارات */
+  --radius-full: 32px; /* pills / دائرية */
+  --radius-control: 6px; /* macOS kit Button/Radius */
+
+  /* ─── Elevation — «04» ────────────────────────────────────────────────── */
+  --elev-1: 0 1px 1.5px rgba(0, 0, 0, 0.04); /* raised — default cards */
+  --elev-2: 0 6px 6px rgba(0, 0, 0, 0.08); /* floating — clipboard & tools */
+  --elev-3: 0 12px 12px rgba(0, 0, 0, 0.11); /* overlay — panels & menus */
+  /* The window drop shadow the product screens mock. Identical in both
+     appearances («09»). Windows get this from macOS itself; the token exists
+     for in-page surfaces that must match. */
+  --elev-window: 0 12px 24px rgba(0, 0, 0, 0.15);
+  /* The About app icon's own drop shadow — «08», Logo-Graphic 2:8066. Tinted
+     with the brand instead of black, and unchanged in dark. */
+  --elev-appicon: 0 8px 8px rgba(196, 112, 75, 0.25);
+
+  /* ─── Typography — «03», φ scale from a 13px baseline ─────────────────── */
+  --font-ar: 'Cairo', -apple-system, 'SF Arabic', system-ui, sans-serif;
+  --font-latin: 'Almarai', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', 'SFMono-Regular', Menlo, monospace;
+
+  --text-display-1: 55px;
+  --text-display-2: 34px;
+  --text-title-1: 28px;
+  --text-title-2: 21px;
+  --text-title-3: 17px;
+  --text-subhead: 15px;
+  --text-body: 13px;
+  --text-caption: 11px;
+
+  --leading-display-1: 64px;
+  --leading-display-2: 42px;
+  --leading-title-1: 36px;
+  --leading-title-2: 28px;
+  --leading-title-3: 24px;
+  --leading-subhead: 20px;
+  --leading-body: 18px;
+  --leading-caption: 15px;
+
+  --tracking-display-1: -0.01em;
+  --tracking-display-2: -0.005em;
+
+  /* ─── Motion ──────────────────────────────────────────────────────────────
+     «04» defines no motion tokens. These are the minimum needed for the
+     interaction states «07 — Patterns & States» documents, kept deliberately
+     short so the panel never feels laggy on open. */
+  --t-fast: 90ms;
+  --t-base: 150ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+}
+
+:root[data-appearance='dark'] {
+  --color-bg-primary: #1e1a17;
+  --color-bg-secondary: #2a2420;
+  --color-bg-selected: #2e160e;
+  --color-bg-field: #342d26;
+
+  --color-text-primary: #faf8f6;
+  --color-text-secondary: #b0a596;
+  --color-text-tertiary: #8a7e72;
+  --color-text-brand: #d4855a;
+  /* No dark counterpart is drawn for the credit brown — it falls back to the
+     dark text-secondary value. */
+  --color-text-credit: #b0a596;
+
+  --color-border-default: #4d443a;
+  --color-border-divider: #2e2620;
+  --color-border-selected: #d4855a;
+  --color-border-selected-soft: rgba(212, 133, 90, 0.25);
+
+  --color-fill-subtle: rgba(255, 255, 255, 0.06);
+
+  --color-interactive-primary: #d4855a;
+  --color-pinned: #c4704b;
+
+  --color-success: #5cb37a;
+  --color-error: #d46b6b;
+  --color-warning: #d9a641;
+
+  /* Elevation shadows need more weight on a dark surface to read at all. */
+  --elev-1: 0 1px 1.5px rgba(0, 0, 0, 0.3);
+  --elev-2: 0 6px 6px rgba(0, 0, 0, 0.38);
+  --elev-3: 0 12px 12px rgba(0, 0, 0, 0.45);
+}
+
+/* ─── Reset & shared base ─────────────────────────────────────────────────── */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+body {
+  font-family: var(--font-ar);
+  font-size: var(--text-body);
+  line-height: var(--leading-body);
+  color: var(--color-text-primary);
+  background: var(--color-bg-secondary);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overflow: hidden;
+  cursor: default;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+button,
+input,
+select {
+  font: inherit;
+  color: inherit;
+  margin: 0;
+}
+
+button {
+  border: 0;
+  background: none;
+  padding: 0;
+  cursor: default;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-interactive-primary);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* Latin runs, numerals and macOS modifier glyphs are Almarai and must never be
+   reordered by the bidi algorithm inside an RTL line. */
+.latin,
+kbd {
+  font-family: var(--font-latin);
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

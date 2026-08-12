@@ -4,55 +4,76 @@
   <meta charset="utf-8" />
   <title>رفّ</title>
   <script src="theme.js"></script>
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="tokens.css" />
   <link rel="stylesheet" href="panel.css" />
 </head>
 <body>
+  <!-- Figma «08 — Product Screens» → macOS-Panel-Shell (2:7684), 360 × 580. -->
   <main class="panel" id="panel">
-    <div class="panel-titlebar">
-      <div class="panel-brand">
-        <img class="panel-mark" src="assets/brand/raff-mark.svg" alt="" width="23" height="23" aria-hidden="true" />
-        <strong>رفّ</strong>
+    <header class="panel-header">
+      <!-- Window Controls/Utility (2:7686). Physically left, as on every macOS
+           window — the traffic lights never mirror in RTL. -->
+      <div class="window-controls">
+        <button type="button" class="dot dot-close" id="panel-close" title="إغلاق" aria-label="إغلاق رفّ" tabindex="-1"></button>
+        <span class="dot dot-min" aria-hidden="true"></span>
+        <span class="dot dot-zoom" aria-hidden="true"></span>
       </div>
-      <div class="panel-title-actions">
-        <span class="privacy-chip" id="privacy-chip" title="كل شيء على جهازك">محلي</span>
+
+      <div class="brand">
+        <strong class="brand-name">رفّ</strong>
+        <span class="brand-mark" id="brand-mark" aria-hidden="true"></span>
+      </div>
+
+      <div class="header-actions">
         <button
           type="button"
-          class="refresh-btn"
-          id="refresh-btn"
-          title="تحديث رَفّ"
-          aria-label="تحديث محتوى رَفّ"
+          class="action-btn"
+          id="settings-btn"
+          title="الإعدادات"
+          aria-label="فتح إعدادات رفّ"
           tabindex="-1"
+        ></button>
+      </div>
+    </header>
+
+    <div class="search-container">
+      <div class="search-field" id="search-field">
+        <span class="search-glyph" id="search-glyph" aria-hidden="true"></span>
+        <input
+          id="search"
+          class="search-input"
+          type="text"
+          placeholder="ابحث في رفّك…"
+          autocomplete="off"
+          autocorrect="off"
+          spellcheck="false"
+          aria-label="ابحث في رفّك"
+        />
+        <button
+          type="button"
+          class="search-clear"
+          id="search-clear"
+          title="مسح البحث"
+          aria-label="مسح البحث"
+          tabindex="-1"
+          hidden
         ></button>
       </div>
     </div>
 
-    <div class="search-field" id="search-field">
-      <span class="search-icon" id="search-icon" aria-hidden="true"></span>
-      <input
-        id="search"
-        class="search-input"
-        type="text"
-        placeholder="ابحث في رفّك…"
-        autocomplete="off"
-        autocorrect="off"
-        spellcheck="false"
-        aria-label="ابحث في رفّك"
-      />
-      <span class="esc-chip" id="esc-chip" hidden>esc</span>
-      <kbd class="search-kbd" aria-hidden="true">⌘F</kbd>
+    <!-- Filters (2:7710). RTL reading order: الكل is the rightmost segment. -->
+    <div class="filters" id="filters" role="tablist" aria-label="تصفية العناصر">
+      <button type="button" class="segment is-active" data-filter="all" role="tab" aria-selected="true" tabindex="-1">الكل</button>
+      <button type="button" class="segment" data-filter="text" role="tab" aria-selected="false" tabindex="-1">نص</button>
+      <button type="button" class="segment" data-filter="link" role="tab" aria-selected="false" tabindex="-1">روابط</button>
+      <button type="button" class="segment" data-filter="image" role="tab" aria-selected="false" tabindex="-1">صور</button>
+      <button type="button" class="segment" data-filter="pinned" role="tab" aria-selected="false" tabindex="-1">مثبّت</button>
     </div>
 
-    <div class="list scroll-pane" id="list" role="listbox" aria-label="عناصر الحافظة"></div>
+    <div class="items-list" id="list" role="listbox" aria-label="عناصر الحافظة"></div>
 
-    <footer class="footer">
-      <!-- .keys isolates each shortcut so the bidi algorithm can't flip
-           ⌥P into P⌥ inside the RTL line. -->
-      <span class="hint"><kbd class="keys">↑↓</kbd> تنقّل</span>
-      <span class="hint"><kbd class="keys">⏎</kbd> لصق</span>
-      <span class="hint"><kbd class="keys">⌥P</kbd> تثبيت</span>
-      <span class="hint"><kbd class="keys">⌘⌫</kbd> حذف</span>
-      <i class="footer-spacer"></i>
+    <footer class="panel-footer">
+      <span class="footer-hint" id="footer-hint"><kbd>⌘V</kbd> للصق الفوري</span>
       <span class="toast" id="toast" hidden></span>
     </footer>
   </main>

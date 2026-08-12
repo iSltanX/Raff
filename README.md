@@ -1,13 +1,13 @@
 <div align="center">
 
-<img src="docs/assets/raff-readme-header.png" alt="رفّ — Raff" width="100%" />
+<img src="docs/assets/raff-app-icon.png" alt="رفّ — Raff" width="128" height="128" />
 
 **مدير الحافظة الشخصي والخاص لنظام macOS**
 
 كل ما نسخته يبقى قريبًا، مرتبًا، وخاصًا.
 
-[![الإصدار](https://img.shields.io/badge/%D8%A7%D9%84%D8%A5%D8%B5%D8%AF%D8%A7%D8%B1-v3.1.0-96540F?style=flat-square)](https://github.com/iSltanX/Raff/releases/latest)
-[![macOS](https://img.shields.io/badge/macOS-12%2B%20·%20Apple%20Silicon-211D19?style=flat-square)](https://github.com/iSltanX/Raff/releases/latest)
+[![الإصدار](https://img.shields.io/badge/%D8%A7%D9%84%D8%A5%D8%B5%D8%AF%D8%A7%D8%B1-v4.0.0-C4704B?style=flat-square)](https://github.com/iSltanX/Raff/releases/latest)
+[![macOS](https://img.shields.io/badge/macOS-12%2B%20·%20Apple%20Silicon-1E1A17?style=flat-square)](https://github.com/iSltanX/Raff/releases/latest)
 [![محلي بالكامل](https://img.shields.io/badge/%D9%85%D8%AD%D9%84%D9%8A%20%D8%A8%D8%A7%D9%84%D9%83%D8%A7%D9%85%D9%84-%D8%A8%D9%84%D8%A7%20%D8%B4%D8%A8%D9%83%D8%A9-16643F?style=flat-square)](#الخصوصية--local-first)
 
 ### [⬇︎ تنزيل أحدث إصدار](https://github.com/iSltanX/Raff/releases/latest)
@@ -29,7 +29,7 @@
 <div align="center">
 <img src="docs/assets/shot-panel-dark.png" alt="اللوحة العائمة — الوضع الداكن" width="392" />
 <img src="docs/assets/shot-panel-light.png" alt="اللوحة العائمة — الوضع الفاتح" width="392" />
-<br /><sub>لقطات فعلية من الإصدار الحالي v3.1.0. محتوى السجل الظاهر بيانات توضيحية وهمية لأغراض العرض فقط.</sub>
+<br /><sub>لقطات فعلية من الإصدار الحالي v4.0.0. محتوى السجل الظاهر بيانات توضيحية وهمية لأغراض العرض فقط.</sub>
 </div>
 
 ---
@@ -50,12 +50,15 @@
 
 ## الهوية البصرية
 
-هوية رفّ البصرية الحالية — الشعار الهندسي «القوس الحاضن»، الألوان،
-الخطوط، ومكوّنات الواجهة — مبنية بالكامل من نظام تصميم معتمد في Figma:
-[رف — Visual Identity & Digital Design System](https://www.figma.com/design/vDH28SpsdviHvY0MQkAaoC/%D8%B1%D9%81).
-الخطوط المعتمدة: **Almarai** للعناوين وعناصر التحكم، **Cairo** للنصوص
-والحقول. Design tokens الكاملة (ألوان، تباعد، انحناءات، حركة) في
-[src/styles.css](src/styles.css).
+هوية رفّ البصرية — الألوان، الخطوط، الأيقونات، ومكوّنات الواجهة وشاشات
+المنتج — مبنية بالكامل من نظام تصميم معتمد في Figma:
+[رفّ — Raff Brand Identity & Product Design System](https://www.figma.com/design/j3EzLpDw4tIHQQSRQm8ZDM/%D8%B1%D9%81%D9%91-%E2%80%94-Raff-Brand-Identity---Product-Design-System).
+اللون الأساسي **Terracotta ‏#C4704B**. الخطوط المعتمدة: **Cairo** للنصوص
+العربية والعناوين، **Almarai** للنصوص اللاتينية والأرقام ورموز لوحة
+المفاتيح. Design tokens الكاملة (ألوان الوضعين الفاتح والداكن، تباعد،
+انحناءات، ارتفاعات، سلّم الطباعة) في
+[src/tokens.css](src/tokens.css)، والمكوّنات المشتركة في
+[src/controls.css](src/controls.css).
 
 ---
 
@@ -120,7 +123,7 @@
 
 ## التثبيت
 
-1. نزّل `Raff_3.1.0_aarch64.dmg` من
+1. نزّل `Raff_4.0.0_aarch64.dmg` من
    [صفحة الإصدارات](https://github.com/iSltanX/Raff/releases/latest).
 2. افتح الملف واسحب **Raff** إلى مجلد التطبيقات.
 3. شغّل رفّ. ستجده في **شريط القائمة** — لا تبحث عنه في Dock، فهو تطبيق
@@ -170,11 +173,8 @@
 </div>
 
 > [!NOTE]
-> لقطة الإعدادات أعلاه فعلية من الإصدار الحالي v3.1.0. لقطة نافذة «حول»
-> ما زالت من واجهة ما قبل v3.0.0 ولم تُحدَّث بعد — التخطيط نفسه، لكنها
-> تُظهر الشعار وأيقونة التطبيق والألوان القديمة بدل شعار «القوس الحاضن»
-> الحالي الموصوف في [الهوية البصرية](#الهوية-البصرية) أعلاه. ستُستبدل في
-> تحديث لاحق.
+> جميع اللقطات أعلاه فعلية من الإصدار الحالي v4.0.0. محتوى السجل الظاهر
+> بيانات توضيحية وهمية لأغراض العرض فقط.
 
 ---
 
@@ -182,21 +182,21 @@
 
 | | |
 | --- | --- |
-| الإصدار الحالي | **v3.1.0** |
+| الإصدار الحالي | **v4.0.0** |
 | المعمارية | macOS arm64 (Apple Silicon) |
 | التوقيع | ad-hoc — غير موثَّق من Apple |
 | قناة التحديث | Tauri Updater عبر إصدارات هذا المستودع |
 | سجل التغييرات | [CHANGELOG.md](CHANGELOG.md) |
 
-v3.1.0 تنقيح نهائي لشعار v3.0.0: شعار «القوس الحاضن» وأيقونة تطبيق أكثر
-تميّزًا ووضوحًا في الأحجام الصغيرة، يستبدل شعار v3.0.0 في كل مكان — مبنية
-من نظام تصميم Figma معتمد (انظر [الهوية البصرية](#الهوية-البصرية)). لا
-تغيير في المنطق أو البيانات أو الاختصارات؛ راجع [CHANGELOG.md](CHANGELOG.md)
+v4.0.0 إعادة بناء كاملة لواجهة رفّ من نظام تصميم Figma معتمد (انظر
+[الهوية البصرية](#الهوية-البصرية)): لوحة جديدة بالكامل، تصفية فورية حسب
+النوع، نافذة إعدادات مُعاد تنظيمها، نافذة «عن رفّ» مستقلة، ونقرة واحدة على
+أيقونة شريط القائمة تفتح رفّ مباشرة. لا تغيير في البيانات المحفوظة ولا في
+آلية الالتقاط ولا في الاختصارات؛ راجع [CHANGELOG.md](CHANGELOG.md)
 للتفاصيل الكاملة.
 
-قبله جاء v3.0.0 بهوية بصرية جديدة كليًا (أول شعار هندسي جديد لرفّ)، وv2.1.4
-إصدارًا تصحيحيًا لاستقرار العرض، وv2.1.3 نقل قناة التحديث الرسمية إلى هذا
-المستودع — كل ذلك فوق أساس هوية «رفّ» البصري v2 المعتمد في v2.0.0.
+قبله جاء v3.1.0 وv3.0.0 بالهوية البصرية السابقة، وv2.1.4 إصدارًا تصحيحيًا
+لاستقرار العرض، وv2.1.3 نقل قناة التحديث الرسمية إلى هذا المستودع.
 
 ---
 
@@ -225,10 +225,14 @@ cargo test --manifest-path src-tauri/Cargo.toml   # اختبارات الخلف�
 ```
 src/                 الواجهة (HTML/CSS/JS خام، RTL، فاتح + داكن)
   index.html         اللوحة العائمة          js/panel.js
-  settings.html      الإعدادات و«حول»        js/settings.js
+  settings.html      الإعدادات               js/settings.js
+  about.html         نافذة «عن رفّ»          js/about.js
+  update.html        نافذة التحديث           js/update.js
   firstrun.html      شاشة الأذونات           js/firstrun.js
-  styles.css         Design Tokens (هوية «القوس الحاضن» v3)
-  assets/            أصول الهوية الرسمية (شعار، أيقونة التطبيق)
+  tokens.css         Design Tokens (هوية رفّ v4 — فاتح + داكن)
+  controls.css       المكوّنات المشتركة (أزرار، لوحات تمرير، مفاتيح)
+  js/icons.js        أيقونات المنتج المصدّرة من Figma
+  assets/            أصول الهوية الرسمية (أيقونة التطبيق، شريط القائمة)
 src-tauri/           خلفية Rust
   src/monitor.rs     مراقبة الحافظة والالتقاط
   src/storage.rs     التخزين المحلي (JSON)
@@ -260,9 +264,6 @@ src-tauri/           خلفية Rust
 <div align="center">
 <br />
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/sultan-rights-dark.png" />
-  <img src="docs/assets/sultan-rights-light.png" alt="برمجة وتصميم: سلطان — Sultan · Design & Development" width="206" />
-</picture>
+**تطوير وتصميم : سلطان**
 
 </div>

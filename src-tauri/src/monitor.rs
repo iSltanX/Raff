@@ -9,7 +9,7 @@ use base64::Engine;
 use tauri::{AppHandle, Emitter, Manager};
 
 use crate::storage::{detect_kind, CaptureOutcome, ItemKind};
-use crate::{macos, tray, AppState};
+use crate::{macos, AppState};
 
 const POLL_MS: u64 = 350;
 /// Thumbnails are capped to this box (logical 200×40 at 2x).
@@ -55,7 +55,6 @@ pub fn start(app: AppHandle) {
 
             if capture_current(&app, front) {
                 let _ = app.emit("raff://changed", ());
-                tray::refresh(&app);
             }
         }
     });

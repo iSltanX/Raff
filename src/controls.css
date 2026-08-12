@@ -1,0 +1,142 @@
+/* ===========================================================================
+   Shared controls — the macOS 26 kit components as the approved Figma file
+   composes them («08 — Product Screens», Push Button 2:8043 / 2:8050 / 2:8073;
+   kit variables Button/Radius 6, Button/Padding-Horizontal 16, Global/Height
+   24, Global/Font Size 13, Controls/Tint #0d6fff, Controls/Destructive Red
+   #ff383c — all already tokenised in tokens.css).
+
+   Any window that needs a button, a scroll pane or a keycap links this after
+   tokens.css. Nothing here declares a literal.
+   =========================================================================== */
+
+/* ─── Push Button ─────────────────────────────────────────────────────────── */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 24px;
+  padding: 0 16px;
+  border-radius: var(--radius-control);
+  border: 1px solid var(--color-border-default);
+  background: var(--color-bg-primary);
+  font-family: var(--font-ar);
+  font-weight: 500;
+  font-size: var(--text-body);
+  line-height: normal;
+  color: var(--color-text-primary);
+  white-space: nowrap;
+  transition:
+    background var(--t-fast) var(--ease-standard),
+    border-color var(--t-fast) var(--ease-standard),
+    color var(--t-fast) var(--ease-standard);
+}
+
+.btn:hover:not(:disabled) {
+  background: var(--color-bg-selected);
+  border-color: var(--color-interactive-primary);
+  color: var(--color-interactive-primary);
+}
+
+.btn:disabled {
+  opacity: 0.45;
+}
+
+/* Style: Default / Preferred — the affirmative action. */
+.btn-primary {
+  background: var(--color-control-tint);
+  border-color: var(--color-control-tint);
+  color: var(--color-text-on-accent);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--color-control-tint);
+  border-color: var(--color-control-tint);
+  color: var(--color-text-on-accent);
+  filter: brightness(1.08);
+}
+
+/* Style: Bordered Destructive — irreversible actions only. */
+.btn-destructive {
+  background: transparent;
+  border-color: var(--color-control-destructive);
+  color: var(--color-control-destructive);
+}
+
+.btn-destructive:hover:not(:disabled) {
+  background: var(--color-control-destructive);
+  border-color: var(--color-control-destructive);
+  color: var(--color-text-on-accent);
+}
+
+/* A full-width action, as the About window's bottom button is drawn. */
+.btn-block {
+  width: 100%;
+}
+
+/* ─── Scroll pane ─────────────────────────────────────────────────────────── */
+
+.scroll-pane {
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.scroll-pane::-webkit-scrollbar {
+  width: 4px;
+}
+
+.scroll-pane::-webkit-scrollbar-thumb {
+  background: var(--color-border-default);
+  border-radius: 2px;
+}
+
+.scroll-pane::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ─── Keycap ──────────────────────────────────────────────────────────────── */
+
+kbd,
+.kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  padding: 0 5px;
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border-default);
+  font-family: var(--font-latin);
+  font-weight: 700;
+  font-size: var(--text-caption);
+  line-height: 18px;
+  color: var(--color-text-primary);
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+
+/* ─── Window chrome shared by the secondary windows ───────────────────────── */
+
+.window-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  direction: ltr;
+}
+
+.dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex: none;
+}
+
+.dot-close {
+  background: var(--color-stoplight-close);
+}
+.dot-min {
+  background: var(--color-stoplight-min);
+}
+.dot-zoom {
+  background: var(--color-stoplight-zoom);
+}

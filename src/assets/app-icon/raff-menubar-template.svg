@@ -1,8 +1,18 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20" fill="none">
-  <title>Raff menu bar template icon — Containing Bracket (inactive/template)</title>
-  <g transform="translate(0 -0.8) scale(0.675)">
-    <path d="M22 6.5 L7.5 6.5 L7.5 25.5 L22 25.5" stroke="#000" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>
-    <rect x="12" y="12.2" width="9" height="2.8" rx="1.4" fill="#000"/>
-    <rect x="12" y="17.6" width="6" height="2.8" rx="1.4" fill="#000" opacity=".5"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20">
+  <!--
+    رفّ — macOS menu-bar (tray) icon.
+    Figma «11 — Brand Applications» → "Raff Menu Bar Icon" (node 3:7240):
+    three 10 × 2 bars, radius 1, 2px gap, centred on a 20 × 20 canvas — a 5px
+    inset on every side.
+
+    Shipped as a TEMPLATE image: macOS renders it from the alpha channel and
+    tints it for the light and dark menu bar (and for the highlighted state),
+    so the rgba(0,0,0,0.88) Figma draws must NOT be baked in — solid black is
+    what a template expects.
+  -->
+  <g fill="#000000">
+    <rect x="5" y="5" width="10" height="2" rx="1" ry="1"/>
+    <rect x="5" y="9" width="10" height="2" rx="1" ry="1"/>
+    <rect x="5" y="13" width="10" height="2" rx="1" ry="1"/>
   </g>
 </svg>

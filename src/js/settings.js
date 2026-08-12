@@ -1,9 +1,13 @@
 // Settings window: reads the store, writes back full Settings objects.
+//
+// View structure follows Figma «08 — Product Screens», screen ٥ (2:7983):
+// one scrolling body of titled groups, every row built the same way — the
+// control on the left, the Arabic label on the right — closed by the window's
+// two actions. The window has no tabs.
 
 import { api, on } from './store.js';
 import { arabicDigits, metaLine, hotkeyDisplay, hotkeyFromEvent } from './logic.js';
-import { SUN_ICON, MOON_ICON } from './icons.js';
-import { createUpdateFlow } from './update-flow.js';
+import { CLEAR } from './icons.js';
 
 // The native WKWebView menu is English ("Reload") — never shown in Raff.
 window.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -14,20 +18,26 @@ const el = (id) => document.getElementById(id);
 const hotkeyChip = el('hotkey-chip');
 const hotkeySub = el('hotkey-sub');
 
-// ─── Tabs ─────────────────────────────────────────────────────────────────
+/** The resting sub-line under the hotkey row; also what a flashed error
+ *  reverts to once it clears. */
+const HOTKEY_HINT = 'انقر على الاختصار ثم اضغط التركيبة الجديدة';
 
-function activateTab(name) {
-  document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.dataset.tab === name));
-  document
-    .querySelectorAll('.tab-panel')
-    .forEach((p) => p.classList.toggle('active', p.id === `tab-${name}`));
+// ─── Window actions ───────────────────────────────────────────────────────
+// The red traffic light and «تم» both close the window. Settings are saved as
+// they change, so closing is never a commit point — there is nothing to lose.
+
+function closeWindow() {
+  const nativeWindow = window.__TAURI__?.window;
+  if (!nativeWindow) return; // outside Tauri (design review) there is no window
+  nativeWindow
+    .getCurrentWindow()
+    .close()
+    .catch((err) => console.error('raff: closing the settings window failed', err));
 }
 
-el('tabs').addEventListener('click', (e) => {
-  const tab = e.target.closest('.tab');
-  if (!tab) return;
-  activateTab(tab.dataset.tab);
-});
+el('window-close').addEventListener('click', closeWindow);
+el('done-btn').addEventListener('click', closeWindow);
+el('open-about').addEventListener('click', () => api.openAbout());
 
 // ─── Load / sync ──────────────────────────────────────────────────────────
 
@@ -35,25 +45,26 @@ async function load() {
   const state = await api.getState();
   settings = state.settings;
 
-  const display = hotkeyDisplay(settings.hotkey);
-  hotkeyChip.textContent = display;
-  // LRI/PDI isolate the shortcut so RTL text doesn't reorder its symbols.
-  hotkeySub.textContent = `⁦${display}⁩ — يمكن تغييره`;
-  setToggle('launch-toggle', settings.launchAtLogin);
-  setToggle('concealed-toggle', settings.respectConcealed);
-  setToggle('learning-toggle', settings.learningEnabled);
+  hotkeyChip.textContent = hotkeyDisplay(settings.hotkey);
+  hotkeySub.textContent = HOTKEY_HINT;
+  setChecked('launch-toggle', settings.launchAtLogin);
+  setChecked('capture-toggle', settings.captureEnabled);
+  setChecked('concealed-toggle', settings.respectConcealed);
+  setChecked('learning-toggle', settings.learningEnabled);
   el('history-limit').value = String(settings.historyLimit);
-  el('about-version').textContent = `الإصدار ${arabicDigits(state.version)}`;
   renderAppearance();
-  renderAppIcon();
   renderExcluded();
 }
 
-function setToggle(id, value) {
+/** Switches and the checkbox are ARIA-driven: aria-checked is the state, and
+ *  the stylesheet draws from it. */
+function setChecked(id, value) {
   el(id).setAttribute('aria-checked', String(Boolean(value)));
 }
 
 async function save(patch) {
+  // update_settings takes a COMPLETE Settings object — a partial patch would
+  // drop every field it omits.
   const next = { ...settings, ...patch };
   let failure = null;
   try {
@@ -68,7 +79,7 @@ async function save(patch) {
 }
 
 // Surfaces the backend's Arabic error (e.g. «اختصار غير صالح») instead of
-// silently reverting the chip.
+// silently reverting the badge.
 let hotkeyErrorTimer = null;
 function flashHotkeyError(message) {
   hotkeySub.textContent = message;
@@ -80,70 +91,37 @@ function flashHotkeyError(message) {
   }, 4000);
 }
 
-// ─── Toggles / select ─────────────────────────────────────────────────────
+// ─── Switches, checkbox, pop-up button ────────────────────────────────────
 
 el('launch-toggle').addEventListener('click', () => save({ launchAtLogin: !settings.launchAtLogin }));
+el('capture-toggle').addEventListener('click', () => save({ captureEnabled: !settings.captureEnabled }));
 el('concealed-toggle').addEventListener('click', () => save({ respectConcealed: !settings.respectConcealed }));
 el('learning-toggle').addEventListener('click', () => save({ learningEnabled: !settings.learningEnabled }));
 el('history-limit').addEventListener('change', (e) => save({ historyLimit: Number(e.target.value) }));
 
-// ─── Appearance (المظهر) ──────────────────────────────────────────────────
+// ─── المظهر — Segments-Container (2:8018) ─────────────────────────────────
+// Three tabs over two settings: «تلقائي» is followSystem, the other two are an
+// explicit appearance with followSystem off.
 
-document.getElementById('icon-light').innerHTML = SUN_ICON; // static SVG constant
-document.getElementById('icon-dark').innerHTML = MOON_ICON; // static SVG constant
-
-const systemDark = window.matchMedia('(prefers-color-scheme: dark)');
-
-/** The appearance currently in effect (explicit choice, or the system's). */
-function effectiveAppearance() {
-  return settings.followSystem ? (systemDark.matches ? 'dark' : 'light') : settings.appearance;
-}
+const appearanceTabs = document.querySelectorAll('#appearance-segments .seg-tab');
 
 function renderAppearance() {
-  const effective = effectiveAppearance();
-  document.querySelectorAll('.appearance-card').forEach((card) => {
-    const selected = card.dataset.appearance === effective;
-    card.classList.toggle('selected', selected);
-    card.setAttribute('aria-checked', String(selected));
-  });
-  setToggle('follow-system-toggle', settings.followSystem);
-}
-
-document.querySelectorAll('.appearance-card').forEach((card) => {
-  card.addEventListener('click', () =>
-    save({ appearance: card.dataset.appearance, followSystem: false })
-  );
-});
-
-// ─── App icon (أيقونة التطبيق) — independent from the theme ───────────────
-
-function renderAppIcon() {
-  document.querySelectorAll('.icon-card').forEach((card) => {
-    const selected = card.dataset.appIcon === settings.appIcon;
-    card.classList.toggle('selected', selected);
-    card.setAttribute('aria-checked', String(selected));
-  });
-}
-
-document.querySelectorAll('.icon-card').forEach((card) => {
-  card.addEventListener('click', () => save({ appIcon: card.dataset.appIcon }));
-});
-
-el('follow-system-toggle').addEventListener('click', () => {
-  if (settings.followSystem) {
-    // Turning follow-off keeps what is on screen right now.
-    save({ followSystem: false, appearance: effectiveAppearance() });
-  } else {
-    save({ followSystem: true });
+  const active = settings.followSystem ? 'auto' : settings.appearance;
+  for (const tab of appearanceTabs) {
+    const on = tab.dataset.appearance === active;
+    tab.classList.toggle('is-active', on);
+    tab.setAttribute('aria-checked', String(on));
   }
-});
+}
 
-// While following the system, the selected card tracks macOS live.
-systemDark.addEventListener('change', () => {
-  if (settings?.followSystem) renderAppearance();
-});
+for (const tab of appearanceTabs) {
+  tab.addEventListener('click', () => {
+    const choice = tab.dataset.appearance;
+    save(choice === 'auto' ? { followSystem: true } : { followSystem: false, appearance: choice });
+  });
+}
 
-// ─── Hotkey recorder ──────────────────────────────────────────────────────
+// ─── Hotkey recorder — Hotkey-Badge (2:8030) ──────────────────────────────
 
 let recording = false;
 
@@ -177,11 +155,14 @@ function stopRecording() {
   hotkeyChip.textContent = hotkeyDisplay(settings.hotkey);
 }
 
-// ─── Excluded apps ────────────────────────────────────────────────────────
+// ─── Excluded apps (الالتقاط) ─────────────────────────────────────────────
 
-el('manage-excluded').addEventListener('click', async () => {
+const manageExcludedBtn = el('manage-excluded');
+
+manageExcludedBtn.addEventListener('click', async () => {
   const manager = el('excluded-manager');
   manager.hidden = !manager.hidden;
+  manageExcludedBtn.setAttribute('aria-expanded', String(!manager.hidden));
   if (!manager.hidden) await populateRunningApps();
 });
 
@@ -193,11 +174,13 @@ function renderExcluded() {
     li.className = 'excluded-item';
     const bundle = document.createElement('span');
     bundle.className = 'bundle';
-    bundle.textContent = bundleId;
+    bundle.textContent = bundleId; // app-supplied string → textContent
     const remove = document.createElement('button');
+    remove.type = 'button';
     remove.className = 'remove-excluded';
-    remove.textContent = '✕';
+    remove.innerHTML = CLEAR; // static SVG constant
     remove.title = 'إزالة';
+    remove.setAttribute('aria-label', `إزالة ${bundleId}`);
     remove.addEventListener('click', () =>
       save({ excludedApps: settings.excludedApps.filter((b) => b !== bundleId) })
     );
@@ -214,7 +197,7 @@ async function populateRunningApps() {
     if (settings.excludedApps.includes(app.bundleId)) continue;
     const option = document.createElement('option');
     option.value = app.bundleId;
-    option.textContent = app.name;
+    option.textContent = app.name; // app-supplied string → textContent
     select.append(option);
   }
 }
@@ -308,7 +291,7 @@ confirmOverlay.addEventListener('mousedown', (e) => {
   if (e.target === confirmOverlay) settleConfirm?.(false);
 });
 
-// ─── «مسح سجل الحافظة» ────────────────────────────────────────────────────
+// ─── «مسح سجل الحافظة» — Bottom-Row (2:8042), left ────────────────────────
 
 const dataStatus = el('data-status');
 let dataStatusTimer = null;
@@ -331,11 +314,15 @@ el('clear-history').addEventListener('click', async () => {
   showDataStatus('تم مسح سجل الحافظة.');
 });
 
-// ─── "عرض ما تعلّمه رفّ" ─────────────────────────────────────────────────
+// ─── «ما تعلّمه رفّ حتى الآن» ─────────────────────────────────────────────
 
-el('show-learning').addEventListener('click', async () => {
+const showLearningBtn = el('show-learning');
+
+showLearningBtn.addEventListener('click', async () => {
   const view = el('learning-view');
   view.hidden = !view.hidden;
+  showLearningBtn.setAttribute('aria-expanded', String(!view.hidden));
+  showLearningBtn.textContent = view.hidden ? 'عرض' : 'إخفاء';
   if (!view.hidden) await renderLearning();
 });
 
@@ -385,118 +372,6 @@ function showRelaunchNotice() {
   overlay.append(message);
   document.body.append(overlay);
 }
-
-// ─── Updates (تبويب «حول») ────────────────────────────────────────────────
-// The manual check/download/restart flow is the shared `update-flow.js`
-// module (also used by the standalone update window) — this file only owns
-// the About-tab-specific rendering. The tray's «التحقق من وجود تحديثات…» no
-// longer targets this window at all (it opens its own small update window),
-// so there is no menu-intent handling here.
-
-const updateCheckBtn = el('update-check');
-const updateAvailable = el('update-available');
-const updateNewVersion = el('update-new-version');
-const updateDate = el('update-date');
-const updateNotes = el('update-notes');
-const updateDownloadBtn = el('update-download');
-const updateProgress = el('update-progress');
-const updateBar = el('update-bar');
-const updateBarFill = el('update-bar-fill');
-const updateRestartBtn = el('update-restart');
-const updateStatus = el('update-status');
-
-function setProgress(percent) {
-  if (percent == null) {
-    updateBar.classList.add('indeterminate');
-    updateBarFill.style.width = '';
-  } else {
-    updateBar.classList.remove('indeterminate');
-    updateBarFill.style.width = `${percent}%`;
-  }
-}
-
-function renderUpdate(state, data = {}) {
-  // Safe defaults; each state overrides only what it needs.
-  updateCheckBtn.hidden = false;
-  updateCheckBtn.disabled = false;
-  updateAvailable.hidden = true;
-  updateDownloadBtn.hidden = false;
-  updateDownloadBtn.disabled = false;
-  updateProgress.hidden = true;
-  updateBar.classList.remove('indeterminate');
-  updateRestartBtn.hidden = true;
-  updateRestartBtn.disabled = false;
-  updateStatus.classList.remove('error');
-
-  switch (state) {
-    case 'checking':
-      updateCheckBtn.disabled = true;
-      updateStatus.textContent = 'جارٍ التحقق من وجود تحديثات…';
-      break;
-
-    case 'uptodate':
-      updateStatus.textContent = 'لا توجد تحديثات';
-      break;
-
-    case 'available':
-      updateCheckBtn.hidden = true;
-      updateAvailable.hidden = false;
-      updateNewVersion.textContent = `الإصدار ${arabicDigits(data.version)}`;
-      updateDate.hidden = !data.date;
-      if (data.date) updateDate.textContent = `تاريخ النشر: ${arabicDigits(data.date)}`;
-      updateNotes.hidden = !data.notes;
-      updateNotes.textContent = data.notes || ''; // textContent → untrusted-safe
-      updateStatus.textContent = '';
-      break;
-
-    case 'downloading':
-      updateCheckBtn.hidden = true;
-      updateAvailable.hidden = false;
-      updateDownloadBtn.hidden = true;
-      updateProgress.hidden = false;
-      setProgress(data.percent ?? null);
-      updateStatus.textContent = 'جارٍ تنزيل التحديث…';
-      break;
-
-    case 'installing':
-      updateCheckBtn.hidden = true;
-      updateAvailable.hidden = false;
-      updateDownloadBtn.hidden = true;
-      updateProgress.hidden = false;
-      updateBar.classList.add('indeterminate'); // install has no byte progress
-      updateStatus.textContent = 'جارٍ تثبيت التحديث…';
-      break;
-
-    case 'installed':
-      updateCheckBtn.hidden = true;
-      updateRestartBtn.hidden = false;
-      updateStatus.textContent = 'اكتمل التثبيت، التطبيق جاهز لإعادة التشغيل';
-      break;
-
-    case 'error':
-      updateStatus.classList.add('error');
-      updateStatus.textContent = data.message || 'حدث خطأ';
-      if (data.from === 'download') {
-        // Rust keeps the update pending → the download can simply be retried.
-        updateCheckBtn.hidden = true;
-        updateAvailable.hidden = false;
-      } else if (data.from === 'restart') {
-        updateCheckBtn.hidden = true;
-        updateRestartBtn.hidden = false;
-      }
-      // from 'check' (or unset): the check button is already visible + enabled.
-      break;
-
-    default:
-      updateStatus.textContent = 'لم يتم التحقق بعد';
-  }
-}
-
-const updateFlow = createUpdateFlow({ onChange: renderUpdate });
-
-updateCheckBtn.addEventListener('click', () => updateFlow.check());
-updateDownloadBtn.addEventListener('click', () => updateFlow.download());
-updateRestartBtn.addEventListener('click', () => updateFlow.restart());
 
 // First load: retry briefly (IPC can lag right after window creation) so a
 // transient failure never leaves the window showing default values.

@@ -1,600 +1,747 @@
-/* Settings window — عام · الخصوصية · التعلّم · حول */
+/* ===========================================================================
+   Settings window — Figma «08 — Product Screens» (page 2:9)
+     screen ٥  macOS-Settings-Window  2:7983   480 × 520
+       Title-Bar      2:7984
+       Settings-Body  2:7991
+       عام            2:7992
+       المظهر          2:8015
+       الاختصارات والخصوصية 2:8027
+       Bottom-Row     2:8042
+   Every value here comes from those nodes; colours resolve through tokens.css.
+   The groups «الالتقاط», «التعلّم», «أيقونة التطبيق» and «عن رفّ» are not drawn
+   in «08» — they reuse the group/row/segment vocabulary defined above so they
+   read as part of the same system.
+   =========================================================================== */
 
+/* The window is opaque and macOS-owned, so the body carries the same fill as
+   the shell: nothing of the native backing can show through the 16px corners. */
 body {
-  background: var(--canvas);
+  background: var(--color-bg-secondary);
 }
 
-.window {
+.settings-window {
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  height: 100%;
+  overflow: hidden;
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-xl);
 }
 
-/* ─── Tabs ─────────────────────────────────────────────────────────────── */
+/* ─── Title-Bar (2:7984) ──────────────────────────────────────────────────── */
 
-.tabs {
-  background: var(--toolbar-bg);
-  border-bottom: 1px solid var(--border);
-  padding: 0 16px;
-  display: flex;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.tab {
-  padding: 10px 16px 8px;
-  border: none;
-  cursor: pointer;
-  font-size: 13px;
-  font-family: var(--font-body);
-  color: var(--tab-inactive);
-  background: transparent;
-  border-bottom: 2px solid transparent;
-  transition: color 0.15s;
-}
-.tab.active {
-  color: var(--tab-active);
-  border-bottom-color: var(--accent);
-  font-weight: 500;
-}
-
-/* ─── Content ──────────────────────────────────────────────────────────── */
-
-.content {
-  flex: 1;
-  padding: 4px 24px 24px;
-}
-
-.tab-panel {
-  display: none;
-}
-.tab-panel.active {
-  display: block;
-}
-
-.setting-row {
+.title-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  padding: 10px 0;
-  border-bottom: 1px solid var(--border);
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--color-border-default);
+  /* Physical order: traffic lights left, title centre, spacer right. macOS
+     window chrome does not mirror — «10 — RTL & Accessibility». */
+  direction: ltr;
+  flex: none;
 }
 
-.setting-title {
-  font-size: 13px;
-  color: var(--text);
+.window-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
-.setting-title.danger {
-  color: var(--danger);
+
+.dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex: none;
 }
-.setting-sub {
-  font-size: 11px;
-  color: var(--secondary);
-  margin-top: 2px;
+
+.dot-close {
+  background: var(--color-stoplight-close);
 }
-.setting-sub.error {
-  color: var(--danger);
+.dot-min {
+  background: var(--color-stoplight-min);
+}
+.dot-zoom {
+  background: var(--color-stoplight-zoom);
+}
+
+.title-bar-title {
+  margin: 0;
+  font-family: var(--font-ar);
+  font-weight: 700;
+  font-size: var(--text-body);
+  line-height: normal;
+  color: var(--color-text-primary);
+  direction: rtl;
+}
+
+/* The Latin parenthetical is isolated so the bidi algorithm can neither
+   reorder it nor mirror its brackets inside the Arabic title. */
+.title-latin {
+  unicode-bidi: isolate;
+}
+
+/* Spacer 40 × 1 (2:7990) — balances the traffic lights so the title reads
+   optically centred. */
+.title-bar-spacer {
+  width: 40px;
+  height: 1px;
+  flex: none;
+}
+
+/* ─── Settings-Body (2:7991) ──────────────────────────────────────────────── */
+
+.settings-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 18px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.settings-body::-webkit-scrollbar {
+  width: 4px;
+}
+.settings-body::-webkit-scrollbar-thumb {
+  background: var(--color-border-default);
+  border-radius: 2px;
+}
+.settings-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ─── Group + row vocabulary ──────────────────────────────────────────────── */
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.group-title {
+  margin: 0;
+  font-family: var(--font-ar);
+  font-weight: 800;
+  font-size: 12px;
+  line-height: normal;
+  color: var(--color-interactive-primary);
+}
+
+/* Row: the control sits on the LEFT, the Arabic label on the RIGHT. The row's
+   own geometry is LTR; the label's text is not (dir="auto" in the markup). */
+.row {
+  direction: ltr;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+}
+
+.row-label {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end; /* LTR cross axis → the label hugs the right edge */
+  gap: 2px;
+}
+
+.label-title {
+  font-family: var(--font-ar);
+  font-weight: 400;
+  font-size: 12px;
+  line-height: normal;
+  color: var(--color-text-primary);
+  text-align: right;
+}
+
+.label-sub {
+  font-family: var(--font-ar);
+  font-weight: 400;
+  font-size: var(--text-caption);
+  line-height: 1.5;
+  color: var(--color-text-secondary);
+  text-align: right;
+}
+
+.label-sub.error {
+  color: var(--color-control-destructive);
+}
+
+.divider {
+  height: 1px;
+  width: 100%;
+  background: var(--color-border-default);
+  flex: none;
+}
+
+/* ─── Switch (macOS kit: track 54 × 24, knob 32, inset 2) ─────────────────── */
+
+.switch {
+  position: relative;
+  width: 54px;
+  height: 24px;
+  flex: none;
+  border-radius: var(--radius-full);
+  background: var(--color-bg-field);
+  border: 1px solid var(--color-border-default);
+  transition:
+    background var(--t-base) var(--ease-standard),
+    border-color var(--t-base) var(--ease-standard);
+}
+
+.switch-knob {
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  width: 32px;
+  height: 20px;
+  border-radius: var(--radius-full);
+  /* The knob is white in both appearances, exactly like the native control —
+     the one place a component reaches for the primitive ramp, because no
+     semantic token stays white in dark. */
+  background: var(--stone-0);
+  box-shadow: var(--elev-1);
+  transition: transform var(--t-base) var(--ease-standard);
+}
+
+.switch[aria-checked='true'] {
+  background: var(--color-control-tint);
+  border-color: var(--color-control-tint);
+}
+
+.switch[aria-checked='true'] .switch-knob {
+  transform: translateX(18px);
+}
+
+/* ─── Checkbox (macOS kit: 16px, radius 5.5, checkmark 9.31 × 8.93) ───────── */
+
+.checkbox {
+  position: relative;
+  width: 16px;
+  height: 16px;
+  flex: none;
+  /* 5.5px is the kit's Checkboxes/Radius — a macOS control metric, not a step
+     on Raff's radius scale, so it has no token. */
+  border-radius: 5.5px;
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border-default);
+  transition:
+    background var(--t-fast) var(--ease-standard),
+    border-color var(--t-fast) var(--ease-standard);
+}
+
+.checkbox::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 5px;
+  width: 4px;
+  height: 8px;
+  border: solid var(--stone-0);
+  border-width: 0 2px 2px 0;
+  border-radius: 1px;
+  transform: rotate(45deg);
+  opacity: 0;
+  transition: opacity var(--t-fast) var(--ease-standard);
+}
+
+.checkbox[aria-checked='true'] {
+  background: var(--color-control-tint);
+  border-color: var(--color-control-tint);
+}
+
+.checkbox[aria-checked='true']::after {
+  opacity: 1;
+}
+
+/* ─── Segments-Container (2:8018) — المظهر and أيقونة التطبيق ─────────────── */
+
+.segments {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: 2px;
+  flex: none;
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-control);
+}
+
+.seg-tab {
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  font-family: var(--font-ar);
+  font-weight: 400;
+  font-size: var(--text-caption);
+  line-height: normal;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  transition:
+    background var(--t-fast) var(--ease-standard),
+    color var(--t-fast) var(--ease-standard);
+}
+
+.seg-tab:hover:not(.is-active) {
+  color: var(--color-text-primary);
+}
+
+.seg-tab.is-active {
+  background: var(--color-bg-selected);
+  color: var(--color-interactive-primary);
+}
+
+/* ─── Hotkey-Badge (2:8030) ───────────────────────────────────────────────── */
+
+.hotkey-badge {
+  padding: 4px 8px;
+  flex: none;
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-control);
+  font-family: var(--font-latin);
+  font-weight: 700;
+  font-size: var(--text-caption);
+  line-height: normal;
+  color: var(--color-text-primary);
+  direction: ltr;
+  unicode-bidi: isolate;
+  white-space: nowrap;
+  transition:
+    border-color var(--t-fast) var(--ease-standard),
+    color var(--t-fast) var(--ease-standard);
+}
+
+.hotkey-badge:hover {
+  border-color: var(--color-interactive-primary);
+}
+
+/* Armed: the badge is listening for the next key combination. */
+.hotkey-badge.recording {
+  border-color: var(--color-interactive-primary);
+  color: var(--color-interactive-primary);
+  font-family: var(--font-ar);
+  font-weight: 400;
+  direction: rtl;
+}
+
+/* ─── Push Button (macOS kit: height 24, radius 6, padding-horizontal 16) ─── */
+
+.push-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 24px;
+  padding: 0 16px;
+  flex: none;
+  border-radius: var(--radius-control);
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border-default);
+  font-family: var(--font-ar);
+  font-weight: 400;
+  font-size: 12px;
+  line-height: normal;
+  color: var(--color-text-primary);
+  white-space: nowrap;
+  /* Every push-button label is Arabic, and the rows around them are laid out
+     LTR — the label keeps its own direction so trailing «…» and «؟» land on
+     the correct side. */
+  direction: rtl;
+  transition:
+    background var(--t-fast) var(--ease-standard),
+    color var(--t-fast) var(--ease-standard),
+    border-color var(--t-fast) var(--ease-standard);
+}
+
+.push-btn:hover {
+  background: var(--color-bg-selected);
+  color: var(--color-interactive-primary);
+  border-color: var(--color-interactive-primary);
+}
+
+/* Bordered Destructive — Controls/Destructive Red on a transparent fill. */
+.push-btn.is-destructive {
+  background: transparent;
+  border-color: var(--color-control-destructive);
+  color: var(--color-control-destructive);
+  overflow: hidden;
+}
+
+/* The hover tint is the button's own colour at 10%, laid over the transparent
+   fill — color-mix() postdates the macOS 12 WebKit floor, and a 10% veil of
+   the label's own red leaves the label itself unchanged. */
+.push-btn.is-destructive::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: currentColor;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--t-fast) var(--ease-standard);
+}
+
+.push-btn.is-destructive:hover {
+  background: transparent;
+  border-color: var(--color-control-destructive);
+  color: var(--color-control-destructive);
+}
+
+.push-btn.is-destructive:hover::before {
+  opacity: 0.1;
+}
+
+/* Default / Preferred — the filled macOS tint with a white label. */
+.push-btn.is-preferred {
+  background: var(--color-control-tint);
+  border-color: var(--color-control-tint);
+  color: var(--stone-0);
+}
+
+.push-btn.is-preferred:hover {
+  background: var(--color-control-tint);
+  border-color: var(--color-control-tint);
+  color: var(--stone-0);
+  opacity: 0.9;
+}
+
+/* ─── Pop-Up Button (macOS kit: 100 × 24, radius 6) ───────────────────────── */
+
+.select-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: none;
 }
 
 .select {
-  padding: 4px 8px;
-  border-radius: var(--r-chip);
-  font-size: 13px;
-  font-family: var(--font-body);
-  background: var(--surface);
-  color: var(--text);
-  border: 1px solid var(--border);
+  -webkit-appearance: none;
+  appearance: none;
+  height: 24px;
+  min-width: 100px;
+  /* RTL pop-up button: the label reads right, the chevron sits on the left. */
+  padding: 0 8px 0 22px;
+  border-radius: var(--radius-control);
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border-default);
+  font-family: var(--font-ar);
+  font-weight: 400;
+  font-size: 12px;
+  line-height: normal;
+  color: var(--color-text-primary);
+  direction: rtl;
+  text-align: right;
+  transition: border-color var(--t-fast) var(--ease-standard);
 }
 
-.hotkey-chip {
-  cursor: pointer;
-  border: 1px solid transparent;
-}
-.hotkey-chip.recording {
-  border-color: var(--accent);
-  color: var(--accent-text);
+.select:hover {
+  border-color: var(--color-interactive-primary);
 }
 
-/* ─── Appearance cards (نهاري / ليلي) ──────────────────────────────────── */
-
-.appearance-cards {
-  display: flex;
-  gap: 12px;
-  padding: 10px 0;
-  border-bottom: 1px solid var(--border);
+/* Bundle ids and app names are Latin — read them left-to-right. */
+.select.is-latin {
+  font-family: var(--font-latin);
+  direction: ltr;
+  text-align: left;
+  padding: 0 22px 0 8px;
 }
 
-.appearance-card {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 8px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--r-row);
-  cursor: pointer;
-  font-family: var(--font-body);
-  transition: border-color 0.15s, background 0.15s;
-}
-.appearance-card:hover {
-  border-color: var(--secondary);
-}
-.appearance-card.selected {
-  border-color: var(--accent);
-  background: var(--selected-bg);
-  box-shadow: inset 0 0 0 1px var(--accent);
-}
-
-/* Miniature theme previews — fixed palettes, one per theme. */
-.card-preview {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 7px 8px;
-  border-radius: var(--r-chip);
-  height: 56px;
-}
-.preview-light {
-  background: #f7f5f1;
-  border: 1px solid #e2ddd5;
-}
-.preview-dark {
-  background: #100e0c;
-  border: 1px solid #2d2822;
-}
-.pv-search,
-.pv-row {
-  border-radius: 3px;
-  flex-shrink: 0;
-}
-.pv-search {
-  height: 8px;
-  width: 55%;
-}
-.pv-row {
-  height: 11px;
-  width: 100%;
-}
-.preview-light .pv-search {
-  background: #ffffff;
-}
-.preview-light .pv-row {
-  background: #ffffff;
-  border: 1px solid #e2ddd5;
-}
-.preview-light .pv-accent {
-  background: #fff0cd;
-  border: 1px solid #96540f;
-}
-.preview-dark .pv-search {
-  background: #26221e;
-}
-.preview-dark .pv-row {
-  background: #1b1815;
-  border: 1px solid #2d2822;
-}
-.preview-dark .pv-accent {
-  background: #4e270b;
-  border: 1px solid #ecb751;
-}
-
-.card-label {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  font-size: 13px;
-  color: var(--text);
-}
-
-/* ─── App-icon cards (أيقونة التطبيق) — compact twins of the appearance cards */
-
-.icon-cards {
-  display: flex;
-  gap: 12px;
-  padding: 10px 0 6px;
-}
-.icon-card {
-  gap: 6px;
-  padding: 10px 8px 8px;
-}
-.icon-preview {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 48px;
-}
-.icon-preview img {
-  width: 44px;
-  height: 44px;
-}
-/* «تلقائي» — one squircle, split between the two states (RTL: light first). */
-.icon-preview-auto {
-  position: relative;
-  width: 44px;
-  margin: 0 auto;
-}
-.icon-preview-auto img {
+/* Chevron, drawn from two borders so no raster or raw colour is needed. */
+.select-wrap::after {
+  content: '';
   position: absolute;
-  inset-block-start: 2px;
-}
-.icon-preview-auto img:first-child {
-  clip-path: inset(0 0 0 50%); /* right half = light */
-}
-.icon-preview-auto img:last-child {
-  clip-path: inset(0 50% 0 0); /* left half = dark */
-}
-.icon-note {
-  font-size: 11px;
-  color: var(--secondary);
-  padding: 2px 0 10px;
-  border-bottom: 1px solid var(--border);
-}
-.card-icon {
-  display: flex;
-  color: var(--secondary);
-}
-.appearance-card.selected .card-label {
-  font-weight: 700;
-}
-.appearance-card.selected .card-icon {
-  color: var(--accent);
+  left: 9px;
+  top: 8px;
+  width: 5px;
+  height: 5px;
+  border-right: 1.5px solid var(--color-text-secondary);
+  border-bottom: 1.5px solid var(--color-text-secondary);
+  transform: rotate(45deg);
+  pointer-events: none;
 }
 
-/* ─── Excluded apps ────────────────────────────────────────────────────── */
+/* :has() postdates the macOS 12 WebKit floor, so the LTR variant is a class on
+   the wrapper rather than a parent selector. */
+.select-wrap.is-latin::after {
+  left: auto;
+  right: 9px;
+}
+
+/* ─── Excluded apps (الالتقاط) ────────────────────────────────────────────── */
 
 .excluded-manager {
-  padding: 10px 0;
-  border-bottom: 1px solid var(--border);
-}
-.excluded-list {
-  list-style: none;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  margin-bottom: 10px;
+  gap: var(--space-md);
+  padding: 10px 12px;
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-md);
 }
+/* Author display:flex would otherwise defeat the UA [hidden] rule. */
+.excluded-manager[hidden] {
+  display: none;
+}
+
+.excluded-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
 .excluded-list:empty::after {
   content: 'لا تطبيقات مستبعَدة بعد';
-  font-size: 12px;
-  color: var(--secondary);
+  font-family: var(--font-ar);
+  font-size: var(--text-caption);
+  color: var(--color-text-secondary);
 }
+
 .excluded-item {
+  direction: ltr;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  padding: 6px 10px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--r-btn);
-  font-size: 12px;
+  gap: var(--space-md);
+  padding: 4px 8px;
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-sm);
 }
+
 .excluded-item .bundle {
-  color: var(--secondary);
-  font-size: 11px;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-latin);
+  font-size: var(--text-caption);
+  line-height: normal;
+  color: var(--color-text-secondary);
   direction: ltr;
+  unicode-bidi: isolate;
 }
+
 .remove-excluded {
-  border: none;
-  background: transparent;
-  color: var(--danger);
-  cursor: pointer;
-  font-size: 14px;
-  line-height: 1;
-  padding: 2px 6px;
-  border-radius: 4px;
-}
-.remove-excluded:hover {
-  background: var(--danger-bg);
-}
-.excluded-add {
   display: flex;
-  gap: 8px;
+  flex: none;
+  color: var(--color-text-tertiary);
+  transition: color var(--t-fast) var(--ease-standard);
 }
+
+.remove-excluded:hover {
+  color: var(--color-control-destructive);
+}
+
+.remove-excluded svg {
+  width: 12px;
+  height: 12px;
+  display: block;
+}
+
+.excluded-add {
+  direction: ltr;
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+}
+
+.excluded-add .select-wrap {
+  flex: 1;
+  min-width: 0;
+}
+
 .excluded-add .select {
   flex: 1;
   min-width: 0;
 }
 
-/* ─── Learning ─────────────────────────────────────────────────────────── */
-
-.learning-actions {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 8px;
-  padding-top: 16px;
-}
+/* ─── Learning summary ────────────────────────────────────────────────────── */
 
 .learning-view {
-  margin-top: 14px;
-  border: 1px solid var(--border);
-  border-radius: var(--r-row);
-  background: var(--surface);
-  padding: 4px 12px;
+  display: flex;
+  flex-direction: column;
+  padding: 2px 12px;
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-md);
 }
+.learning-view[hidden] {
+  display: none;
+}
+
 .learn-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 8px 0;
-  border-bottom: 1px solid var(--border);
-  font-size: 12px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--color-border-divider);
 }
+
 .learn-row:last-child {
-  border-bottom: none;
+  border-bottom: 0;
 }
+
 .learn-text {
   flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--text);
+  font-family: var(--font-ar);
+  font-size: 12px;
+  line-height: normal;
+  color: var(--color-text-primary);
 }
+
 .learn-counts {
-  color: var(--secondary);
-  font-size: 11px;
+  flex: none;
+  font-family: var(--font-ar);
+  font-size: var(--text-caption);
+  line-height: normal;
+  color: var(--color-text-secondary);
   white-space: nowrap;
 }
+
 .learning-empty {
-  padding: 12px 0;
+  padding: 8px 0;
+  font-family: var(--font-ar);
   font-size: 12px;
-  color: var(--secondary);
+  color: var(--color-text-secondary);
 }
 
-/* ─── About ────────────────────────────────────────────────────────────── */
+/* ─── Bottom-Row (2:8042) ─────────────────────────────────────────────────── */
 
-.about {
-  padding-top: 32px;
+.bottom-row {
+  direction: ltr; /* destructive left, preferred right */
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 4px;
-  text-align: center;
-}
-.about-icon {
-  border-radius: 20px;
-  margin-bottom: var(--s-3);
-}
-/* title2 — Almarai 800 22/30 */
-.about-name {
-  font: 800 22px/30px var(--font-display);
-  color: var(--text);
-}
-.about-latin {
-  font: 500 13px/21px var(--font-body);
-  color: var(--muted);
-  direction: ltr;
-  unicode-bidi: isolate;
-  letter-spacing: 0.02em;
-}
-.about-version {
-  font: 500 13px/21px var(--font-body);
-  color: var(--secondary);
-  margin-top: var(--s-1);
-}
-.about-desc {
-  font: 400 13px/21px var(--font-body);
-  color: var(--muted);
-  margin-top: var(--s-2);
-}
-
-/* ─── Rights signature (Sultan Visual Identity) ────────────────────
-   Closing element of «حول». Rendered from the official asset at 300px —
-   above the 180px minimum for the composite signature, and two steps below
-   the product name so it never competes with the رفّ mark. */
-.about-credit {
-  margin-top: var(--s-8);
-  padding-top: var(--s-5);
-  border-top: var(--b-default) solid var(--separator);
-  align-self: stretch;
-  display: flex;
-  justify-content: center;
-  /* safe area — no element may enter this margin */
-  padding-bottom: var(--s-6);
-}
-.rights-mark {
-  display: block;
-  width: 206px;
-  height: auto;
-}
-.rights-dark {
-  display: none;
-}
-:root[data-appearance='dark'] .rights-light {
-  display: none;
-}
-:root[data-appearance='dark'] .rights-dark {
-  display: block;
-}
-
-/* ─── Updates (داخل «حول») ──────────────────────────────────────────────── */
-
-.update {
-  align-self: stretch;
-  margin-top: 24px;
-  padding-top: 20px;
-  border-top: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+  justify-content: space-between;
   gap: 12px;
+  flex: none;
+  padding: 8px 18px 18px;
 }
 
-.update .btn:disabled {
-  opacity: 0.5;
-  cursor: default;
-  filter: none;
+.bottom-row .push-btn {
+  font-size: var(--text-body);
 }
 
-.update-available {
-  align-self: stretch;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
+/* Quiet confirmation after a destructive action completes. */
+.status-note {
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+  font-family: var(--font-ar);
+  font-size: var(--text-caption);
+  line-height: normal;
+  color: var(--color-text-secondary);
 }
-/* Author `display:flex` would otherwise defeat the UA `[hidden]` rule. */
-.update-available[hidden] {
+.status-note[hidden] {
   display: none;
 }
-.update-new-version {
-  font: 700 14px/21px var(--font-display);
-  color: var(--text);
-}
-.update-date {
-  font-size: 11px;
-  color: var(--secondary);
-}
-.update-notes {
-  align-self: stretch;
-  max-height: 140px;
-  padding: 10px 12px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--r-row);
-  font-size: 12px;
-  line-height: 1.6;
-  color: var(--text);
-  text-align: start;
-  /* Release notes are untrusted text: rendered via textContent only, with
-     line breaks preserved safely (no HTML/Markdown parsing). */
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  user-select: text;
-  -webkit-user-select: text;
-}
 
-.update-progress {
-  align-self: stretch;
-}
-.update-bar {
-  height: 6px;
-  background: var(--input-bg);
-  border-radius: 3px;
-  overflow: hidden;
-}
-.update-bar-fill {
-  height: 100%;
-  width: 0%;
-  background: var(--accent);
-  border-radius: 3px;
-  transition: width 0.2s ease;
-}
-/* Unknown total → non-numeric motion instead of a fake percentage. */
-.update-bar.indeterminate .update-bar-fill {
-  width: 40%;
-  animation: update-indeterminate 1.1s ease-in-out infinite;
-}
-@keyframes update-indeterminate {
-  0% { margin-inline-start: -40%; }
-  100% { margin-inline-start: 100%; }
-}
+/* ─── Overlays ────────────────────────────────────────────────────────────── */
+/* Both the relaunch notice and the confirmation share one scrim: a veil of the
+   window surface itself (a ::before, so the dialog above it stays opaque)
+   plus a blur — no raw colour is needed for either appearance. */
 
-.update-status {
-  min-height: 1em;
-  font-size: 12px;
-  color: var(--secondary);
-  text-align: center;
-}
-.update-status.error {
-  color: var(--danger);
-}
-
-/* ─── Controlled relaunch notice ───────────────────────────────────────── */
-/* Covers the whole window: shows the message and blocks further clicks
-   during the short grace period before رفّ quits and relaunches. */
-
-.relaunch-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 100;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--glass-bg);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
-  animation: relaunch-fade 0.18s ease-out;
-}
-
-.relaunch-message {
-  background: var(--surface);
-  color: var(--text);
-  border: 1px solid var(--border);
-  border-radius: var(--r-window);
-  padding: 18px 28px;
-  font-size: 14px;
-  font-family: var(--font-body);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
-}
-
-@keyframes relaunch-fade {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-/* ─── Destructive-action confirmation ──────────────────────────────────── */
-/* Same overlay language as the relaunch notice, with an actionable dialog. */
-
+.relaunch-overlay,
 .confirm-overlay {
   position: fixed;
   inset: 0;
-  z-index: 110;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 24px;
-  background: var(--glass-bg);
+  animation: overlay-fade var(--t-base) var(--ease-standard);
+}
+
+.relaunch-overlay::before,
+.confirm-overlay::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--color-bg-secondary);
+  opacity: 0.78;
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
-  animation: relaunch-fade 0.18s ease-out;
+}
+
+.relaunch-overlay {
+  z-index: 100;
+}
+.confirm-overlay {
+  z-index: 110;
 }
 .confirm-overlay[hidden] {
   display: none;
 }
 
+.relaunch-message,
+.confirm-dialog {
+  position: relative;
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--elev-3);
+  color: var(--color-text-primary);
+}
+
+.relaunch-message {
+  padding: 18px 24px;
+  font-family: var(--font-ar);
+  font-size: var(--text-body);
+  line-height: var(--leading-body);
+  text-align: center;
+}
+
 .confirm-dialog {
   width: 100%;
-  max-width: 380px;
-  background: var(--surface);
-  color: var(--text);
-  border: 1px solid var(--border);
-  border-radius: var(--r-window);
-  padding: 20px;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
+  max-width: 340px;
+  padding: 18px;
 }
 
 .confirm-title {
-  font: 700 15px/22px var(--font-display);
-  color: var(--text);
+  font-family: var(--font-ar);
+  font-weight: 700;
+  font-size: var(--text-body);
+  line-height: normal;
+  color: var(--color-text-primary);
 }
 
 .confirm-text {
   margin: 8px 0 0;
-  font-size: 13px;
-  line-height: 20px;
-  color: var(--secondary-strong);
+  font-family: var(--font-ar);
+  font-weight: 400;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--color-text-secondary);
 }
 
 .confirm-actions {
   display: flex;
+  /* RTL trailing edge — macOS keeps the accepting button furthest from the
+     reading start, with إلغاء beside it. */
   justify-content: flex-end;
-  gap: 8px;
-  margin-top: 20px;
+  gap: var(--space-md);
+  margin-top: 18px;
 }
 
-/* Quiet confirmation after a destructive action completes. */
-.setting-note {
-  padding: 10px 0 0;
-  font-size: 12px;
-  color: var(--secondary-strong);
-}
-.setting-note[hidden] {
-  display: none;
+@keyframes overlay-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }

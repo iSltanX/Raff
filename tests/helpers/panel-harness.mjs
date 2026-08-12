@@ -19,6 +19,11 @@ const indexHtml = readFileSync(path.join(here, '../../src/index.html'), 'utf8');
 
 const now = Date.now();
 
+/** A timestamp `minutes` in the past — the list is sorted by `createdAt`
+ *  descending, so ordering assertions state their expected order explicitly
+ *  rather than leaning on the tie-break of equal timestamps. */
+export const minutesAgo = (minutes) => now - minutes * 60_000;
+
 export function sampleItem(id, overrides = {}) {
   return {
     id,
@@ -51,6 +56,7 @@ export function createFakeTauri(initialState, { failTimes = 0 } = {}) {
   const listeners = new Map();
   const listenCalls = new Map();
   const deletedIds = [];
+  const invokeCounts = new Map();
   let getStateCalls = 0;
 
   const notify = (event, payload = null) => {
@@ -60,6 +66,7 @@ export function createFakeTauri(initialState, { failTimes = 0 } = {}) {
   const tauri = {
     core: {
       invoke: (cmd, args) => {
+        invokeCounts.set(cmd, (invokeCounts.get(cmd) || 0) + 1);
         if (cmd === 'get_state') {
           getStateCalls++;
           if (remainingFailures === Infinity || remainingFailures > 0) {
@@ -69,6 +76,22 @@ export function createFakeTauri(initialState, { failTimes = 0 } = {}) {
           return Promise.resolve(structuredClone(state));
         }
         if (cmd === 'get_image') return Promise.resolve('data:image/png;base64,AAAA');
+        // Every row asks for its source app's real icon. The real command may
+        // legitimately answer `null` (no icon on disk) — the row then keeps
+        // its initial. Answering explicitly keeps rows from producing
+        // unhandled rejections that the uncaught-error assertions would see.
+        if (cmd === 'source_app_icon') return Promise.resolve(null);
+        if (
+          cmd === 'open_settings' ||
+          cmd === 'open_about' ||
+          cmd === 'open_repository' ||
+          cmd === 'hide_panel' ||
+          cmd === 'paste_item' ||
+          cmd === 'copy_item' ||
+          cmd === 'toggle_pin'
+        ) {
+          return Promise.resolve(null);
+        }
         if (cmd === 'delete_item') {
           // Mirrors the real `delete_item` command: mutate the store, persist
           // (there is no disk here, but the mutation is permanent within this
@@ -122,6 +145,9 @@ export function createFakeTauri(initialState, { failTimes = 0 } = {}) {
     listenCallCount(event) {
       return listenCalls.get(event) ?? 0;
     },
+    invokeCount(cmd) {
+      return invokeCounts.get(cmd) ?? 0;
+    },
     getStateCallCount() {
       return getStateCalls;
     },
@@ -145,6 +171,43 @@ export function rowIds(dom) {
 
 export function listText(dom) {
   return dom.window.document.getElementById('list').textContent;
+}
+
+/** A real, bubbling click — the filter row listens on its container, so a
+ *  non-bubbling Event would never reach the delegated handler. */
+export function click(dom, el) {
+  el.dispatchEvent(new dom.window.Event('click', { bubbles: true, cancelable: true }));
+}
+
+/**
+ * In-place recovery is reached by ⌘R (and by the failure view's own button);
+ * «08 — Product Screens» gives the header only the settings action, so there
+ * is no refresh button to click any more. The recovery semantics behind it —
+ * soft re-init first, a full reload only if that fails — are unchanged.
+ */
+export function pressCmdR(dom) {
+  dom.window.dispatchEvent(
+    new dom.window.KeyboardEvent('keydown', {
+      key: 'r',
+      code: 'KeyR',
+      metaKey: true,
+      bubbles: true,
+      cancelable: true,
+    })
+  );
+}
+
+/** Clicks one of the designed filter segments (الكل / نص / روابط / صور / مثبّت). */
+export function clickFilter(dom, name) {
+  const seg = dom.window.document.querySelector(`#filters .segment[data-filter="${name}"]`);
+  if (!seg) throw new Error(`no filter segment named ${name}`);
+  click(dom, seg);
+  return seg;
+}
+
+/** The `data-filter` of whichever segment is currently marked active. */
+export function activeFilter(dom) {
+  return dom.window.document.querySelector('#filters .segment.is-active')?.dataset.filter ?? null;
 }
 
 /**

@@ -1,6 +1,6 @@
 [package]
 name = "raff"
-version = "3.1.0"
+version = "4.0.0"
 description = "رفّ — personal, local-only, keyboard-first clipboard manager for macOS"
 authors = ["Raff"]
 edition = "2021"
@@ -15,7 +15,6 @@ tauri-plugin-autostart = "2"
 tauri-plugin-single-instance = "2"
 tauri-plugin-updater = "2"
 tauri-nspanel = { git = "https://github.com/ahkohd/tauri-nspanel", branch = "v2" }
-window-vibrancy = "0.6"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 uuid = { version = "1", features = ["v4"] }

@@ -1,13 +1,28 @@
-// When in-place re-initialisation cannot recover, the «تحديث رَفّ» button must
-// fall back to reloading the frontend — the fallback, never the first move.
+// When in-place re-initialisation cannot recover, ⌘R must fall back to
+// reloading the frontend — the fallback, never the first move.
+//
+// «08 — Product Screens» removed the header's refresh button; ⌘R (and the
+// failure view's own button) now carry the same recovery. The semantics under
+// test are unchanged: soft re-init first, a reload only when that fails.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mountPanel, sampleItem, flush, wait, rowIds } from './helpers/panel-harness.mjs';
+import {
+  mountPanel,
+  sampleItem,
+  minutesAgo,
+  flush,
+  wait,
+  rowIds,
+  pressCmdR,
+} from './helpers/panel-harness.mjs';
 
-test('refresh button: falls back to a frontend reload only when re-initialising fails', async (t) => {
+test('⌘R recovery: falls back to a frontend reload only when re-initialising fails', async (t) => {
   const { dom, fake, reloads, uncaught } = await mountPanel({
     pinned: [],
-    history: [sampleItem('r1'), sampleItem('r2')],
+    history: [
+      sampleItem('r1', { createdAt: minutesAgo(10) }),
+      sampleItem('r2', { createdAt: minutesAgo(20) }),
+    ],
     settings: null,
     axTrusted: true,
   });
@@ -17,10 +32,10 @@ test('refresh button: falls back to a frontend reload only when re-initialising 
     assert.equal(reloads.length, 0);
   });
 
-  await t.test('with IPC wedged, refresh tries in place first and only then reloads', async () => {
+  await t.test('with IPC wedged, ⌘R tries in place first and only then reloads', async () => {
     fake.failForever();
     const before = fake.getStateCallCount();
-    dom.window.document.getElementById('refresh-btn').dispatchEvent(new dom.window.Event('click'));
+    pressCmdR(dom);
 
     // Still no reload while the retries are in flight.
     await flush(4);
@@ -40,13 +55,13 @@ test('refresh button: falls back to a frontend reload only when re-initialising 
     assert.equal(reloads.length, 1, 'no further reloads without another user action');
   });
 
-  await t.test('a panel://shown landing mid-refresh is not mistaken for a failure', async () => {
+  await t.test('a panel://shown landing mid-recovery is not mistaken for a failure', async () => {
     fake.stopFailing();
     const before = reloads.length;
-    // Press refresh, then immediately reopen the panel — the reopen supersedes
-    // the button's in-flight fetch. That is a normal race, not a fault, and
-    // must not be answered with a reload.
-    dom.window.document.getElementById('refresh-btn').dispatchEvent(new dom.window.Event('click'));
+    // Press ⌘R, then immediately reopen the panel — the reopen supersedes the
+    // in-flight fetch. That is a normal race, not a fault, and must not be
+    // answered with a reload.
+    pressCmdR(dom);
     fake.emit('panel://shown', null);
     await wait(1400);
     assert.equal(reloads.length, before, 'a superseded refresh must never trigger a reload');

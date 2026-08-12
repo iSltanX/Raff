@@ -131,6 +131,24 @@ pub fn frontmost_app() -> FrontApp {
     }
 }
 
+/// The Finder icon of an installed application, as TIFF bytes.
+///
+/// Figma «08 — Product Screens» puts the real source-app icon in an 18×18 chip
+/// at the end of every clipboard row, so the row needs more than the app's
+/// name. Resolved through the documented `NSWorkspace` pair
+/// (`URLForApplicationWithBundleIdentifier` → `iconForFile`); returns `None`
+/// when the bundle id is unknown or not installed. AppKit — main thread only.
+pub fn app_icon_tiff(bundle_id: &str) -> Option<Vec<u8>> {
+    if bundle_id.is_empty() {
+        return None;
+    }
+    let ws = NSWorkspace::sharedWorkspace();
+    let url = ws.URLForApplicationWithBundleIdentifier(&NSString::from_str(bundle_id))?;
+    let path = url.path()?;
+    let image = ws.iconForFile(&path);
+    image.TIFFRepresentation().map(|d| d.to_vec())
+}
+
 /// Ordinary (Dock-visible) running apps, for the exclusion-list picker.
 pub fn running_apps() -> Vec<(String, String)> {
     use objc2_app_kit::NSApplicationActivationPolicy;
@@ -268,6 +286,17 @@ pub fn app_appearance_is_dark() -> bool {
         Some(best) => *best == *dark,
         None => false,
     }
+}
+
+/// The official Raff repository. Hardcoded on purpose: the About window's link
+/// must be able to open this URL and nothing else, so no URL ever crosses the
+/// IPC boundary from the webview.
+pub const REPOSITORY_URL: &str = "https://github.com/iSltanX/Raff";
+
+pub fn open_repository() {
+    let _ = std::process::Command::new("open")
+        .arg(REPOSITORY_URL)
+        .spawn();
 }
 
 pub fn open_accessibility_pane() {

@@ -1,5 +1,5 @@
-// ⌘⌫ deletes the selected item — footer chip, guarded shortcut, persistence,
-// and selection movement after the delete.
+// ⌘⌫ deletes the selected item — guarded shortcut, persistence, and selection
+// movement after the delete.
 //
 // One `mountPanel()` per file (see the harness header comment): `panel.js` is
 // imported once per process and its module-level DOM references are captured
@@ -8,7 +8,15 @@
 // scenario below therefore lives as a `t.test()` under one shared mount.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mountPanel, sampleItem, flush, rowIds, listText } from './helpers/panel-harness.mjs';
+import {
+  mountPanel,
+  sampleItem,
+  minutesAgo,
+  flush,
+  rowIds,
+  listText,
+  click,
+} from './helpers/panel-harness.mjs';
 
 function pressCmdBackspace(dom) {
   dom.window.dispatchEvent(
@@ -35,27 +43,29 @@ function pressEnter(dom) {
  * keep the test faithful to the shipped WebView instead of to a jsdom gap. */
 function selectRow(dom, id) {
   dom.window.document.getElementById('search').blur();
-  dom.window.document.querySelector(`.row[data-id="${id}"]`).dispatchEvent(new dom.window.Event('click'));
+  click(dom, dom.window.document.querySelector(`.row[data-id="${id}"]`));
 }
 
 test('delete shortcut: ⌘⌫ removes the selected item', async (t) => {
   const { dom, fake, uncaught } = await mountPanel({
     pinned: [],
-    history: [sampleItem('r1'), sampleItem('r2'), sampleItem('r3')],
+    history: [
+      sampleItem('r1', { createdAt: minutesAgo(10) }),
+      sampleItem('r2', { createdAt: minutesAgo(20) }),
+      sampleItem('r3', { createdAt: minutesAgo(30) }),
+    ],
     settings: null,
     axTrusted: true,
   });
 
-  await t.test('the footer shows an Arabic «حذف» chip with the ⌘⌫ combo, beside «تثبيت»', () => {
-    const hints = [...dom.window.document.querySelectorAll('.footer .hint')];
-    const pinIndex = hints.findIndex((h) => h.textContent.includes('تثبيت'));
-    const deleteIndex = hints.findIndex((h) => h.textContent.includes('حذف'));
-    assert.notEqual(deleteIndex, -1, 'a «حذف» hint exists in the footer');
-    assert.equal(deleteIndex, pinIndex + 1, 'it sits immediately beside «تثبيت»');
-
-    const chip = hints[deleteIndex];
-    assert.equal(chip.querySelector('kbd.keys')?.textContent, '⌘⌫', 'uses the same .keys wrapper as other hints');
-    assert.equal(chip.className, hints[pinIndex].className, 'same visual style as the other footer hints');
+  // «08 — Product Screens» replaced the old shortcut-chip strip with a single
+  // hint line, so there is no ⌘⌫ chip to assert any more. The shortcut itself
+  // is covered in full by the behavioural tests below.
+  await t.test('the footer carries the designed single Arabic hint', () => {
+    const hint = dom.window.document.getElementById('footer-hint');
+    assert.equal(hint.hidden, false, 'the hint line is visible in the ready state');
+    assert.equal(hint.querySelector('kbd').textContent, '⌘V');
+    assert.equal(hint.textContent, '⌘V للصق الفوري');
   });
 
   await t.test('does not delete anything when nothing is selected', async () => {
@@ -149,12 +159,12 @@ test('delete shortcut: ⌘⌫ removes the selected item', async (t) => {
     pressCmdBackspace(dom);
     await flush(6);
     assert.deepEqual(rowIds(dom), []);
-    assert.match(listText(dom), /رفّك فارغ/, 'reads as the natural empty state, not an error');
-  });
-
-  await t.test('the delete list design and other footer hints were never touched', () => {
-    const hints = [...dom.window.document.querySelectorAll('.footer .hint')].map((h) => h.textContent);
-    assert.deepEqual(hints, ['↑↓ تنقّل', '⏎ لصق', '⌥P تثبيت', '⌘⌫ حذف']);
+    assert.match(listText(dom), /الرفّ فارغ/, 'reads as the natural empty state, not an error');
+    assert.equal(
+      dom.window.document.querySelector('.state-view.is-failure'),
+      null,
+      'an emptied shelf is never the failure state'
+    );
   });
 
   await t.test('no uncaught errors across the whole flow', () => {

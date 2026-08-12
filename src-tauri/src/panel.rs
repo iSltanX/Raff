@@ -5,12 +5,14 @@
 use tauri::{AppHandle, Emitter, LogicalPosition, Manager};
 use tauri_nspanel::cocoa::appkit::NSWindowCollectionBehavior;
 use tauri_nspanel::{panel_delegate, ManagerExt, WebviewWindowExt};
-use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial, NSVisualEffectState};
 
 use crate::{macos, AppState};
 
 pub const PANEL_LABEL: &str = "panel";
-const PANEL_WIDTH: f64 = 392.0;
+/// Figma «08 — Product Screens»: macOS-Panel-Shell is 360 × 580.
+/// MUST stay in sync with `app.windows[0].width` in tauri.conf.json — this
+/// constant is what centres the panel horizontally.
+const PANEL_WIDTH: f64 = 360.0;
 /// NSWindowStyleMaskNonActivatingPanel — the panel can become key (receive
 /// keyboard) without activating the app that owns it.
 const STYLE_MASK_NON_ACTIVATING_PANEL: i32 = 1 << 7;
@@ -22,14 +24,13 @@ pub fn init(app: &AppHandle) -> tauri::Result<()> {
         .get_webview_window(PANEL_LABEL)
         .expect("panel window missing from tauri.conf.json");
 
-    // Native frosted glass behind the webview (the CSS tint sits on top).
-    let _ = apply_vibrancy(
-        &window,
-        NSVisualEffectMaterial::HudWindow,
-        Some(NSVisualEffectState::Active),
-        Some(14.0),
-    );
-
+    // No vibrancy: the Figma panel is an opaque warm surface
+    // (`#FAF8F6` light / `#1E1A17` dark) with a 1px border and a 16px radius,
+    // all painted by CSS. A frosted NSVisualEffectView underneath would only
+    // be visible at the corners, where its own radius never matched the CSS
+    // shell's. The window stays `transparent: true` so the rounded CSS corners
+    // are not clipped by a square opaque backing, and macOS draws the window
+    // shadow the design mocks as `0 12px 24px rgba(0,0,0,.15)`.
     let panel = window.to_panel()?;
     panel.set_level(PANEL_LEVEL);
     panel.set_style_mask(STYLE_MASK_NON_ACTIVATING_PANEL);

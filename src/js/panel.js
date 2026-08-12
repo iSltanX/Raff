@@ -1,62 +1,67 @@
 // Floating panel behavior: instant filter, full keyboard control, paste.
 // Clip content is ALWAYS rendered via textContent — never innerHTML.
+//
+// View structure follows Figma «08 — Product Screens» (2:7684 / 2:7791 / 2:7880):
+// timestamp on the left, preview in the centre, source app on the right, with
+// a filter row above the list and a hint footer below it.
 
 import { api, on } from './store.js';
-import { arabicDigits, filterItems, metaLine } from './logic.js';
-import {
-  TYPE_ICONS,
-  PIN_ICON,
-  PIN_ICON_FILLED,
-  SEARCH_ICON,
-  EMPTY_ICON,
-  NO_RESULTS_ICON,
-  REFRESH_ICON,
-  BROKEN_ICON,
-} from './icons.js';
+import { arabicDigits, filterItems, relativeTimeAr } from './logic.js';
+import { BRAND_MARK, SETTINGS, SEARCH, CLEAR, PIN, PIN_TOGGLE, ALERT, SHELF } from './icons.js';
 import { diag, installGlobalTraps } from './diag.js';
 
 diag('module:start');
 
-const searchEl = document.getElementById('search');
-const listEl = document.getElementById('list');
-const escChip = document.getElementById('esc-chip');
-const toastEl = document.getElementById('toast');
 const panelEl = document.getElementById('panel');
-const refreshBtn = document.getElementById('refresh-btn');
-document.getElementById('search-icon').innerHTML = SEARCH_ICON;
-refreshBtn.innerHTML = REFRESH_ICON; // static SVG constant
+const searchEl = document.getElementById('search');
+const searchClearEl = document.getElementById('search-clear');
+const listEl = document.getElementById('list');
+const toastEl = document.getElementById('toast');
+const footerHintEl = document.getElementById('footer-hint');
+const filtersEl = document.getElementById('filters');
+const settingsBtn = document.getElementById('settings-btn');
+const closeBtn = document.getElementById('panel-close');
+
+// Static, author-controlled SVG constants — safe as innerHTML.
+document.getElementById('brand-mark').innerHTML = BRAND_MARK;
+document.getElementById('search-glyph').innerHTML = SEARCH;
+settingsBtn.innerHTML = SETTINGS;
+searchClearEl.innerHTML = CLEAR;
 
 let state = { pinned: [], history: [], settings: null, axTrusted: false };
 let query = '';
+let filter = 'all';
 let selectedId = null;
-let visible = []; // flat filtered list, pinned first
-const thumbs = new Map(); // id → data URL
+let visible = []; // flat filtered list, newest first
+const thumbs = new Map(); // item id → data URL
+const appIcons = new Map(); // bundle id → data URL | null
 let toastTimer = null;
 
 // The list area has three distinct states and they must never be confused:
 //   'loading' — the first fetch has not answered yet
 //   'ready'   — data is in hand (which may legitimately be zero items)
 //   'error'   — data could not be fetched, or rendering threw
-// Only 'ready' + zero items is the natural «رفّك فارغ» empty shelf.
+// Only 'ready' + zero items is the natural «الرفّ فارغ» empty shelf.
 let phase = 'loading';
 
 // ─── Rendering ────────────────────────────────────────────────────────────
 
-function stateView(icon, title, sub, extraClass = '') {
+function stateView(art, title, sub, extraClass = '') {
   const view = document.createElement('div');
-  view.className = `state-view ${extraClass}`;
-  const box = document.createElement('div');
-  box.className = 'state-icon-box';
-  box.innerHTML = icon; // static SVG constant
-  const textWrap = document.createElement('div');
+  view.className = `state-view ${extraClass}`.trim();
+  const artEl = document.createElement('div');
+  artEl.className = 'state-art';
+  artEl.innerHTML = art; // static SVG constant
+  const text = document.createElement('div');
+  text.className = 'state-text';
   const titleEl = document.createElement('div');
   titleEl.className = 'state-title';
   titleEl.textContent = title;
   const subEl = document.createElement('div');
   subEl.className = 'state-sub';
   subEl.textContent = sub;
-  textWrap.append(titleEl, subEl);
-  view.append(box, textWrap);
+  text.append(titleEl, subEl);
+  view.append(artEl, text);
   return view;
 }
 
@@ -64,10 +69,10 @@ function stateView(icon, title, sub, extraClass = '') {
  *  Deliberately carries no technical detail; the cause goes to `diag` only. */
 function failureView() {
   const view = stateView(
-    BROKEN_ICON,
-    'تعذّر عرض محتوى رَفّ',
-    'حدث خلل مؤقت في عرض العناصر. يمكنك إعادة تحميل الواجهة دون فقدان محتواك.',
-    'failure'
+    ALERT,
+    'تعذّر عرض محتوى رفّ',
+    'حدث خلل مؤقت في العرض. يمكنك إعادة تحميل الواجهة دون فقدان محتواك.',
+    'is-failure'
   );
   const action = document.createElement('button');
   action.type = 'button';
@@ -79,11 +84,30 @@ function failureView() {
   return view;
 }
 
-function sectionHeader(label) {
-  const el = document.createElement('div');
-  el.className = 'section-header';
-  el.textContent = label;
-  return el;
+/** Lazily resolve the source app's real icon; fall back to its initial. */
+async function loadAppIcon(bundleId, host) {
+  if (!bundleId) return;
+  if (appIcons.has(bundleId)) {
+    const cached = appIcons.get(bundleId);
+    if (cached) paintAppIcon(host, cached);
+    return;
+  }
+  try {
+    const url = await api.sourceAppIcon(bundleId);
+    appIcons.set(bundleId, url || null);
+    if (url) paintAppIcon(host, url);
+  } catch {
+    appIcons.set(bundleId, null); // the initial stays — decorative either way
+  }
+}
+
+function paintAppIcon(host, url) {
+  const img = document.createElement('img');
+  img.alt = '';
+  img.width = 14;
+  img.height = 14;
+  img.src = url;
+  host.replaceChildren(img);
 }
 
 function buildRow(item) {
@@ -91,52 +115,68 @@ function buildRow(item) {
   row.className = 'row';
   row.dataset.id = item.id;
   row.setAttribute('role', 'option');
+  row.setAttribute('aria-selected', String(item.id === selectedId));
   if (item.id === selectedId) row.classList.add('selected');
 
-  const icon = document.createElement('span');
-  icon.className = 'row-icon';
-  icon.innerHTML = TYPE_ICONS[item.type] || TYPE_ICONS.text; // static SVG constant
-
-  const content = document.createElement('div');
-  content.className = 'row-content';
-  const title = document.createElement('div');
-  title.className = 'row-title';
-
-  if (item.type === 'link') {
-    const chip = document.createElement('span');
-    chip.className = 'link-chip';
-    chip.textContent = item.text; // clip content → textContent
-    title.append(chip);
-  } else if (item.type === 'image') {
-    const wrap = document.createElement('span');
-    wrap.className = 'image-preview';
-    const img = document.createElement('img');
-    img.className = 'image-thumb';
-    img.alt = '';
-    if (thumbs.has(item.id)) img.src = thumbs.get(item.id);
-    else loadThumb(item.id, img);
-    const label = document.createElement('span');
-    label.className = 'image-label';
-    label.textContent = arabicDigits(item.text); // bidi-stable dimensions
-    wrap.append(img, label);
-    title.append(wrap);
-  } else {
-    if (item.type === 'code') title.classList.add('code');
-    title.dir = 'auto';
-    title.textContent = item.text; // clip content → textContent
+  // ── left: timestamp, and the pin marker when the item is pinned
+  const timeWrap = document.createElement('div');
+  timeWrap.className = 'row-time';
+  const time = document.createElement('span');
+  time.className = 'time';
+  time.textContent = relativeTimeAr(item.createdAt);
+  timeWrap.append(time);
+  if (item.isPinned) {
+    const pin = document.createElement('span');
+    pin.className = 'pin-indicator';
+    pin.title = 'مثبّت';
+    pin.innerHTML = PIN; // static SVG constant
+    timeWrap.append(pin);
   }
 
-  const meta = document.createElement('div');
-  meta.className = 'row-meta';
-  meta.textContent = metaLine(item);
-  content.append(title, meta);
+  // ── centre: the clip preview
+  const preview = document.createElement('div');
+  preview.className = 'row-preview';
 
-  const pin = document.createElement('button');
-  pin.className = 'pin-btn' + (item.isPinned ? ' pinned' : '');
-  pin.innerHTML = item.isPinned ? PIN_ICON_FILLED : PIN_ICON; // static SVG constant
-  pin.title = item.isPinned ? 'إلغاء التثبيت' : 'تثبيت';
-  pin.tabIndex = -1;
-  pin.addEventListener('click', (e) => {
+  if (item.type === 'image') {
+    const thumb = document.createElement('div');
+    thumb.className = 'preview-thumb';
+    const img = document.createElement('img');
+    img.alt = arabicDigits(item.text); // "صورة ٤٢٠×٣١٥"
+    if (thumbs.has(item.id)) img.src = thumbs.get(item.id);
+    else loadThumb(item.id, img);
+    thumb.append(img);
+    preview.append(thumb);
+  } else {
+    // «08» renders text and code identically — Cairo Medium 12, right-aligned,
+    // with dir=auto letting a Latin snippet read left-to-right in place. Only
+    // links get their own treatment.
+    const title = document.createElement('div');
+    title.className = 'preview-title';
+    if (item.type === 'link') title.classList.add('is-link');
+    else title.dir = 'auto';
+    title.textContent = item.text; // clip content → textContent
+    preview.append(title);
+  }
+
+  // ── right: the source application
+  const source = document.createElement('div');
+  source.className = 'row-source';
+  const name = document.createElement('span');
+  name.className = 'source-name';
+  name.textContent = item.sourceApp || '';
+  const icon = document.createElement('span');
+  icon.className = 'source-icon';
+  icon.textContent = (item.sourceApp || '؟').trim().charAt(0);
+  loadAppIcon(item.sourceAppBundleId, icon);
+  source.append(name, icon);
+
+  const pinBtn = document.createElement('button');
+  pinBtn.type = 'button';
+  pinBtn.className = 'pin-btn' + (item.isPinned ? ' is-pinned' : '');
+  pinBtn.innerHTML = PIN_TOGGLE; // static SVG constant
+  pinBtn.title = item.isPinned ? 'إلغاء التثبيت' : 'تثبيت';
+  pinBtn.tabIndex = -1;
+  pinBtn.addEventListener('click', (e) => {
     e.stopPropagation();
     api.togglePin(item.id);
   });
@@ -147,56 +187,94 @@ function buildRow(item) {
   });
   row.addEventListener('dblclick', () => paste(item.id, false));
 
-  row.append(icon, content, pin);
+  row.append(timeWrap, preview, source, pinBtn);
   return row;
+}
+
+/** The designed type filters, backed by the item's own kind + pin flag. */
+function matchesFilter(item) {
+  switch (filter) {
+    case 'text':
+      return item.type === 'text' || item.type === 'code';
+    case 'link':
+      return item.type === 'link';
+    case 'image':
+      return item.type === 'image';
+    case 'pinned':
+      return item.isPinned;
+    default:
+      return true;
+  }
 }
 
 function renderList() {
   if (phase === 'loading') {
-    listEl.replaceChildren(stateView(EMPTY_ICON, 'جارٍ التحميل…', 'لحظة من فضلك', 'loading'));
-    escChip.hidden = true;
+    listEl.replaceChildren(stateView(SHELF, 'جارٍ التحميل…', 'لحظة من فضلك'));
     visible = [];
+    syncChrome();
     return;
   }
   if (phase === 'error') {
     listEl.replaceChildren(failureView());
-    escChip.hidden = true;
     visible = [];
+    syncChrome();
     return;
   }
 
-  const pinned = filterItems(state.pinned, query);
-  const recent = filterItems(state.history, query);
-  visible = [...pinned, ...recent];
+  // «08» shows one chronological list with pinned items marked in place —
+  // there are no section headers. The مثبّت segment is how you isolate them.
+  const all = [...state.pinned, ...state.history].sort((a, b) => b.createdAt - a.createdAt);
+  visible = filterItems(all, query).filter(matchesFilter);
 
   if (!visible.some((i) => i.id === selectedId)) {
     selectedId = visible[0]?.id ?? null;
   }
 
   listEl.replaceChildren();
-  escChip.hidden = query.length === 0;
+  syncChrome();
 
   if (visible.length === 0) {
-    if (query) {
-      listEl.append(stateView(NO_RESULTS_ICON, 'لا نتائج', 'جرّب كلمة أخرى', 'no-results'));
+    if (query || filter !== 'all') {
+      listEl.append(stateView(SHELF, 'لا نتائج', 'جرّب كلمة أخرى أو صنفًا مختلفًا'));
     } else {
       // Genuinely nothing saved yet — never shown for a failed fetch.
-      listEl.append(stateView(EMPTY_ICON, 'رفّك فارغ', 'انسخ أي شيء ليظهر هنا'));
+      listEl.append(
+        stateView(SHELF, 'الرفّ فارغ', 'انسخ أي شيء وسيظهر بشكل آمن وجميل على رفّك القريب')
+      );
     }
     return;
   }
 
   const fragment = document.createDocumentFragment();
-  if (pinned.length > 0) {
-    fragment.append(sectionHeader('مثبّت'));
-    pinned.forEach((item) => fragment.append(buildRow(item)));
-  }
-  if (recent.length > 0) {
-    fragment.append(sectionHeader('الأخير'));
-    recent.forEach((item) => fragment.append(buildRow(item)));
+  visible.forEach((item) => fragment.append(buildRow(item)));
+  if (query) {
+    const end = document.createElement('div');
+    end.className = 'results-end';
+    end.textContent = `نهاية نتائج البحث عن «${query}»`;
+    fragment.append(end);
   }
   listEl.append(fragment);
   scrollSelectedIntoView();
+}
+
+/** Footer copy and the clear button follow the current view state. */
+function syncChrome() {
+  searchClearEl.hidden = query.length === 0;
+  if (toastEl.hidden) {
+    footerHintEl.hidden = false;
+    if (phase !== 'ready') {
+      footerHintEl.textContent = '';
+    } else if (query) {
+      footerHintEl.textContent = 'اضغط ↵ للصق النتيجة المحددة';
+    } else if (visible.length === 0) {
+      footerHintEl.textContent = 'في انتظار نسخك الأول…';
+    } else {
+      footerHintEl.replaceChildren();
+      const kbd = document.createElement('kbd');
+      kbd.textContent = '⌘V';
+      footerHintEl.append(kbd, document.createTextNode(' للصق الفوري'));
+    }
+  }
 }
 
 /**
@@ -217,7 +295,7 @@ function render() {
       listEl.replaceChildren(failureView());
     } catch {
       // Last resort: the failure view itself could not be built.
-      listEl.textContent = 'تعذّر عرض محتوى رَفّ';
+      listEl.textContent = 'تعذّر عرض محتوى رفّ';
     }
   }
 }
@@ -241,9 +319,11 @@ function scrollSelectedIntoView() {
 function showToast(message) {
   toastEl.textContent = message;
   toastEl.hidden = false;
+  footerHintEl.hidden = true;
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => {
     toastEl.hidden = true;
+    syncChrome();
   }, 2200);
 }
 
@@ -262,6 +342,17 @@ function moveSelection(delta) {
   const index = visible.findIndex((i) => i.id === selectedId);
   const next = Math.min(visible.length - 1, Math.max(0, index + delta));
   selectedId = visible[next].id;
+  render();
+}
+
+function setFilter(next) {
+  if (filter === next) return;
+  filter = next;
+  for (const seg of filtersEl.querySelectorAll('.segment')) {
+    const on = seg.dataset.filter === next;
+    seg.classList.toggle('is-active', on);
+    seg.setAttribute('aria-selected', String(on));
+  }
   render();
 }
 
@@ -361,46 +452,47 @@ function hardReload(reason) {
   window.location.reload();
 }
 
-// ─── Manual «تحديث رَفّ» ───────────────────────────────────────────────────
+/**
+ * In-place recovery. «08» gives the header only the settings action, so this
+ * is reached by ⌘R (and by the failure view's own button) rather than by a
+ * toolbar button — the capability is preserved, the chrome stays as designed.
+ */
+let recovering = false;
 
-let refreshBusy = false;
-
-async function manualRefresh() {
-  if (refreshBusy) return; // short busy state blocks double-clicks
-  refreshBusy = true;
-  refreshBtn.disabled = true;
-  refreshBtn.classList.add('busy');
-  refreshBtn.title = 'جارٍ تحديث رَفّ…';
-  diag('manual-refresh:start');
-
+async function recover() {
+  if (recovering) return;
+  recovering = true;
+  diag('recover:start');
   try {
-    // 1) Re-initialise data and view state in place. Nothing is written, the
-    //    database is untouched, and saved items cannot be lost.
     const outcome = await refresh({ retry: true });
     if (outcome !== 'failed') {
       // 'superseded' means a concurrent refresh is already delivering fresh
       // data — recovered either way, so no reload.
       forceRepaint();
-      diag('manual-refresh:soft-ok', outcome);
+      diag('recover:soft-ok', outcome);
       return;
     }
-    // 2) In-place recovery failed — reload the frontend as the fallback.
-    diag('manual-refresh:fallback-reload');
-    try {
-      hardReload('manual-fallback');
-    } catch (err) {
-      diag('manual-refresh:reload-failed', err);
-      showToast('تعذّر تحديث رَفّ. حاول مرة أخرى.');
-    }
+    diag('recover:fallback-reload');
+    hardReload('recover-fallback');
   } finally {
-    refreshBusy = false;
-    refreshBtn.disabled = false;
-    refreshBtn.classList.remove('busy');
-    refreshBtn.title = 'تحديث رَفّ';
+    recovering = false;
   }
 }
 
-refreshBtn.addEventListener('click', manualRefresh);
+// ─── Chrome actions ───────────────────────────────────────────────────────
+
+settingsBtn.addEventListener('click', () => api.openSettings());
+closeBtn.addEventListener('click', () => api.hidePanel());
+searchClearEl.addEventListener('click', () => {
+  query = '';
+  searchEl.value = '';
+  searchEl.focus();
+  render();
+});
+filtersEl.addEventListener('click', (e) => {
+  const seg = e.target.closest('.segment');
+  if (seg) setFilter(seg.dataset.filter);
+});
 
 // ─── Keyboard (full control — mouse optional) ─────────────────────────────
 
@@ -448,6 +540,11 @@ window.addEventListener('keydown', (e) => {
     searchEl.select();
     return;
   }
+  if (e.metaKey && e.code === 'KeyR') {
+    e.preventDefault();
+    recover();
+    return;
+  }
   if (e.metaKey && e.key === 'Backspace') {
     // A text field (the search input) owns ⌘⌫ for its own native editing —
     // delete-to-start-of-line, or a no-op when empty. Item deletion must
@@ -467,7 +564,8 @@ window.addEventListener('keydown', (e) => {
   if (e.metaKey && e.code === 'KeyC') {
     e.preventDefault();
     if (selectedId) {
-      api.copyItem(selectedId)
+      api
+        .copyItem(selectedId)
         .then(() => showToast('نُسخ إلى الحافظة'))
         .catch((err) => showToast(String(err)));
     }
@@ -492,6 +590,7 @@ on('panel://shown', async () => {
   query = '';
   searchEl.value = '';
   selectedId = null;
+  setFilter('all');
   // Repaint before and after the fetch: the first invalidates whatever frozen
   // frame the suspended web process left behind, the second guarantees the
   // freshly rendered list is actually composited.
@@ -524,10 +623,9 @@ setInterval(() => {
 }, 30000);
 
 // The native WKWebView page menu is English and offers a technical reload that
-// has no place in an Arabic panel — the titlebar button is the supported way
-// to refresh. But it is suppressed ONLY over inert areas: inside a writable
-// field, or when text is selected, WebKit shows the editing menu (cut / copy /
-// paste / select) instead, and that must keep working normally.
+// has no place in an Arabic panel. But it is suppressed ONLY over inert areas:
+// inside a writable field, or when text is selected, WebKit shows the editing
+// menu (cut / copy / paste / select) instead, and that must keep working.
 function isWritable(node) {
   // nodeType 1 = element; text nodes are asked via their parent. Checked by
   // nodeType rather than `instanceof Element` so this never depends on a

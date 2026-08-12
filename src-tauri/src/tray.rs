@@ -1,16 +1,20 @@
-//! Menu-bar (tray) presence: the identity's template icon, the last 5 items,
-//! a capture toggle, and the app actions. Rebuilt whenever the store changes.
+//! Menu-bar (tray) presence.
+//!
+//! Interaction model (Figma «08 — Product Screens», screen ٤):
+//!   * primary click   → open رفّ immediately (the panel is the product)
+//!   * secondary click → the contextual application menu
+//!
+//! The menu is deliberately static — four actions and one separator, exactly
+//! as designed. Reaching a clipboard item is the panel's job, so the menu is
+//! never rebuilt and never mirrors store state.
 
-use tauri::menu::{CheckMenuItemBuilder, Menu, MenuBuilder, MenuItemBuilder, PredefinedMenuItem};
-use tauri::tray::TrayIconBuilder;
-use tauri::{AppHandle, Emitter, Manager, Wry};
+use tauri::menu::{Menu, MenuBuilder, MenuItemBuilder, PredefinedMenuItem};
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+use tauri::{AppHandle, Wry};
 
-use crate::storage::ItemKind;
-use crate::{commands, panel, paste, AppState};
+use crate::{commands, panel};
 
 const TRAY_ID: &str = "raff-tray";
-const RECENT_IN_MENU: usize = 5;
-const LABEL_MAX_CHARS: usize = 44;
 
 pub fn create(app: &AppHandle) -> tauri::Result<()> {
     // The menu-bar item must exist exactly once, no matter how often this is
@@ -26,133 +30,47 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
         .icon_as_template(true)
         .tooltip("رفّ")
         .menu(&menu)
-        .show_menu_on_left_click(true)
+        // Left click must NOT drop the menu — it opens the panel instead.
+        .show_menu_on_left_click(false)
+        .on_tray_icon_event(|tray, event| {
+            if let TrayIconEvent::Click {
+                button: MouseButton::Left,
+                button_state: MouseButtonState::Up,
+                ..
+            } = event
+            {
+                panel::toggle(tray.app_handle());
+            }
+        })
         .on_menu_event(|app, event| handle_menu_event(app, event.id().as_ref()))
         .build(app)?;
     Ok(())
 }
 
-/// Rebuilds the tray menu. Callable from any thread (menus are AppKit objects,
-/// so the work is dispatched to the main thread).
-pub fn refresh(app: &AppHandle) {
-    let handle = app.clone();
-    let _ = app.run_on_main_thread(move || {
-        if let Some(tray) = handle.tray_by_id(TRAY_ID) {
-            if let Ok(menu) = build_menu(&handle) {
-                let _ = tray.set_menu(Some(menu));
-            }
-        }
-    });
-}
-
 fn build_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
-    let state = app.state::<AppState>();
-    let (recent, capture_enabled, hotkey): (Vec<(String, String, ItemKind)>, bool, String) = {
-        let store = state.store.lock().unwrap();
-        (
-            store
-                .history
-                .iter()
-                .take(RECENT_IN_MENU)
-                .map(|i| (i.id.clone(), i.text.clone(), i.kind))
-                .collect(),
-            store.settings.capture_enabled,
-            store.settings.hotkey.clone(),
-        )
-    };
-
-    let mut builder = MenuBuilder::new(app);
-    if recent.is_empty() {
-        let empty = MenuItemBuilder::with_id("noop", "لا عناصر بعد")
-            .enabled(false)
-            .build(app)?;
-        builder = builder.item(&empty);
-    } else {
-        for (id, text, kind) in &recent {
-            let label = menu_label(text, *kind);
-            let item = MenuItemBuilder::with_id(format!("clip:{id}"), label).build(app)?;
-            builder = builder.item(&item);
-        }
-    }
-
-    let capture = CheckMenuItemBuilder::with_id("capture", "الالتقاط")
-        .checked(capture_enabled)
-        .build(app)?;
-    // The accelerator is display-only (the global shortcut does the work) and
-    // must mirror the *configured* hotkey. If muda cannot parse the stored
-    // accelerator string, fall back to a plain item rather than failing the menu.
-    let open = MenuItemBuilder::with_id("open", "فتح رفّ")
-        .accelerator(&hotkey)
-        .build(app)
-        .or_else(|_| MenuItemBuilder::with_id("open", "فتح رفّ").build(app))?;
     let settings = MenuItemBuilder::with_id("settings", "الإعدادات…").build(app)?;
     let check_updates =
-        MenuItemBuilder::with_id("check-updates", "التحقق من وجود تحديثات…").build(app)?;
+        MenuItemBuilder::with_id("check-updates", "التحقق من التحديثات…").build(app)?;
+    let about = MenuItemBuilder::with_id("about", "عن رفّ").build(app)?;
     let quit = MenuItemBuilder::with_id("quit", "إنهاء")
         .accelerator("Cmd+Q")
         .build(app)?;
 
-    builder
-        .item(&PredefinedMenuItem::separator(app)?)
-        .item(&capture)
-        .item(&PredefinedMenuItem::separator(app)?)
-        .item(&open)
+    MenuBuilder::new(app)
         .item(&settings)
         .item(&check_updates)
+        .item(&about)
         .item(&PredefinedMenuItem::separator(app)?)
         .item(&quit)
         .build()
 }
 
-fn menu_label(text: &str, kind: ItemKind) -> String {
-    if kind == ItemKind::Image {
-        // "صورة W×H" is stored with Western digits; the UI convention
-        // (matching the panel) is Arabic-Indic digits everywhere.
-        return arabic_digits(text);
-    }
-    let one_line = text.split_whitespace().collect::<Vec<_>>().join(" ");
-    let mut label: String = one_line.chars().take(LABEL_MAX_CHARS).collect();
-    if one_line.chars().count() > LABEL_MAX_CHARS {
-        label.push('…');
-    }
-    label
-}
-
-fn arabic_digits(s: &str) -> String {
-    s.chars()
-        .map(|c| match c {
-            '0'..='9' => char::from_u32('٠' as u32 + (c as u32 - '0' as u32)).unwrap_or(c),
-            _ => c,
-        })
-        .collect()
-}
-
 fn handle_menu_event(app: &AppHandle, id: &str) {
     match id {
-        "open" => panel::toggle(app),
         "settings" => commands::open_settings_window(app),
         "check-updates" => crate::updater::request_check_from_menu(app),
+        "about" => commands::open_about_window(app),
         "quit" => app.exit(0),
-        "capture" => {
-            let state = app.state::<AppState>();
-            {
-                let mut store = state.store.lock().unwrap();
-                store.settings.capture_enabled = !store.settings.capture_enabled;
-                store.save_settings();
-            }
-            let _ = app.emit("raff://changed", ());
-            refresh(app);
-        }
-        clip if clip.starts_with("clip:") => {
-            let item_id = &clip["clip:".len()..];
-            // Tray click copies with the item's full representations (plain +
-            // HTML/RTF/PNG); the monitor skips our own write and the copy is
-            // recorded as an explicit learning signal instead of letting the
-            // capture-dedupe reshuffle the history and reset created_at.
-            if paste::write_item_to_clipboard(app, item_id, false) {
-                paste::bump_copy_signals(app, item_id);
-            }
-        }
         _ => {}
     }
 }

@@ -2,13 +2,14 @@
 // the permission and closes itself once granted.
 
 import { api } from './store.js';
-import { ACCESSIBILITY_ICON, SHIELD_ICON } from './icons.js';
+import { KEYBOARD, CHECK } from './icons.js';
 
 // The native WKWebView menu is English ("Reload") — never shown in Raff.
 window.addEventListener('contextmenu', (e) => e.preventDefault());
 
-document.getElementById('figure').innerHTML = ACCESSIBILITY_ICON;
-document.getElementById('shield').innerHTML = SHIELD_ICON;
+// Static, author-controlled SVG constants — safe as innerHTML.
+document.getElementById('figure').innerHTML = KEYBOARD;
+document.getElementById('shield').innerHTML = CHECK;
 
 // Watch from the start: the user may grant the permission directly in System
 // Settings without ever pressing the button below.

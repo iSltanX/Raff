@@ -64,6 +64,13 @@ function createFakeTauri(initialState) {
           }
           case 'get_image':
             return Promise.resolve('data:image/png;base64,AAAA');
+          // Every row asks for its source app's icon; `null` (no icon on
+          // disk) is a legitimate answer and must not reject.
+          case 'source_app_icon':
+            return Promise.resolve(null);
+          case 'open_settings':
+          case 'open_about':
+          case 'open_repository':
           case 'paste_item':
           case 'copy_item':
           case 'toggle_pin':
@@ -153,17 +160,29 @@ async function mountPanelOnce(initialState) {
 
 test('panel lifecycle: copy/paste an old item, hide, reopen — the list must survive', async (t) => {
   const { dom, fake } = await mountPanelOnce({
-    pinned: [sampleItem('pin1', { isPinned: true, text: 'kept pinned' })],
+    // «08 — Product Screens» merges pinned and recent into ONE chronological
+    // list (newest first) with pinned items marked in place, so `pin1` sits
+    // between the newest and the oldest clip rather than at the top.
+    pinned: [sampleItem('pin1', { isPinned: true, text: 'kept pinned', createdAt: now - 5 * MIN })],
     history: [
-      sampleItem('newest', { text: 'newest clip' }),
-      sampleItem('old-text', { text: 'an older clip' }),
+      sampleItem('newest', { text: 'newest clip', createdAt: now - 1 * MIN }),
+      sampleItem('old-text', { text: 'an older clip', createdAt: now - 30 * MIN }),
     ],
     settings: null,
     axTrusted: true,
   });
 
-  await t.test('initial load renders pinned and recent items', () => {
-    assert.deepEqual(rowIds(dom), ['pin1', 'newest', 'old-text']);
+  await t.test('initial load renders one chronological list, pinned marked in place', () => {
+    assert.deepEqual(rowIds(dom), ['newest', 'pin1', 'old-text']);
+    assert.ok(
+      dom.window.document.querySelector('.row[data-id="pin1"] .pin-indicator'),
+      'the pinned row carries its marker'
+    );
+    assert.equal(
+      dom.window.document.querySelectorAll('.section-header').length,
+      0,
+      'no section headers exist any more'
+    );
   });
 
   await t.test('reopening after copying an OLD TEXT item still shows the full list', async () => {
@@ -172,21 +191,31 @@ test('panel lifecycle: copy/paste an old item, hide, reopen — the list must su
     //    broadcasts raff://changed while the panel is still hidden.
     fake.emit('raff://changed', null);
     await flush();
-    assert.deepEqual(rowIds(dom), ['pin1', 'newest', 'old-text'], 'still populated while hidden');
+    assert.deepEqual(rowIds(dom), ['newest', 'pin1', 'old-text'], 'still populated while hidden');
 
     // 2) User reopens via hotkey/tray → Rust emits panel://shown.
     fake.emit('panel://shown', null);
     await flush();
-    assert.deepEqual(rowIds(dom), ['pin1', 'newest', 'old-text'], 'list must repopulate, not go blank');
-    assert.doesNotMatch(listText(dom), /رفّك فارغ/, 'must not fall back to the empty state');
+    assert.deepEqual(rowIds(dom), ['newest', 'pin1', 'old-text'], 'list must repopulate, not go blank');
+    assert.doesNotMatch(listText(dom), /الرفّ فارغ/, 'must not fall back to the empty state');
   });
 
   await t.test('reopening after copying an OLD IMAGE item still shows the full list', async () => {
     fake.setState({
-      pinned: [sampleItem('pin1', { isPinned: true, text: 'kept pinned' })],
+      pinned: [sampleItem('pin1', { isPinned: true, text: 'kept pinned', createdAt: now - 5 * MIN })],
       history: [
-        sampleItem('newest-img', { type: 'image', text: 'صورة 5×5', hasImage: true }),
-        sampleItem('old-image', { type: 'image', text: 'صورة 20×20', hasImage: true }),
+        sampleItem('newest-img', {
+          type: 'image',
+          text: 'صورة 5×5',
+          hasImage: true,
+          createdAt: now - 1 * MIN,
+        }),
+        sampleItem('old-image', {
+          type: 'image',
+          text: 'صورة 20×20',
+          hasImage: true,
+          createdAt: now - 30 * MIN,
+        }),
       ],
       settings: null,
       axTrusted: true,
@@ -195,13 +224,13 @@ test('panel lifecycle: copy/paste an old item, hide, reopen — the list must su
     await flush();
     fake.emit('panel://shown', null); // reopen
     await flush();
-    assert.deepEqual(rowIds(dom), ['pin1', 'newest-img', 'old-image']);
+    assert.deepEqual(rowIds(dom), ['newest-img', 'pin1', 'old-image']);
   });
 
-  await t.test('reopening after copying a PINNED item preserves pin placement', async () => {
+  await t.test('reopening after copying a PINNED item keeps it in its chronological place', async () => {
     fake.setState({
-      pinned: [sampleItem('pin1', { isPinned: true, text: 'kept pinned' })],
-      history: [sampleItem('r1')],
+      pinned: [sampleItem('pin1', { isPinned: true, text: 'kept pinned', createdAt: now - 5 * MIN })],
+      history: [sampleItem('r1', { createdAt: now - 1 * MIN })],
       settings: null,
       axTrusted: true,
     });
@@ -209,13 +238,20 @@ test('panel lifecycle: copy/paste an old item, hide, reopen — the list must su
     await flush();
     fake.emit('panel://shown', null);
     await flush();
-    assert.deepEqual(rowIds(dom), ['pin1', 'r1']);
+    assert.deepEqual(rowIds(dom), ['r1', 'pin1']);
+    assert.ok(
+      dom.window.document.querySelector('.row[data-id="pin1"] .pin-indicator'),
+      'and is still marked as pinned'
+    );
   });
 
   await t.test('search text is cleared on reopen but does not lose items', async () => {
     fake.setState({
       pinned: [],
-      history: [sampleItem('alpha-item', { text: 'alpha' }), sampleItem('beta-item', { text: 'beta' })],
+      history: [
+        sampleItem('alpha-item', { text: 'alpha', createdAt: now - 1 * MIN }),
+        sampleItem('beta-item', { text: 'beta', createdAt: now - 2 * MIN }),
+      ],
       settings: null,
       axTrusted: true,
     });
@@ -237,8 +273,11 @@ test('panel lifecycle: copy/paste an old item, hide, reopen — the list must su
 
   await t.test('repeated hide/show cycles (10x) never duplicate rows', async () => {
     fake.setState({
-      pinned: [sampleItem('p1', { isPinned: true })],
-      history: [sampleItem('r1'), sampleItem('r2', { type: 'image', hasImage: true })],
+      pinned: [sampleItem('p1', { isPinned: true, createdAt: now - 30 * MIN })],
+      history: [
+        sampleItem('r1', { createdAt: now - 10 * MIN }),
+        sampleItem('r2', { type: 'image', hasImage: true, createdAt: now - 20 * MIN }),
+      ],
       settings: null,
       axTrusted: true,
     });
@@ -247,7 +286,7 @@ test('panel lifecycle: copy/paste an old item, hide, reopen — the list must su
       await flush();
       fake.emit('panel://shown', null);
       await flush();
-      assert.deepEqual(rowIds(dom), ['p1', 'r1', 'r2'], `cycle ${i} kept exactly one row per item`);
+      assert.deepEqual(rowIds(dom), ['r1', 'r2', 'p1'], `cycle ${i} kept exactly one row per item`);
     }
   });
 
@@ -259,7 +298,10 @@ test('panel lifecycle: copy/paste an old item, hide, reopen — the list must su
   await t.test('a slow, stale get_state response cannot overwrite a newer one (race safety)', async () => {
     fake.setState({
       pinned: [],
-      history: [sampleItem('race-r1'), sampleItem('race-r2')],
+      history: [
+        sampleItem('race-r1', { createdAt: now - 1 * MIN }),
+        sampleItem('race-r2', { createdAt: now - 2 * MIN }),
+      ],
       settings: null,
       axTrusted: true,
     });
@@ -273,7 +315,12 @@ test('panel lifecycle: copy/paste an old item, hide, reopen — the list must su
 
     // ...then the item is deleted and the panel reopens with a *fast* fetch
     // that resolves before the slow one.
-    fake.setState({ pinned: [], history: [sampleItem('race-r1')], settings: null, axTrusted: true });
+    fake.setState({
+      pinned: [],
+      history: [sampleItem('race-r1', { createdAt: now - 1 * MIN })],
+      settings: null,
+      axTrusted: true,
+    });
     fake.setGetStateDelay(5);
     fake.emit('panel://shown', null);
 
@@ -291,7 +338,10 @@ test('panel lifecycle: copy/paste an old item, hide, reopen — the list must su
   await t.test('a rejected get_state on panel://shown does not leave the panel permanently blank', async () => {
     fake.setState({
       pinned: [],
-      history: [sampleItem('err-r1'), sampleItem('err-r2')],
+      history: [
+        sampleItem('err-r1', { createdAt: now - 1 * MIN }),
+        sampleItem('err-r2', { createdAt: now - 2 * MIN }),
+      ],
       settings: null,
       axTrusted: true,
     });
@@ -316,7 +366,12 @@ test('panel lifecycle: copy/paste an old item, hide, reopen — the list must su
   });
 
   await t.test('regaining window focus also resyncs the list through the official refresh path', async () => {
-    fake.setState({ pinned: [], history: [sampleItem('focus-r1')], settings: null, axTrusted: true });
+    fake.setState({
+      pinned: [],
+      history: [sampleItem('focus-r1', { createdAt: now - 1 * MIN })],
+      settings: null,
+      axTrusted: true,
+    });
     fake.emit('panel://shown', null);
     await flush();
 
@@ -324,7 +379,10 @@ test('panel lifecycle: copy/paste an old item, hide, reopen — the list must su
     // from the tray) — the panel never got a dedicated event for it.
     fake.setState({
       pinned: [],
-      history: [sampleItem('focus-r1'), sampleItem('focus-r2')],
+      history: [
+        sampleItem('focus-r1', { createdAt: now - 1 * MIN }),
+        sampleItem('focus-r2', { createdAt: now - 2 * MIN }),
+      ],
       settings: null,
       axTrusted: true,
     });

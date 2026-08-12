@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <title>عن رفّ</title>
+  <script src="theme.js"></script>
+  <link rel="stylesheet" href="tokens.css" />
+  <link rel="stylesheet" href="about.css" />
+</head>
+<body>
+  <!-- Figma «08 — Product Screens» → macOS-About-Window (2:8059), 320 × 400. -->
+  <main class="about" id="about">
+    <!-- Controls-Left (2:8060). Physically left, as on every macOS window —
+         the traffic lights never mirror in RTL. -->
+    <div class="window-controls" data-tauri-drag-region>
+      <button type="button" class="dot dot-close" id="about-close" title="إغلاق" aria-label="إغلاق نافذة عن رفّ" tabindex="-1"></button>
+      <span class="dot dot-min" aria-hidden="true"></span>
+      <span class="dot dot-zoom" aria-hidden="true"></span>
+    </div>
+
+    <!-- Large-Logo (2:8065) -->
+    <div class="large-logo">
+      <div class="logo-graphic" aria-hidden="true">رفّ</div>
+      <div class="title-text">
+        <h1 class="app-title">رفّ — Raff</h1>
+        <!-- Version line — filled by about.js from the running app's own
+             version; never hardcoded, not even as placeholder text. -->
+        <p class="app-version latin" id="app-version"></p>
+      </div>
+    </div>
+
+    <!-- Tagline (2:8071) -->
+    <p class="tagline">"رفّك القريب والموثوق لكل ما نسخت وحفظت"</p>
+
+    <div class="credit">
+      <!-- Author (7:1609) -->
+      <p class="author">تطوير وتصميم : سلطان</p>
+      <!-- Repository (7:1610). Not an <a href> — the webview may never
+           navigate away; the URL lives in Rust behind `open_repository`. -->
+      <button type="button" class="repo-link" id="repo-link">github.com/iSltanX/Raff</button>
+    </div>
+
+    <!-- Actions-Bottom (2:8072) -->
+    <div class="actions-bottom">
+      <button type="button" class="push-btn" id="update-btn">التحقق من التحديثات</button>
+      <p class="update-status" id="update-status" role="status" hidden></p>
+      <p class="copyright">حقوق الطبع والنشر © ٢٠٢٦ رفّ. جميع الحقوق محفوظة.</p>
+    </div>
+  </main>
+  <script type="module" src="js/about.js"></script>
+</body>
+</html>
