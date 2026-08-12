@@ -143,6 +143,13 @@
      defines a third text level; no page defines its dark counterpart, so the
      dark value is set one step dimmer than text-secondary. */
   --color-text-tertiary: #a5a19d;
+  /* Brand-coloured TEXT. The system deliberately separates this from
+     --color-interactive-primary, which is for brand fills, borders and icon
+     strokes. «10 — RTL & Accessibility» rates the terracotta #C4704B at 3.9:1
+     — "كبير فقط", large text only — so any brand-coloured run below the WCAG
+     large-text threshold uses this darker step instead: 4.73:1 on the panel
+     surface, 4.65:1 on a selected row, 5.32:1 in dark. Display-size brand text
+     (the 18px empty-shelf title) and the wordmark keep the interactive hue. */
   --color-text-brand: #a85a3a; /* = terracotta-600 */
   /* The author credit on the About window — «08 — Product Screens», 7:1609.
      The only place the system uses this warm brown, and «09 — Light & Dark»

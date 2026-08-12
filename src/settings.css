@@ -128,7 +128,7 @@ body {
   font-weight: 800;
   font-size: 12px;
   line-height: normal;
-  color: var(--color-interactive-primary);
+  color: var(--color-text-brand);
 }
 
 /* Row: the control sits on the LEFT, the Arabic label on the RIGHT. The row's
@@ -294,7 +294,7 @@ body {
 
 .seg-tab.is-active {
   background: var(--color-bg-selected);
-  color: var(--color-interactive-primary);
+  color: var(--color-text-brand);
 }
 
 /* ─── Hotkey-Badge (2:8030) ───────────────────────────────────────────────── */

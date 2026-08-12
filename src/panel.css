@@ -344,7 +344,7 @@ body {
 .preview-title.is-link {
   font-family: var(--font-latin);
   font-weight: 400;
-  color: var(--color-interactive-primary);
+  color: var(--color-text-brand);
   direction: ltr;
   text-align: left;
   -webkit-line-clamp: 1;
