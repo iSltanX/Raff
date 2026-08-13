@@ -128,7 +128,7 @@
 ## أيقونة التطبيق
 
 <div align="center">
-<img src="docs/assets/raff-icon-showcase.png" alt="أيقونة رفّ — فاتح وداكن" width="100%">
+<img src="docs/assets/raff-icon-showcase.png" alt="أيقونة رفّ — الفاتحة هي المشحونة، والداكنة مرجع في نظام الهوية" width="100%">
 </div>
 
 أيقونة رفّ التي تراها في Finder وDock وDMG هي **النسخة الفاتحة دائمًا**، بصرف
