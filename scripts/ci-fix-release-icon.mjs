@@ -111,11 +111,19 @@ if (!existsSync(sigPath)) {
 
 // ── 4. Regenerate latest.json with the new signature. Same shape as the
 //      one tauri-action already published (verified against v4.1.1's real,
-//      live latest.json before writing this): the `signature` field is the
-//      base64 of the ENTIRE .sig file, not just its signature line. ────────
+//      live latest.json before writing this).
+//
+//      `tauri signer sign` writes the .sig file ALREADY base64-encoded — its
+//      raw content on disk (trimmed) IS the exact string the updater expects
+//      as `signature`, not something to base64-encode again. Re-encoding it
+//      here was a real bug: it shipped on v4.2.1's first upload as a
+//      double-encoded value that would have failed every real client's
+//      minisign verification silently, caught only by downloading the live
+//      asset and decoding it — decode-once must land on minisign's own
+//      "untrusted comment: ..." text, never on more base64. ───────────────
 const repo = process.env.GITHUB_REPOSITORY;
 const assetUrl = `https://github.com/${repo}/releases/download/${tag}/${tarAssetName}`;
-const signatureB64 = Buffer.from(readFileSync(sigPath)).toString('base64');
+const signatureB64 = readFileSync(sigPath, 'utf8').trim();
 let notes;
 try {
   notes = capture('gh', ['release', 'view', tag, '--json', 'body', '--jq', '.body']);
