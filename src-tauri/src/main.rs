@@ -57,6 +57,8 @@ fn main() {
             commands::copy_item,
             commands::toggle_pin,
             commands::delete_item,
+            commands::undo_delete,
+            commands::commit_delete,
             commands::clear_history,
             commands::clear_learning,
             commands::learning_summary,
@@ -78,10 +80,8 @@ fn main() {
             updater::consume_update_intent,
         ])
         .on_window_event(|window, event| match event {
-            // Keeps the Automatic app icon in sync while following the system
-            // appearance (fires when a window's effective theme flips).
-            tauri::WindowEvent::ThemeChanged(_) => {
-                commands::apply_app_icon(window.app_handle());
+            tauri::WindowEvent::Moved(_) if window.label() == panel::PANEL_LABEL => {
+                panel::remember_position(window.app_handle());
             }
             // The update window is a singleton the tray reopens repeatedly —
             // hide instead of destroy so its in-progress state (or a staged
@@ -115,7 +115,6 @@ fn main() {
             let handle = app.handle().clone();
             panel::init(&handle)?;
             tray::create(&handle)?;
-            commands::apply_app_icon(&handle); // أيقونة التطبيق preference
             if let Err(err) = commands::register_hotkey(&handle, &hotkey) {
                 eprintln!("raff: hotkey registration failed: {err}");
             }
@@ -124,10 +123,8 @@ fn main() {
             if first_run_pending && !macos::ax_trusted() {
                 commands::open_firstrun_window(&handle);
             }
-            // A controlled relaunch (icon/appearance change) forwards
-            // --settings so the user returns to the window they were in.
-            // Opening a window never triggers another relaunch, so this
-            // cannot loop.
+            // A relaunch carrying --settings (for example after an update)
+            // returns the user to the window they were in.
             if std::env::args().any(|a| a == "--settings") {
                 commands::open_settings_window(&handle);
             }

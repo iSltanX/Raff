@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="72" height="48" viewBox="0 0 72 48" fill="none">
+  <!--
+    Direct vector port of the approved RaffLogoMark in Figma
+    «02 — Logo System», SECTION "LIBRARY • Approved Brand Assets" (43:10) →
+    COMPONENT_SET "Brand / Logo Mark" (46:27), variant Tone=Brand (43:9).
+    Source child layers: 43:6 (Shelf / Top), 43:7 (Shelf / Middle),
+    43:8 (Shelf / Bottom). Corrected 2026-08-13 — the file was renumbered
+    since this comment last pointed at node 4:7981, which no longer resolves.
+  -->
+  <g fill="currentColor">
+    <rect x="0" y="4" width="72" height="6" rx="3"/>
+    <rect x="0" y="21" width="61" height="6" rx="3"/>
+    <rect x="0" y="38" width="47" height="6" rx="3"/>
+  </g>
+</svg>

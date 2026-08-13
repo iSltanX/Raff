@@ -8,7 +8,7 @@ use std::time::Duration;
 use base64::Engine;
 use tauri::{AppHandle, Emitter, Manager};
 
-use crate::storage::now_ms;
+use crate::storage::{now_ms, ItemKind};
 use crate::{macos, panel, AppState};
 
 /// How long we give macOS to move focus back before synthesizing ⌘V.
@@ -18,7 +18,7 @@ const ACTIVATE_DELAY_MS: u64 = 150;
 /// ("لصق كنص عادي"). Returns false when the id is unknown.
 pub fn write_item_to_clipboard(app: &AppHandle, id: &str, plain: bool) -> bool {
     let state = app.state::<AppState>();
-    let (text, html, rtf, png) = {
+    let (kind, text, html, rtf, png) = {
         let store = state.store.lock().unwrap();
         let Some(item) = store.find(id) else {
             return false;
@@ -28,23 +28,31 @@ pub fn write_item_to_clipboard(app: &AppHandle, id: &str, plain: bool) -> bool {
             .as_ref()
             .and_then(|f| std::fs::read(store.images_dir().join(f)).ok());
         if plain {
-            (item.text.clone(), None, None, png)
+            (item.kind, item.text.clone(), None, None, png)
         } else {
             let rtf = item
                 .rtf
                 .as_ref()
                 .and_then(|b| base64::engine::general_purpose::STANDARD.decode(b).ok());
-            (item.text.clone(), item.html.clone(), rtf, png)
+            (item.kind, item.text.clone(), item.html.clone(), rtf, png)
         }
     };
 
+    // Never turn a missing image file into a successful copy of its Arabic
+    // metadata label. The user asked to copy the image itself.
+    if kind == ItemKind::Image && png.is_none() {
+        return false;
+    }
+
     let is_image = png.is_some();
-    let new_count = macos::write_clip(
+    let Some(new_count) = macos::write_clip(
         if is_image { None } else { Some(&text) },
         html.as_deref(),
         rtf.as_deref(),
         png.as_deref(),
-    );
+    ) else {
+        return false;
+    };
     state
         .skip_change_count
         .store(new_count as i64, Ordering::SeqCst);
@@ -52,10 +60,16 @@ pub fn write_item_to_clipboard(app: &AppHandle, id: &str, plain: bool) -> bool {
 }
 
 /// Full paste: clipboard write + focus restore + ⌘V + silent learning signals.
-/// Returns false when the id is unknown.
-pub fn paste_item(app: &AppHandle, id: &str, plain: bool) -> bool {
+/// The boolean distinguishes a real synthesized paste from clipboard-only
+/// fallback, using a fresh Accessibility check instead of stale panel state.
+pub async fn paste_item(app: &AppHandle, id: &str, plain: bool) -> Result<bool, String> {
     if !write_item_to_clipboard(app, id, plain) {
-        return false;
+        return Err("العنصر غير موجود".into());
+    }
+
+    if !macos::ax_trusted() {
+        bump_paste_signals(app, id);
+        return Ok(false);
     }
 
     let state = app.state::<AppState>();
@@ -63,23 +77,43 @@ pub fn paste_item(app: &AppHandle, id: &str, plain: bool) -> bool {
 
     let handle = app.clone();
     let id = id.to_string();
-    // AppKit work (panel + activation) belongs on the main thread; the delay
-    // and keystroke happen on a background thread so nothing blocks the UI.
-    let _ = app.run_on_main_thread(move || {
-        panel::hide(&handle);
-        if let Some(pid) = previous_pid {
-            macos::activate_app(pid);
+    let worker = handle.clone();
+    let attempt = tauri::async_runtime::spawn_blocking(move || {
+        let (tx, rx) = std::sync::mpsc::channel();
+        worker
+            .run_on_main_thread(move || {
+                panel::hide(&handle);
+                if let Some(pid) = previous_pid {
+                    macos::activate_app(pid);
+                }
+                let handle2 = handle.clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(Duration::from_millis(ACTIVATE_DELAY_MS));
+                    let pasted = macos::ax_trusted() && macos::send_cmd_v();
+                    bump_paste_signals(&handle2, &id);
+                    let _ = tx.send(pasted);
+                });
+            })
+            .map_err(|err| err.to_string())?;
+        rx.recv_timeout(Duration::from_secs(2))
+            .map_err(|err| err.to_string())
+    })
+    .await
+    .map_err(|err| format!("تعذّر تنفيذ اللصق: {err}"))
+    .and_then(|result| result.map_err(|err| format!("تعذّر تنفيذ اللصق: {err}")));
+
+    let pasted = match attempt {
+        Ok(pasted) => pasted,
+        Err(err) => {
+            panel::show(app);
+            return Err(err);
         }
-        let handle2 = handle.clone();
-        std::thread::spawn(move || {
-            std::thread::sleep(Duration::from_millis(ACTIVATE_DELAY_MS));
-            if macos::ax_trusted() {
-                macos::send_cmd_v();
-            }
-            bump_paste_signals(&handle2, &id);
-        });
-    });
-    true
+    };
+
+    if !pasted {
+        panel::show(app);
+    }
+    Ok(pasted)
 }
 
 fn bump_paste_signals(app: &AppHandle, id: &str) {
@@ -95,6 +129,10 @@ pub fn bump_copy_signals(app: &AppHandle, id: &str) {
 fn bump_signals(app: &AppHandle, id: &str, bump: impl Fn(&mut crate::storage::ClipItem)) {
     let state = app.state::<AppState>();
     let mut store = state.store.lock().unwrap();
+    if let Err(err) = store.finish_pending_pin() {
+        eprintln!("raff: usage signal deferred: {err}");
+        return;
+    }
     if !store.settings.learning_enabled {
         return;
     }

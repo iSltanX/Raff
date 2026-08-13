@@ -37,7 +37,17 @@
       <button class="btn big" id="later">لاحقًا</button>
     </div>
 
-    <div class="granted" id="granted" hidden>✓ تم منح الإذن — رفّ جاهز</div>
+    <div
+      class="permission-status"
+      id="permission-status"
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+      hidden
+    >
+      <span id="permission-status-text"></span>
+      <button type="button" class="btn permission-retry" id="permission-retry" hidden>إعادة التحقق</button>
+    </div>
   </main>
   <script type="module" src="js/firstrun.js"></script>
 </body>

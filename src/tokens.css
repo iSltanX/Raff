@@ -10,13 +10,15 @@
      «08 — Product Screens»      (2:9)  — the product surfaces
      «09 — Light & Dark»         (2:10) — the light↔dark token pairs
 
-   The Figma file carries no bound Figma Variables — every value there is a
-   literal, so the token layer is authored here. Pages 04 and 09 define the
-   semantic light/dark pairs and agree with each other exactly; they are the
-   authority for colour. Page 08 is the authority for structure and is composed
-   from these same roles.
+   This file mirrors Figma's local Primitives (113 variables) and Semantic
+   (59 variables) collections one-for-one. Semantic values remain aliases here
+   just as they are in Figma, so changing a primitive cannot leave a component
+   with a second, contradictory literal. Page 08 remains the authority for
+   product structure and is composed from these same roles.
 
-   Nothing outside this file may declare a raw colour, radius, or spacing value.
+   Semantic colours and reusable scales belong here. A component may retain a
+   documented optical pixel metric where its approved Figma geometry or native
+   macOS hit target is role-specific rather than a reusable system primitive.
    =========================================================================== */
 
 /* ─── Typefaces ────────────────────────────────────────────────────────────
@@ -62,18 +64,80 @@
   font-display: block;
 }
 @font-face {
-  font-family: 'Cairo';
-  src: url('fonts/Cairo-Black.ttf') format('truetype');
-  font-weight: 900;
-  font-style: normal;
-  font-display: block;
-}
-@font-face {
   font-family: 'Almarai';
   src: url('fonts/Almarai-Regular.ttf') format('truetype');
   font-weight: 400;
   font-style: normal;
   font-display: block;
+}
+
+/* Script-aware face for the few runs that genuinely mix Arabic and Latin in
+   one DOM text node. Arabic shapes with Cairo; Latin, Western numerals and
+   macOS symbols shape with Almarai. Pure-language roles continue to use the
+   explicit --font-ar / --font-latin families below. */
+@font-face {
+  font-family: 'Raff Mixed';
+  src: url('fonts/Cairo-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: block;
+  unicode-range: U+0600-06ff, U+0750-077f, U+08a0-08ff, U+fb50-fdff, U+fe70-feff, U+1ee00-1eeff;
+}
+@font-face {
+  font-family: 'Raff Mixed';
+  src: url('fonts/Almarai-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: block;
+  unicode-range: U+0000-024f, U+2000-206f, U+20a0-20cf, U+2100-214f, U+2190-23ff, U+25a0-25ff;
+}
+@font-face {
+  font-family: 'Raff Mixed';
+  src: url('fonts/Cairo-Medium.ttf') format('truetype');
+  font-weight: 500;
+  font-style: normal;
+  font-display: block;
+  unicode-range: U+0600-06ff, U+0750-077f, U+08a0-08ff, U+fb50-fdff, U+fe70-feff, U+1ee00-1eeff;
+}
+@font-face {
+  font-family: 'Raff Mixed';
+  src: url('fonts/Almarai-Regular.ttf') format('truetype');
+  font-weight: 500;
+  font-style: normal;
+  font-display: block;
+  unicode-range: U+0000-024f, U+2000-206f, U+20a0-20cf, U+2100-214f, U+2190-23ff, U+25a0-25ff;
+}
+@font-face {
+  font-family: 'Raff Mixed';
+  src: url('fonts/Cairo-SemiBold.ttf') format('truetype');
+  font-weight: 600;
+  font-style: normal;
+  font-display: block;
+  unicode-range: U+0600-06ff, U+0750-077f, U+08a0-08ff, U+fb50-fdff, U+fe70-feff, U+1ee00-1eeff;
+}
+@font-face {
+  font-family: 'Raff Mixed';
+  src: url('fonts/Almarai-Bold.ttf') format('truetype');
+  font-weight: 600;
+  font-style: normal;
+  font-display: block;
+  unicode-range: U+0000-024f, U+2000-206f, U+20a0-20cf, U+2100-214f, U+2190-23ff, U+25a0-25ff;
+}
+@font-face {
+  font-family: 'Raff Mixed';
+  src: url('fonts/Cairo-Bold.ttf') format('truetype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: block;
+  unicode-range: U+0600-06ff, U+0750-077f, U+08a0-08ff, U+fb50-fdff, U+fe70-feff, U+1ee00-1eeff;
+}
+@font-face {
+  font-family: 'Raff Mixed';
+  src: url('fonts/Almarai-Bold.ttf') format('truetype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: block;
+  unicode-range: U+0000-024f, U+2000-206f, U+20a0-20cf, U+2100-214f, U+2190-23ff, U+25a0-25ff;
 }
 @font-face {
   font-family: 'Almarai';
@@ -84,12 +148,15 @@
 }
 
 :root {
+  color-scheme: light;
+
   /* ─── Primitives — «03 — Color & Typography» ────────────────────────────
      Raw values. Never referenced directly by a component; semantic aliases
      below are what the UI uses.                                             */
 
   /* Terracotta (brand) */
   --terracotta-50: #fdf5f0;
+  --terracotta-75: #fbede5;
   --terracotta-100: #f9e6da;
   --terracotta-200: #f0c9b0;
   --terracotta-300: #e4a882;
@@ -100,101 +167,150 @@
   --terracotta-800: #6c3522;
   --terracotta-900: #4e2619;
   --terracotta-950: #2e160e;
+  --terracotta-app-icon-end: #a35634;
+  /* Dark-appearance app-icon construction — «11 — Brand Applications»,
+     COMPONENT_SET "Brand / App Icon" (157:102), Mode=Dark variant. Promoted
+     2026-08-12; exist only for the app icon, matching --terracotta-app-icon-end's
+     own single-purpose precedent above. */
+  --terracotta-app-icon-dark-bg-start: #2a2018;
+  --terracotta-app-icon-dark-bg-end: #1b140f;
+  --terracotta-app-icon-mark-dark: #f5ede5;
 
   /* Warm neutral (stone) */
   --stone-0: #ffffff;
-  --stone-50: #faf8f5;
-  --stone-100: #f2ece4;
-  --stone-200: #e7ddd3;
-  --stone-300: #dacdc0;
-  --stone-400: #cbbbad;
-  --stone-500: #bca99b;
-  --stone-600: #9f8778;
-  --stone-700: #826d5e;
-  --stone-800: #665346;
-  --stone-900: #4d3b2f;
-  --stone-950: #34251b;
-  --stone-black: #110f0d;
+  --stone-25: #fcfbf9;
+  --stone-40: #fbfaf7;
+  --stone-50: #faf8f6;
+  --stone-60: #f7f5f1;
+  --stone-70: #f6f5f2;
+  --stone-80: #f5f0ea;
+  --stone-90: #f1ede7;
+  --stone-100: #f2efeb;
+  --stone-150: #eae5df;
+  --stone-175: #ebe6df;
+  --stone-200: #e0dad2;
+  --stone-225: #ded8d0;
+  --stone-300: #cec5ba;
+  --stone-400: #b0a596;
+  --stone-500: #8f8275;
+  --stone-550: #766d65;
+  --stone-600: #6b6054;
+  --stone-700: #4d443a;
+  --stone-725: #4a382b;
+  --stone-800: #342d26;
+  --stone-850: #2a2420;
+  --stone-900: #1e1a17;
+  --stone-950: #110f0d;
+
+  /* Neutral Dark surfaces — intentionally graphite, not the retired brown
+     large-surface palette. */
+  --graphite-50: #f4f2ef;
+  --graphite-300: #b9b4ae;
+  --graphite-400: #98928b;
+  --graphite-600: #3a3b3f;
+  --graphite-650: #303136;
+  --graphite-700: #292a2e;
+  --graphite-750: #27282c;
+  --graphite-800: #222326;
+  --graphite-825: #202125;
+  --graphite-850: #202124;
+  --graphite-875: #1d1e21;
+  --graphite-900: #17181a;
+  --warm-dark-selected: #30251f;
 
   /* Status */
-  --indigo-light: #f0f1f8;
-  --indigo-subtle: #b8bce1;
-  --indigo-primary: #4e56a0;
-  --indigo-dark: #171a2f;
-  --success-light: #5cb37a;
-  --success-primary: #2e7a4b;
-  --error-light: #d46b6b;
-  --error-primary: #a33c3c;
-  --warning-light: #d9a641;
-  --warning-primary: #a57724;
+  --indigo-50: #f0f1f8;
+  --indigo-100: #dddff0;
+  --indigo-200: #b8bce1;
+  --indigo-300: #8e94ce;
+  --indigo-400: #6a72bb;
+  --indigo-500: #4e56a0;
+  --indigo-600: #3e4580;
+  --indigo-700: #303562;
+  --indigo-800: #232746;
+  --indigo-900: #171a2f;
+  --indigo-950: #0d0f1c;
+  --green-400: #5cb37a;
+  --green-500: #3d9960;
+  --green-600: #2e7a4b;
+  --red-400: #d46b6b;
+  --red-500: #c04e4e;
+  --red-600: #a33c3c;
+  --amber-400: #d9a641;
+  --amber-500: #c4902c;
+  --amber-600: #a57724;
+
+  /* Alpha and native-system primitives. */
+  --overlay-selected-light: rgba(196, 112, 75, 0.2);
+  --overlay-selected-dark: rgba(212, 133, 90, 0.42);
+  --overlay-ink-subtle: rgba(30, 26, 23, 0.055);
+  --overlay-white-subtle: rgba(255, 255, 255, 0.06);
+  --system-stoplight-close: #ff5f56;
+  --system-stoplight-minimize: #ffbd2e;
+  --system-stoplight-zoom: #27c93f;
+  --system-control-tint: #0868e8;
+  --system-destructive: #ff383c;
 
   /* ─── Semantic colour — LIGHT ──────────────────────────────────────────
      «04 — Foundations & Variables» semantic token table, confirmed value for
      value by the «09 — Light & Dark» comparison table.                      */
 
-  --color-bg-primary: #ffffff; /* footer, raised chips, menus */
-  --color-bg-secondary: #faf8f6; /* the panel / window surface */
-  --color-bg-selected: #fdf5f0; /* selected row, accent-tinted fills */
-  --color-bg-field: #f2ece6; /* search field — «09», not in the token table */
+  --color-bg-primary: var(--stone-0);
+  --color-bg-secondary: var(--stone-60);
+  --color-bg-tertiary: var(--stone-40);
+  --color-bg-elevated: var(--stone-25);
+  --color-bg-hover: var(--stone-80);
+  --color-bg-selected: var(--terracotta-75);
+  --color-bg-brand: var(--terracotta-500);
+  --color-bg-accent: var(--indigo-500);
+  --color-bg-row: var(--stone-40);
+  --color-bg-field: var(--stone-0);
+  --color-bg-control: var(--stone-90);
 
-  --color-text-primary: #1e1a17;
-  --color-text-secondary: #6b6054;
-  /* Timestamps and copyright. «08 — Product Screens» is the only page that
-     defines a third text level; no page defines its dark counterpart, so the
-     dark value is set one step dimmer than text-secondary. */
-  --color-text-tertiary: #a5a19d;
-  /* Brand-coloured TEXT. The system deliberately separates this from
-     --color-interactive-primary, which is for brand fills, borders and icon
-     strokes. «10 — RTL & Accessibility» rates the terracotta #C4704B at 3.9:1
-     — "كبير فقط", large text only — so any brand-coloured run below the WCAG
-     large-text threshold uses this darker step instead: 4.73:1 on the panel
-     surface, 4.65:1 on a selected row, 5.32:1 in dark. Display-size brand text
-     (the 18px empty-shelf title) and the wordmark keep the interactive hue. */
-  --color-text-brand: #a85a3a; /* = terracotta-600 */
-  /* The author credit on the About window — «08 — Product Screens», 7:1609.
-     The only place the system uses this warm brown, and «09 — Light & Dark»
-     draws no dark counterpart for it, so dark reuses text-secondary. */
-  --color-text-credit: #4a382b;
+  --color-text-primary: var(--stone-900);
+  --color-text-secondary: var(--stone-600);
+  --color-text-tertiary: var(--stone-550);
+  --color-text-inverse: var(--stone-0);
+  --color-text-brand: var(--terracotta-700);
+  --color-text-accent: var(--indigo-600);
+  --color-text-link: var(--indigo-600);
+  --color-text-on-accent: var(--stone-900);
+  --color-text-on-system-tint: var(--stone-0);
+  --color-text-credit: var(--stone-725);
 
-  --color-border-default: #e0dad2;
-  --color-border-divider: #f0eae1; /* hairline between header and list */
-  --color-border-selected: #c4704b;
-  /* The selected row's hairline is the accent at 20% — «08», Clipboard-Row
-     2:7722. Held as a literal because color-mix() postdates the WebKit that
-     ships with the macOS 12 floor this app supports. */
-  --color-border-selected-soft: rgba(196, 112, 75, 0.2);
+  --color-border-default: var(--stone-225);
+  --color-border-subtle: var(--stone-175);
+  --color-border-strong: var(--stone-500);
+  --color-border-brand: var(--terracotta-500);
+  --color-border-focus: var(--indigo-500);
+  --color-border-divider: var(--stone-175);
+  --color-border-selected: var(--terracotta-500);
+  --color-border-selected-soft: var(--overlay-selected-light);
 
-  /* Quiet chip fill behind icon-only buttons — «08» header action 2:7696. */
-  --color-fill-subtle: rgba(0, 0, 0, 0.04);
+  --color-icon-primary: var(--stone-900);
+  --color-icon-secondary: var(--stone-600);
+  --color-icon-brand: var(--terracotta-500);
+  --color-status-success: var(--green-600);
+  --color-status-error: var(--red-600);
+  --color-status-warning: var(--amber-600);
 
-  --color-interactive-primary: #c4704b;
-  /* The pinned indicator is the one accent element that does NOT swap in dark
-     — «09 — Light & Dark», map-pin 2:9063 / 2:9066. */
-  --color-pinned: #c4704b;
-  /* Label colour on top of a filled accent (the active filter segment 2:7710,
-     the About app-icon glyph 2:8066). `Labels/White #ffffff` in the macOS kit
-     — white in both appearances. */
-  --color-text-on-accent: #ffffff;
+  --color-interactive-primary: var(--terracotta-500);
+  --color-interactive-primary-hover: var(--terracotta-600);
+  --color-interactive-secondary: var(--stone-90);
+  --color-interactive-secondary-hover: var(--stone-175);
 
-  /* The app icon is the one place the brand appears as a gradient — «08»,
-     Logo-Graphic 2:8066, linear 180° from start to end. Both stops are
-     literals in Figma and do not swap in dark: this is the product mark, not
-     a themed surface. */
-  --color-appicon-start: #c4704b;
-  --color-appicon-end: #f58625;
-
-  --color-success: #3d9960;
-  --color-error: #a33c3c;
-  --color-warning: #a57724;
-
-  /* macOS traffic lights — identical in both appearances («09»). */
-  --color-stoplight-close: #ff5f56;
-  --color-stoplight-min: #ffbd2e;
-  --color-stoplight-zoom: #27c93f;
-
-  /* Native control tints from the embedded macOS 26 kit. */
-  --color-control-tint: #0d6fff;
-  --color-control-destructive: #ff383c;
+  --color-fill-subtle: var(--overlay-ink-subtle);
+  --color-source-icon-well: var(--stone-70);
+  --color-pinned: var(--terracotta-500);
+  --color-app-icon-start: var(--terracotta-500);
+  --color-app-icon-end: var(--terracotta-app-icon-end);
+  --color-app-icon-mark: var(--stone-0);
+  --color-focus-ring: var(--indigo-500);
+  --color-system-stoplight-close: var(--system-stoplight-close);
+  --color-system-stoplight-minimize: var(--system-stoplight-minimize);
+  --color-system-stoplight-zoom: var(--system-stoplight-zoom);
+  --color-system-control-tint: var(--system-control-tint);
+  --color-system-destructive: var(--system-destructive);
 
   /* ─── Spacing — «04», φ scale from a 13px base ─────────────────────────── */
   --space-2xs: 2px;
@@ -207,11 +323,40 @@
   --space-3xl: 55px;
   --space-4xl: 89px;
 
-  /* Purpose aliases — mode-invariant. */
-  --space-panel-padding: 13px;
-  --space-item-gap: 4px;
-  --space-section-gap: 21px;
-  --space-content-padding: 8px;
+  /* Component geometry primitives. These mirror the Figma `size/*` values;
+     production components consume the semantic `--metric-*` aliases below. */
+  --size-12: 12px;
+  --size-20: 20px;
+  --size-30: 30px;
+  --size-32: 32px;
+  --size-56: 56px;
+  --size-68: 68px;
+
+  /* Production geometry — optical macOS sizes, not presentation-frame
+     measurements. Centralising these prevents each screen from drifting into
+     its own density system.
+
+     «04» also declared five `space/*` purpose aliases (panel-padding,
+     item-gap, section-gap, inline-gap, content-padding). They were retired on
+     2026-08-12: nothing consumed them, and `space/panel-padding` claimed a
+     13px outer margin while the approved «08» master gutters the panel at
+     18px. A token that names a purpose it does not govern invites someone to
+     "correct" the panel to a value the design never asked for.               */
+  --metric-panel-inline: 18px;
+  /* Width of the clipboard list's classic scrollbar. It consumes layout width,
+     so the list subtracts it from the inline-end gutter to stay on the grid. */
+  --metric-list-scrollbar: 6px;
+  --metric-row-inline: var(--size-12);
+  --metric-row-block: var(--space-sm);
+  --metric-row-min-height: var(--size-56);
+  --metric-row-action: var(--size-32);
+  --metric-row-actions-gap: var(--space-xs);
+  --metric-row-actions-inline: var(--size-68);
+  --metric-control-height: 30px;
+  --metric-control-height-sm: 28px;
+  --metric-icon-chip: 24px;
+  --metric-source-slot-inline: var(--size-30);
+  --metric-source-glyph: var(--size-20);
 
   /* ─── Radius — «04» ───────────────────────────────────────────────────── */
   --radius-none: 0px;
@@ -220,7 +365,7 @@
   --radius-lg: 12px; /* cards / بطاقات */
   --radius-xl: 16px; /* panels / ألواح */
   --radius-2xl: 20px; /* sheets / الحوارات */
-  --radius-full: 32px; /* pills / دائرية */
+  --radius-full: 9999px; /* pills / دائرية */
   --radius-control: 6px; /* macOS kit Button/Radius */
 
   /* ─── Elevation — «04» ────────────────────────────────────────────────── */
@@ -231,15 +376,16 @@
      appearances («09»). Windows get this from macOS itself; the token exists
      for in-page surfaces that must match. */
   --elev-window: 0 12px 24px rgba(0, 0, 0, 0.15);
-  /* The About app icon's own drop shadow — «08», Logo-Graphic 2:8066. Tinted
-     with the brand instead of black, and unchanged in dark. */
+  /* The canonical app icon's in-product drop shadow. Tinted with the brand
+     instead of black, and unchanged in dark. */
   --elev-appicon: 0 8px 8px rgba(196, 112, 75, 0.25);
 
   /* ─── Typography — «03», φ scale from a 13px baseline ─────────────────── */
   --font-ar: 'Cairo', -apple-system, 'SF Arabic', system-ui, sans-serif;
   --font-latin: 'Almarai', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
-  --font-mono: ui-monospace, 'SF Mono', 'SFMono-Regular', Menlo, monospace;
+  --font-mixed: 'Raff Mixed', 'Cairo', 'Almarai', system-ui, sans-serif;
 
+  --text-micro: 9px;
   --text-display-1: 55px;
   --text-display-2: 34px;
   --text-title-1: 28px;
@@ -257,6 +403,7 @@
   --leading-subhead: 20px;
   --leading-body: 18px;
   --leading-caption: 15px;
+  --leading-micro: 12px;
 
   --tracking-display-1: -0.01em;
   --tracking-display-2: -0.005em;
@@ -271,32 +418,72 @@
 }
 
 :root[data-appearance='dark'] {
-  --color-bg-primary: #1e1a17;
-  --color-bg-secondary: #2a2420;
-  --color-bg-selected: #2e160e;
-  --color-bg-field: #342d26;
+  color-scheme: dark;
 
-  --color-text-primary: #faf8f6;
-  --color-text-secondary: #b0a596;
-  --color-text-tertiary: #8a7e72;
-  --color-text-brand: #d4855a;
-  /* No dark counterpart is drawn for the credit brown — it falls back to the
-     dark text-secondary value. */
-  --color-text-credit: #b0a596;
+  /* Dark mode deliberately neutralises large surfaces. Raff's warm identity
+     now lives in selection, focus and brand details instead of coating the
+     whole window in brown. */
+  --color-bg-primary: var(--graphite-850);
+  --color-bg-secondary: var(--graphite-900);
+  --color-bg-tertiary: var(--graphite-875);
+  --color-bg-elevated: var(--graphite-800);
+  --color-bg-hover: var(--graphite-750);
+  --color-bg-selected: var(--warm-dark-selected);
+  --color-bg-brand: var(--terracotta-400);
+  --color-bg-accent: var(--indigo-200);
+  --color-bg-row: var(--graphite-875);
+  --color-bg-field: var(--graphite-825);
+  --color-bg-control: var(--graphite-700);
 
-  --color-border-default: #4d443a;
-  --color-border-divider: #2e2620;
-  --color-border-selected: #d4855a;
-  --color-border-selected-soft: rgba(212, 133, 90, 0.25);
+  --color-text-primary: var(--graphite-50);
+  --color-text-secondary: var(--graphite-300);
+  --color-text-tertiary: var(--graphite-400);
+  --color-text-inverse: var(--stone-900);
+  --color-text-brand: var(--terracotta-300);
+  --color-text-accent: var(--indigo-200);
+  --color-text-link: var(--indigo-200);
+  --color-text-on-accent: var(--stone-900);
+  --color-text-on-system-tint: var(--stone-0);
+  --color-text-credit: var(--graphite-300);
 
-  --color-fill-subtle: rgba(255, 255, 255, 0.06);
+  --color-border-default: var(--graphite-600);
+  --color-border-subtle: var(--graphite-650);
+  --color-border-strong: var(--stone-600);
+  --color-border-brand: var(--terracotta-400);
+  --color-border-focus: var(--indigo-200);
+  --color-border-divider: var(--graphite-650);
+  --color-border-selected: var(--terracotta-400);
+  --color-border-selected-soft: var(--overlay-selected-dark);
 
-  --color-interactive-primary: #d4855a;
-  --color-pinned: #c4704b;
+  --color-icon-primary: var(--graphite-50);
+  --color-icon-secondary: var(--graphite-300);
+  --color-icon-brand: var(--terracotta-400);
+  --color-status-success: var(--green-400);
+  --color-status-error: var(--red-400);
+  --color-status-warning: var(--amber-400);
 
-  --color-success: #5cb37a;
-  --color-error: #d46b6b;
-  --color-warning: #d9a641;
+  --color-interactive-primary: var(--terracotta-400);
+  --color-interactive-primary-hover: var(--terracotta-500);
+  --color-interactive-secondary: var(--graphite-700);
+  --color-interactive-secondary-hover: var(--graphite-600);
+
+  --color-fill-subtle: var(--overlay-white-subtle);
+  --color-source-icon-well: var(--graphite-700);
+  --color-pinned: var(--terracotta-500);
+  /* Dark app-icon construction is a genuine, different treatment — a deep
+     neutral brown, not a darker terracotta — matching the real approved
+     Figma master (COMPONENT_SET 157:102, Mode=Dark) promoted 2026-08-12. Was
+     previously mode-invariant (same value as Light) because no dark master
+     existed at all. */
+  --color-app-icon-start: var(--terracotta-app-icon-dark-bg-start);
+  --color-app-icon-end: var(--terracotta-app-icon-dark-bg-end);
+  --color-app-icon-mark: var(--terracotta-app-icon-mark-dark);
+  --color-focus-ring: var(--indigo-200);
+  --color-system-stoplight-close: var(--system-stoplight-close);
+  --color-system-stoplight-minimize: var(--system-stoplight-minimize);
+  --color-system-stoplight-zoom: var(--system-stoplight-zoom);
+  --color-system-control-tint: var(--system-control-tint);
+  --color-system-destructive: var(--system-destructive);
 
   /* Elevation shadows need more weight on a dark surface to read at all. */
   --elev-1: 0 1px 1.5px rgba(0, 0, 0, 0.3);
@@ -348,8 +535,47 @@ button {
   cursor: default;
 }
 
+/* Original Figma SVG exports are consumed as masks so their geometry stays
+   untouched while semantic state colour remains controlled by the component.
+   WebKit's prefixed form covers the macOS WKWebView versions Raff supports. */
+.figma-icon {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  flex: none;
+  background-color: currentColor;
+  -webkit-mask-image: var(--figma-icon);
+  -webkit-mask-position: center;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-size: contain;
+  mask-image: var(--figma-icon);
+  mask-position: center;
+  mask-repeat: no-repeat;
+  mask-size: contain;
+}
+
+/* Keep the familiar 12px macOS stoplight while giving its custom close
+   action a 24px pointer target. Negative margins preserve the native visual
+   spacing and title centring in all three windows. */
+button.dot-close {
+  position: relative;
+  width: 24px;
+  height: 24px;
+  margin: -6px;
+  border-radius: var(--radius-full);
+  background: transparent;
+}
+
+button.dot-close::before {
+  content: '';
+  position: absolute;
+  inset: 6px;
+  border-radius: 50%;
+  background: var(--color-system-stoplight-close);
+}
+
 :focus-visible {
-  outline: 2px solid var(--color-interactive-primary);
+  outline: 2px solid var(--color-focus-ring);
   outline-offset: 2px;
   border-radius: var(--radius-sm);
 }

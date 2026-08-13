@@ -1,6 +1,6 @@
 /* ===========================================================================
-   The floating panel — Figma «08 — Product Screens» (page 2:9)
-     screen ١  macOS-Panel-Shell  2:7684   360 × 580
+   The floating panel — Figma «08/09» translated to a real macOS utility.
+     Production window: 560 × 640 (fixed, draggable from the header)
      screen ٢  search active      2:7791
      screen ٣  empty shelf        2:7880
    Every value here comes from those nodes; colours resolve through tokens.css.
@@ -13,6 +13,11 @@ body {
 }
 
 .panel {
+  /* The utility chrome is a viewport surface, never document content. Keeping
+     it fixed makes WebKit focus/AX scroll requests incapable of shifting the
+     header or filters out of the native window. Only `.items-list` scrolls. */
+  position: fixed;
+  inset: 0;
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -20,6 +25,7 @@ body {
   background: var(--color-bg-secondary);
   border: 1px solid var(--color-border-default);
   border-radius: var(--radius-xl);
+  box-shadow: inset 0 1px 0 var(--color-fill-subtle);
 }
 
 /* ─── Header (2:7685) ─────────────────────────────────────────────────────── */
@@ -28,8 +34,9 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 16px 12px;
-  border-bottom: 1px solid var(--color-border-default);
+  min-height: 62px;
+  padding: 16px var(--metric-panel-inline) 14px;
+  border-bottom: 1px solid var(--color-border-divider);
   /* Physical order: traffic lights left, brand centre, gear right. macOS
      window chrome does not mirror — «10 — RTL & Accessibility». */
   direction: ltr;
@@ -39,7 +46,7 @@ body {
 .window-controls {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 9px;
 }
 
 .dot {
@@ -50,13 +57,13 @@ body {
 }
 
 .dot-close {
-  background: var(--color-stoplight-close);
+  background: var(--color-system-stoplight-close);
 }
 .dot-min {
-  background: var(--color-stoplight-min);
+  background: var(--color-system-stoplight-minimize);
 }
 .dot-zoom {
-  background: var(--color-stoplight-zoom);
+  background: var(--color-system-stoplight-zoom);
 }
 
 .brand {
@@ -69,22 +76,23 @@ body {
 .brand-name {
   font-family: var(--font-ar);
   font-weight: 800;
-  font-size: 16px;
-  line-height: normal;
+  font-size: var(--text-title-3);
+  line-height: var(--leading-title-3);
   color: var(--color-interactive-primary);
 }
 
 .brand-mark {
   display: flex;
-  padding: 2px;
-  border-radius: var(--radius-sm);
-  background: var(--color-bg-selected);
+  width: 24px;
+  height: 18px;
+  align-items: center;
+  justify-content: center;
   color: var(--color-interactive-primary);
 }
 
-.brand-mark svg {
-  width: 14px;
-  height: 14px;
+.brand-mark .figma-icon {
+  width: 24px;
+  height: 16px;
   display: block;
 }
 
@@ -95,7 +103,10 @@ body {
 
 .action-btn {
   display: flex;
-  padding: 4px;
+  width: 30px;
+  height: 30px;
+  align-items: center;
+  justify-content: center;
   border-radius: var(--radius-control);
   background: var(--color-fill-subtle);
   color: var(--color-text-primary);
@@ -103,20 +114,20 @@ body {
 }
 
 .action-btn:hover {
-  background: var(--color-bg-selected);
+  background: var(--color-bg-hover);
   color: var(--color-interactive-primary);
 }
 
-.action-btn svg {
-  width: 14px;
-  height: 14px;
+.action-btn .figma-icon {
+  width: 16px;
+  height: 16px;
   display: block;
 }
 
 /* ─── Search (2:7700) ─────────────────────────────────────────────────────── */
 
 .search-container {
-  padding: 8px 14px;
+  padding: 12px var(--metric-panel-inline) 8px;
   flex: none;
 }
 
@@ -125,10 +136,10 @@ body {
 .search-field {
   display: flex;
   align-items: center;
-  gap: 6px;
-  height: 24px;
-  padding: 0 8px;
-  border-radius: var(--radius-control);
+  gap: 9px;
+  height: 36px;
+  padding: 0 11px;
+  border-radius: var(--radius-md);
   background: var(--color-bg-field);
   border: 1px solid var(--color-border-default);
   transition:
@@ -137,8 +148,9 @@ body {
 }
 
 .search-field:focus-within {
-  background: var(--color-bg-primary);
-  border-color: var(--color-interactive-primary);
+  background: var(--color-bg-elevated);
+  border-color: var(--color-focus-ring);
+  box-shadow: 0 0 0 1px var(--color-focus-ring);
 }
 
 .search-glyph {
@@ -149,12 +161,18 @@ body {
 }
 
 .search-field:focus-within .search-glyph {
-  color: var(--color-interactive-primary);
+  color: var(--color-focus-ring);
 }
 
-.search-glyph svg {
-  width: 14px;
-  height: 14px;
+/* Figma «10 — RTL & Accessibility»: Indigo communicates keyboard focus;
+   Terracotta remains the brand/selection accent. */
+.panel :focus-visible {
+  outline-color: var(--color-focus-ring);
+}
+
+.search-glyph .figma-icon {
+  width: 16px;
+  height: 16px;
   display: block;
 }
 
@@ -166,8 +184,8 @@ body {
   background: none;
   outline: none;
   font-family: var(--font-ar);
-  font-size: var(--text-body);
-  line-height: 18px;
+  font-size: 14px;
+  line-height: 22px;
   color: var(--color-text-primary);
   /* Let a pasted Latin query read left-to-right without flipping the field. */
   unicode-bidi: plaintext;
@@ -183,6 +201,11 @@ body {
 .search-clear {
   order: 3; /* RTL trailing edge — the clear control sits on the left */
   display: flex;
+  width: 24px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
   color: var(--color-text-tertiary);
   flex: none;
 }
@@ -195,9 +218,9 @@ body {
   display: none;
 }
 
-.search-clear svg {
-  width: 12px;
-  height: 12px;
+.search-clear .figma-icon {
+  width: 14px;
+  height: 14px;
   display: block;
 }
 
@@ -206,21 +229,22 @@ body {
 .filters {
   display: flex;
   justify-content: center;
-  gap: var(--space-xs);
-  padding: 4px 14px 10px;
+  gap: var(--space-md);
+  padding: 4px var(--metric-panel-inline) 12px;
   flex: none;
 }
 
 .segment {
-  padding: 4px 10px;
-  border-radius: var(--radius-control);
-  background: var(--color-bg-primary);
-  border: 1px solid var(--color-border-default);
+  min-height: var(--metric-control-height-sm);
+  padding: 3px 12px;
+  border-radius: var(--radius-md);
+  background: transparent;
+  border: 1px solid transparent;
   font-family: var(--font-ar);
   font-weight: 500;
-  font-size: var(--text-caption);
-  line-height: normal;
-  color: var(--color-text-primary);
+  font-size: 12px;
+  line-height: 20px;
+  color: var(--color-text-secondary);
   white-space: nowrap;
   transition:
     background var(--t-fast) var(--ease-standard),
@@ -228,15 +252,17 @@ body {
 }
 
 .segment:hover:not(.is-active) {
-  background: var(--color-bg-selected);
-  color: var(--color-interactive-primary);
+  background: var(--color-bg-hover);
+  border-color: var(--color-border-divider);
+  color: var(--color-text-primary);
 }
 
 .segment.is-active {
-  background: var(--color-interactive-primary);
-  border-color: var(--color-interactive-primary);
+  background: var(--color-bg-selected);
+  border-color: var(--color-border-selected-soft);
   font-weight: 700;
-  color: var(--color-text-on-accent);
+  color: var(--color-text-brand);
+  box-shadow: inset 0 -2px 0 var(--color-interactive-primary);
 }
 
 /* ─── Items list (2:7721) ─────────────────────────────────────────────────── */
@@ -246,34 +272,51 @@ body {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--space-xs);
-  padding-bottom: var(--space-md);
-  overflow-y: auto;
+  gap: var(--space-sm);
+  /* The list shares the panel's single 18px content gutter with the search
+     field, the filters and the footer. Its scrollbar is a classic one that
+     consumes layout width, so the inline-end padding is short by exactly that
+     width, and `scroll` keeps the gutter reserved whether or not the list
+     currently overflows. Together these hold every row edge on the 18px grid
+     in both states — plain `auto` with symmetric padding puts rows 6px off it
+     the moment the list becomes scrollable. */
+  padding-block: 4px 12px;
+  padding-inline-start: var(--metric-panel-inline);
+  padding-inline-end: calc(var(--metric-panel-inline) - var(--metric-list-scrollbar));
+  overflow-y: scroll;
   overflow-x: hidden;
 }
 
 .items-list::-webkit-scrollbar {
-  width: 4px;
+  /* Shares one token with the list's inline-end padding so the two can never
+     drift out of step and knock the rows off the gutter. */
+  width: var(--metric-list-scrollbar);
 }
 .items-list::-webkit-scrollbar-thumb {
   background: var(--color-border-default);
-  border-radius: 2px;
+  border-radius: var(--radius-full);
 }
 .items-list::-webkit-scrollbar-track {
   background: transparent;
 }
 
-/* Clipboard-Row (2:7722). Physical order: timestamp left, preview centre,
-   source right — the row's own geometry is LTR, its text is not. */
+/* Clipboard row: content owns the flexible width, followed by one source-app
+   icon and a compact paired action cluster. The row geometry is physical LTR;
+   each content string still resolves its own bidi direction. */
 .row {
   direction: ltr;
-  display: flex;
+  display: grid;
+  grid-template-columns:
+    minmax(0, 1fr)
+    var(--metric-source-slot-inline)
+    var(--metric-row-actions-inline);
   align-items: center;
-  gap: 12px;
-  padding: 10px 14px;
-  border-radius: var(--radius-md);
-  border-bottom: 1px solid transparent;
-  background: transparent;
+  column-gap: var(--space-md);
+  min-height: var(--metric-row-min-height);
+  padding: var(--metric-row-block) var(--metric-row-inline);
+  border-radius: var(--radius-lg);
+  border: 1px solid transparent;
+  background: var(--color-bg-row);
   flex: none;
   transition:
     background var(--t-fast) var(--ease-standard),
@@ -281,45 +324,18 @@ body {
 }
 
 .row:hover:not(.selected) {
-  background: var(--color-bg-selected);
+  background: var(--color-bg-hover);
+  border-color: var(--color-border-divider);
 }
 
 .row.selected {
   background: var(--color-bg-selected);
-  border-bottom-color: var(--color-border-selected-soft);
-}
-
-.row-time {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--space-xs);
-  flex: none;
-}
-
-.time {
-  font-family: var(--font-ar);
-  font-weight: 400;
-  font-size: 10px;
-  line-height: normal;
-  color: var(--color-text-tertiary);
-  white-space: nowrap;
-}
-
-.pin-indicator {
-  display: flex;
-  padding: 2px;
-  color: var(--color-pinned);
-}
-
-.pin-indicator svg {
-  width: 10px;
-  height: 10px;
-  display: block;
+  border-color: var(--color-border-selected-soft);
+  box-shadow: inset -3px 0 0 var(--color-border-selected);
 }
 
 .row-preview {
-  flex: 1;
+  width: 100%;
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -330,15 +346,35 @@ body {
 .preview-title {
   font-family: var(--font-ar);
   font-weight: 500;
-  font-size: 12px;
-  line-height: normal;
+  font-size: var(--text-body);
+  line-height: var(--leading-body);
   color: var(--color-text-primary);
   width: 100%;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+  text-overflow: ellipsis;
   overflow-wrap: anywhere;
+}
+
+.preview-title.is-latin,
+.preview-title.is-code {
+  font-family: var(--font-latin);
+  font-weight: 400;
+  direction: ltr;
+  text-align: left;
+}
+
+.preview-title.is-code {
+  font-family: var(--font-latin);
+  font-size: 12px;
+  line-height: var(--leading-body);
+}
+
+.preview-title.is-mixed {
+  font-family: var(--font-mixed);
+  unicode-bidi: plaintext;
 }
 
 .preview-title.is-link {
@@ -347,124 +383,190 @@ body {
   color: var(--color-text-brand);
   direction: ltr;
   text-align: left;
-  -webkit-line-clamp: 1;
+  font-size: var(--text-body);
+  line-height: var(--leading-body);
+  -webkit-line-clamp: 2;
   word-break: break-all;
 }
 
-.preview-sub {
-  font-family: var(--font-latin);
-  font-weight: 400;
-  font-size: var(--text-caption);
-  line-height: normal;
-  color: var(--color-text-secondary);
-  width: 100%;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  margin-top: 1px;
-  direction: ltr;
-  text-align: left;
-}
-
-/* Image-Thumbnail (2:7760) — 100 × 44. */
+/* Production image thumbnail — 136×72 logical / 272×144 stored at 2x. */
 .preview-thumb {
-  width: 100px;
-  height: 44px;
-  border-radius: var(--radius-control);
+  position: relative;
+  width: 136px;
+  height: 72px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--color-border-default);
   overflow: hidden;
   background: var(--color-bg-primary);
   flex: none;
+}
+
+.preview-thumb-placeholder {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--color-text-tertiary);
+  background: var(--color-bg-control);
+  transition: opacity var(--t-fast) var(--ease-standard);
+}
+
+.preview-thumb-placeholder .figma-icon {
+  width: 24px;
+  height: 24px;
+  opacity: 0.72;
 }
 
 .preview-thumb img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   display: block;
+  opacity: 0;
+  transition: opacity var(--t-fast) var(--ease-standard);
+}
+
+.preview-thumb[data-state='ready'] .preview-thumb-placeholder {
+  opacity: 0;
+}
+
+.preview-thumb[data-state='ready'] img {
+  opacity: 1;
+}
+
+.preview-thumb[data-state='unavailable'] .preview-thumb-placeholder {
+  color: var(--color-text-tertiary);
 }
 
 .row-source {
   display: flex;
   align-items: center;
-  gap: var(--space-md);
+  justify-content: center;
   flex: none;
-  direction: rtl;
+  width: var(--metric-source-slot-inline);
+  height: var(--metric-source-slot-inline);
+  direction: ltr;
 }
 
-.source-name {
-  font-family: var(--font-ar);
-  font-weight: 400;
-  font-size: 10px;
-  line-height: normal;
-  color: var(--color-text-secondary);
-  white-space: nowrap;
-  max-width: 64px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* Source-App-Icon (2:7731) — 18 × 18 chip holding a 14px glyph. */
+/* The installed macOS app icon is the row's only source identifier. The
+   approved Figma glyph is a lookup-failure fallback; the app name remains in
+   title/aria-label instead of consuming visible text width. */
 .source-icon {
-  width: 18px;
-  height: 18px;
-  border-radius: var(--radius-sm);
-  background: var(--color-bg-primary);
-  border: 1px solid var(--color-border-default);
+  width: var(--metric-source-slot-inline);
+  height: var(--metric-source-slot-inline);
+  border-radius: var(--radius-control);
+  background: var(--color-source-icon-well);
+  color: var(--color-interactive-primary);
   display: flex;
   align-items: center;
   justify-content: center;
-  overflow: hidden;
   flex: none;
-  font-family: var(--font-ar);
-  font-weight: 700;
-  font-size: 9px;
-  line-height: 1;
-  color: var(--color-text-secondary);
 }
 
-/* The row's pin control. Not drawn in «08» as a separate affordance — the
-   pinned state is shown by the indicator under the timestamp — so it stays a
-   keyboard action (⌥P) plus this quiet hover target. */
-.pin-btn {
-  width: 20px;
-  height: 20px;
+.source-icon .figma-icon,
+.source-icon img {
+  width: var(--metric-source-glyph);
+  height: var(--metric-source-glyph);
+  display: block;
+}
+
+.source-icon img {
+  object-fit: contain;
   border-radius: var(--radius-sm);
+}
+
+.source-icon[hidden] {
+  display: none;
+}
+
+/* Figma Row / Action Button (77:603) geometry, translated to the user's compact
+   production target: two adjacent 32px controls, 4px apart, each retaining the
+   exact 28px visual well and 16px exported glyph. */
+.row-actions {
+  display: grid;
+  grid-template-columns: repeat(2, var(--metric-row-action));
+  align-items: center;
+  gap: var(--metric-row-actions-gap);
+  width: var(--metric-row-actions-inline);
+  flex: none;
+}
+
+.row-action {
+  position: relative;
+  width: var(--metric-row-action);
+  height: var(--metric-row-action);
+  border-radius: var(--radius-full);
   display: flex;
   align-items: center;
   justify-content: center;
   color: var(--color-text-tertiary);
-  opacity: 0;
   flex: none;
-  transition: opacity var(--t-fast) var(--ease-standard);
+  transition:
+    opacity var(--t-fast) var(--ease-standard),
+    background var(--t-fast) var(--ease-standard),
+    color var(--t-fast) var(--ease-standard);
+}
+
+.row-action::before {
+  content: '';
+  position: absolute;
+  inset: 2px;
+  border-radius: var(--radius-full);
+  background: transparent;
+  transition: background var(--t-fast) var(--ease-standard);
+}
+
+.row-action .figma-icon {
+  width: 16px;
+  height: 16px;
+  display: block;
+  position: relative;
+  z-index: 1;
+}
+
+/* The row's single pin affordance: unpinned rows reveal it contextually;
+   pinned rows keep the pin-off action visible so state and action cannot be
+   mistaken for duplicate status markers. */
+.pin-btn,
+.delete-btn {
+  opacity: 0;
 }
 
 .row:hover .pin-btn,
 .row.selected .pin-btn,
-.pin-btn:focus-visible {
+.row:focus-within .pin-btn,
+.pin-btn.is-pinned,
+.pin-btn:focus-visible,
+.row:hover .delete-btn,
+.row.selected .delete-btn,
+.row:focus-within .delete-btn,
+.delete-btn:focus-visible {
   opacity: 1;
 }
 
-.pin-btn:hover {
-  background: var(--color-bg-selected);
+.row-action:hover {
   color: var(--color-interactive-primary);
 }
 
-/* The pinned state is carried by the indicator under the timestamp, exactly as
-   «08» draws it — this control only tints to show what a click would undo. */
+.row-action:hover::before,
+.row-action:focus-visible::before {
+  background: var(--color-bg-hover);
+}
+
+.delete-btn:hover,
+.delete-btn:focus-visible {
+  color: var(--color-status-error);
+}
+
+/* A pinned row keeps the action visible and tinted; its pin-off geometry plus
+   tooltip/accessible label communicates that activating it will unpin. */
 .pin-btn.is-pinned {
   color: var(--color-pinned);
 }
 
-.pin-btn svg {
-  width: 12px;
-  height: 12px;
-  display: block;
-}
-
 /* End-of-results marker (2:7875) — only ever shown under an active query. */
 .results-end {
-  padding: 24px 14px;
+  padding: 28px var(--metric-panel-inline);
   text-align: center;
   font-family: var(--font-ar);
   font-weight: 400;
@@ -476,6 +578,102 @@ body {
 
 /* ─── Full-pane states (2:7906) ───────────────────────────────────────────── */
 
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Loading/Skeleton (2:9830–2:9836). It mirrors the final row grid so the
+   panel does not jump when native data arrives. */
+.loading-state {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  flex: none;
+}
+
+.skeleton-row {
+  direction: ltr;
+  display: grid;
+  grid-template-columns:
+    minmax(0, 1fr)
+    var(--metric-source-slot-inline)
+    var(--metric-row-actions-inline);
+  align-items: center;
+  column-gap: var(--space-md);
+  min-height: var(--metric-row-min-height);
+  padding: var(--metric-row-block) var(--metric-row-inline);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border-divider);
+  background: var(--color-bg-row);
+}
+
+.skeleton-block {
+  display: block;
+  background: var(--color-fill-subtle);
+  animation: panel-skeleton-pulse 1.4s var(--ease-standard) infinite alternate;
+}
+
+.skeleton-preview {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-sm);
+}
+
+.skeleton-line {
+  height: 9px;
+  border-radius: var(--radius-full);
+}
+
+.skeleton-line-primary {
+  width: min(92%, 220px);
+}
+
+.skeleton-line-secondary {
+  width: min(58%, 140px);
+}
+
+.skeleton-source {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--metric-source-slot-inline);
+  flex: none;
+}
+
+.skeleton-source-icon {
+  width: var(--metric-source-slot-inline);
+  height: var(--metric-source-slot-inline);
+  border-radius: var(--radius-control);
+  flex: none;
+}
+
+.skeleton-action {
+  width: var(--metric-row-actions-inline);
+  height: var(--metric-row-action);
+  border-radius: var(--radius-sm);
+  flex: none;
+}
+
+@keyframes panel-skeleton-pulse {
+  from {
+    opacity: 0.44;
+  }
+  to {
+    opacity: 0.9;
+  }
+}
+
 .state-view {
   flex: 1;
   min-height: 0;
@@ -483,9 +681,13 @@ body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 20px;
-  padding: 24px;
+  gap: 24px;
+  padding: 40px;
   text-align: center;
+}
+
+.state-view.is-no-results {
+  gap: 0;
 }
 
 .state-art {
@@ -493,17 +695,43 @@ body {
   display: flex;
 }
 
-.state-art svg {
+.state-art .figma-icon {
   width: 160px;
   height: 32px;
   display: block;
 }
 
-.state-view.is-failure .state-art {
-  color: var(--color-warning);
+/* Exact 2:7907 composition: 160/120/80px line layers on a 312×30 canvas,
+   separated by the 14px vertical rhythm drawn in Product Screens. */
+.state-art.shelf-illustration {
+  width: min(312px, 100%);
+  height: 30px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
 }
 
-.state-view.is-failure .state-art svg {
+.state-art.shelf-illustration .figma-icon {
+  height: 2px;
+}
+
+.state-art.shelf-illustration .figma-icon:nth-child(1) {
+  width: 160px;
+}
+
+.state-art.shelf-illustration .figma-icon:nth-child(2) {
+  width: 120px;
+}
+
+.state-art.shelf-illustration .figma-icon:nth-child(3) {
+  width: 80px;
+}
+
+.state-view.is-failure .state-art {
+  color: var(--color-status-warning);
+}
+
+.state-view.is-failure .state-art .figma-icon {
   width: 40px;
   height: 40px;
 }
@@ -518,8 +746,8 @@ body {
 .state-title {
   font-family: var(--font-ar);
   font-weight: 800;
-  font-size: 18px;
-  line-height: normal;
+  font-size: var(--text-title-2);
+  line-height: var(--leading-title-2);
   color: var(--color-interactive-primary);
 }
 
@@ -530,15 +758,15 @@ body {
 .state-sub {
   font-family: var(--font-ar);
   font-weight: 400;
-  font-size: var(--text-body);
-  line-height: normal;
+  font-size: 14px;
+  line-height: 24px;
   color: var(--color-text-secondary);
-  max-width: 220px;
+  max-width: 320px;
 }
 
 .state-action {
-  padding: 4px 16px;
-  height: 24px;
+  padding: 4px 18px;
+  min-height: var(--metric-control-height);
   border-radius: var(--radius-control);
   background: var(--color-bg-primary);
   border: 1px solid var(--color-border-default);
@@ -549,45 +777,177 @@ body {
 }
 
 .state-action:hover {
-  background: var(--color-bg-selected);
-  color: var(--color-interactive-primary);
+  background: var(--color-bg-hover);
+  color: var(--color-text-brand);
 }
 
-/* ─── Footer (2:7787) ─────────────────────────────────────────────────────── */
+/* ─── Feedback + contextual footer (2:7787 / Row Action 77:603) ─────────── */
+
+.panel-feedback {
+  direction: inherit;
+  padding: var(--space-md) var(--metric-panel-inline);
+  background: var(--color-bg-elevated);
+  border-top: 1px solid var(--color-border-divider);
+  flex: none;
+  display: flex;
+  justify-content: center;
+}
+
+.panel-feedback[hidden] {
+  display: none;
+}
+
+.toast {
+  min-height: 42px;
+  width: fit-content;
+  max-width: 100%;
+  padding: var(--space-xs) var(--space-lg);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-full);
+  background: var(--color-bg-primary);
+  color: var(--color-text-primary);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-lg);
+  font-family: var(--font-ar);
+  font-weight: 500;
+  font-size: 12px;
+  line-height: 20px;
+  animation: panel-toast-enter var(--t-fast) var(--ease-standard) both;
+  transition:
+    opacity var(--t-fast) var(--ease-standard),
+    transform var(--t-fast) var(--ease-standard);
+}
+
+.toast-icon {
+  width: 16px;
+  height: 16px;
+  color: var(--color-status-success);
+  display: flex;
+  flex: none;
+}
+
+.toast-icon .figma-icon {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+
+.toast[data-kind='delete'] .toast-icon,
+.toast[data-kind='error'] .toast-icon {
+  color: var(--color-status-error);
+}
+
+.toast[data-kind='pin'] .toast-icon,
+.toast[data-kind='unpin'] .toast-icon {
+  color: var(--color-pinned);
+}
+
+.toast[hidden] {
+  display: none;
+}
+
+.toast.is-leaving {
+  opacity: 0;
+  transform: translateY(2px);
+  pointer-events: none;
+}
+
+.toast-message {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.toast-undo {
+  min-width: 44px;
+  min-height: 28px;
+  padding: 0 var(--space-md);
+  border-radius: var(--radius-control);
+  border: 1px solid var(--color-border-brand);
+  color: var(--color-text-brand);
+  background: transparent;
+  font-family: var(--font-ar);
+  font-weight: 700;
+  font-size: 12px;
+  line-height: 20px;
+  flex: none;
+}
+
+.toast-undo:hover {
+  background: var(--color-bg-selected);
+}
+
+.toast-undo[hidden] {
+  display: none;
+}
+
+@keyframes panel-toast-enter {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
 
 .panel-footer {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 10px;
-  background: var(--color-bg-primary);
-  border-top: 1px solid var(--color-border-default);
+  padding: 12px var(--metric-panel-inline);
+  background: var(--color-bg-elevated);
+  border-top: 1px solid var(--color-border-divider);
   flex: none;
-  min-height: 41px;
+  min-height: 48px;
 }
 
-.footer-hint,
-.toast {
+.footer-shortcuts {
   font-family: var(--font-ar);
   font-weight: 400;
-  font-size: var(--text-caption);
-  line-height: normal;
+  font-size: 12px;
+  line-height: 20px;
   color: var(--color-text-secondary);
+  direction: rtl;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: nowrap;
+  gap: var(--space-md);
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
 }
 
-.footer-hint kbd {
-  font-family: var(--font-latin);
-  font-weight: 700;
-  font-size: var(--text-caption);
-  color: var(--color-text-primary);
+.shortcut-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-width: 0;
+  white-space: nowrap;
 }
 
-.toast {
-  color: var(--color-interactive-primary);
-  font-weight: 500;
+.shortcut-hint + .shortcut-hint {
+  padding-inline-start: var(--space-md);
+  border-inline-start: 1px solid var(--color-border-divider);
 }
 
-.toast[hidden],
-.footer-hint[hidden] {
+.shortcut-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.footer-shortcuts[hidden] {
   display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toast {
+    animation: none;
+    transition: none;
+  }
 }

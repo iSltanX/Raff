@@ -45,6 +45,17 @@ test('panel failure state: a permanently failing load shows a recoverable Arabic
     dom.window.document.getElementById('search').dispatchEvent(new dom.window.Event('input'));
     await flush(1);
     assert.match(listText(dom), /جارٍ التحميل…/);
+    assert.equal(dom.window.document.getElementById('list').getAttribute('aria-busy'), 'true');
+    assert.equal(
+      dom.window.document.querySelectorAll('.loading-state .skeleton-row').length,
+      4,
+      'loading uses the approved row skeleton pattern'
+    );
+    assert.equal(
+      dom.window.document.querySelector('.loading-state .state-art'),
+      null,
+      'loading never borrows the empty-shelf illustration'
+    );
     assert.doesNotMatch(listText(dom), /الرفّ فارغ/);
     assert.doesNotMatch(listText(dom), /تعذّر عرض محتوى رفّ/);
   });
@@ -59,9 +70,19 @@ test('panel failure state: a permanently failing load shows a recoverable Arabic
 
   await t.test('the failure state is shown instead of a blank list', () => {
     assert.match(listText(dom), /تعذّر عرض محتوى رفّ/);
+    assert.equal(dom.window.document.getElementById('list').getAttribute('aria-busy'), 'false');
     assert.equal(
       dom.window.document.querySelector('.state-view.is-failure .state-title').textContent,
       'تعذّر عرض محتوى رفّ'
+    );
+    const failure = dom.window.document.querySelector('.state-view.is-failure');
+    assert.equal(failure.getAttribute('role'), 'alert');
+    assert.equal(failure.getAttribute('aria-live'), 'assertive');
+    assert.equal(failure.getAttribute('aria-atomic'), 'true');
+    assert.equal(dom.window.document.getElementById('list').getAttribute('role'), 'region');
+    assert.equal(
+      dom.window.document.getElementById('search').hasAttribute('aria-activedescendant'),
+      false
     );
     assert.notEqual(
       dom.window.document.getElementById('list').children.length,

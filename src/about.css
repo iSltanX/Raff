@@ -1,46 +1,41 @@
 /* ===========================================================================
-   The About window — Figma «08 — Product Screens» (page 2:9)
-     screen ٦  macOS-About-Window  2:8059   320 × 400
-   Every value here comes from that node; colours resolve through tokens.css.
+   About — the production translation of the v4 About window.
+
+   Figma remains the authority for identity and hierarchy; this composition is
+   optically tuned for a 360 × 400 macOS window so the logo, Arabic copy and
+   update state keep their rhythm at normal desktop scale. Colours and type
+   families resolve exclusively through the shared semantic tokens.
    =========================================================================== */
 
-/* The window is opened by Rust at exactly 320 × 400 and never resizes, so the
-   shell owns the whole viewport. It keeps the token background rather than
-   `transparent` (the panel's trick) because this window is still built with
-   native decorations — a transparent body would show the webview's white
-   backing through the 16px corners. */
+/* This window is undecorated and transparent in Tauri. The painted shell owns
+   its rounded corners; keeping the webview backing clear prevents square
+   corners from showing around it. */
+body {
+  background: transparent;
+}
 
 .about {
   height: 100%;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 20px;
-  padding: 24px;
+  padding: var(--space-xl);
   overflow: hidden;
   background: var(--color-bg-secondary);
   border: 1px solid var(--color-border-default);
   border-radius: var(--radius-xl);
 }
 
-/* The designed stack fills the 400px height almost exactly, so the transient
-   update-status line has nowhere to go. It is the one state that tightens the
-   section rhythm (20 → 13, the base step) instead of clipping the copyright;
-   the resting window is left at the designed spacing. */
-.about.has-status {
-  gap: var(--space-lg);
-}
+/* ─── Window chrome ─────────────────────────────────────────────────────── */
 
-/* ─── Controls-Left (2:8060) ──────────────────────────────────────────────── */
-
-/* Physical order, never mirrored — «10 — RTL & Accessibility». `direction: ltr`
-   on a full-width row is what anchors the lights to the physical left edge in
-   an RTL document. */
+/* Traffic lights are physical macOS chrome and never mirror with the Arabic
+   reading direction. The whole row also acts as the generous drag region. */
 .window-controls {
+  width: 100%;
   display: flex;
   align-items: center;
-  gap: 8px;
-  width: 100%;
+  gap: var(--space-md);
   direction: ltr;
   flex: none;
 }
@@ -53,186 +48,173 @@
 }
 
 .dot-close {
-  background: var(--color-stoplight-close);
+  background: var(--color-system-stoplight-close);
 }
+
 .dot-min {
-  background: var(--color-stoplight-min);
+  background: var(--color-system-stoplight-minimize);
 }
+
 .dot-zoom {
-  background: var(--color-stoplight-zoom);
+  background: var(--color-system-stoplight-zoom);
 }
 
-/* ─── Large-Logo (2:8065) ─────────────────────────────────────────────────── */
+/* ─── Identity ──────────────────────────────────────────────────────────── */
 
-.large-logo {
+.identity-row {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
+  justify-content: center;
+  gap: var(--space-md);
+  margin-top: var(--space-2xl);
   flex: none;
 }
 
-/* Logo-Graphic (2:8066) — 80 × 80, radius 20, the brand gradient, brand-tinted
-   drop shadow, and the mark set in Cairo Black. */
+/* The app icon is the one intentionally vivid surface in the window. The rest
+   of the composition stays quiet so the brand gradient reads as an accent. */
 .logo-graphic {
   width: 80px;
   height: 80px;
-  border-radius: var(--radius-2xl);
-  background: linear-gradient(
-    180deg,
-    var(--color-appicon-start) 0%,
-    var(--color-appicon-end) 100%
-  );
-  filter: drop-shadow(var(--elev-appicon));
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-family: var(--font-ar);
-  font-weight: 900;
-  font-size: 40px;
-  line-height: 1;
-  color: var(--color-text-on-accent);
+  display: block;
   flex: none;
+  filter: drop-shadow(var(--elev-appicon));
 }
 
-/* Title-Text (2:8068) */
-.title-text {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--space-xs);
-}
-
-.app-title {
-  margin: 0;
-  font-family: var(--font-ar);
-  font-weight: 900;
-  font-size: 22px;
-  /* Cairo's `normal` leading is ~1.5em; at 22px that alone would cost the
-     window 10px it does not have. */
-  line-height: 1.2;
-  color: var(--color-text-primary);
-  text-align: center;
-}
-
-/* The version line is Almarai in both halves and reads left-to-right —
-   `.latin` (tokens.css) carries the face, the direction and the isolate. */
 .app-version {
+  min-height: var(--leading-caption);
   margin: 0;
+  font-family: var(--font-latin);
   font-weight: 400;
   font-size: var(--text-caption);
-  line-height: 1.3;
+  line-height: var(--leading-caption);
   color: var(--color-text-secondary);
-  text-align: center;
+  direction: ltr;
+  unicode-bidi: isolate;
+  white-space: nowrap;
 }
 
-/* ─── Tagline (2:8071) ────────────────────────────────────────────────────── */
+/* ─── Credit ───────────────────────────────────────────────────────────── */
 
-.tagline {
-  margin: 0;
-  max-width: 220px;
-  font-family: var(--font-ar);
-  font-weight: 400;
-  font-size: var(--text-body);
-  line-height: 1.4;
-  color: var(--color-text-secondary);
-  text-align: center;
-  flex: none;
-}
-
-/* ─── Credit (7:1609) + repository (7:1610) ───────────────────────────────── */
-
-/* Two lines of one thought — kept as a tight pair rather than two full 20px
-   sections, which is also what buys the window its remaining vertical room. */
 .credit {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: var(--space-xs);
+  margin-top: var(--space-md);
   flex: none;
 }
 
 .author {
   margin: 0;
   font-family: var(--font-ar);
-  font-weight: 400;
+  font-weight: 500;
   font-size: var(--text-caption);
-  line-height: 1.4;
-  color: var(--color-text-credit);
+  line-height: var(--leading-caption);
+  color: var(--color-text-secondary);
   text-align: center;
 }
 
 .repo-link {
-  font-family: var(--font-ar);
+  min-height: 24px;
+  padding: var(--space-xs) var(--space-md);
+  border-radius: var(--radius-control);
+  font-family: var(--font-latin);
   font-weight: 400;
-  font-size: 10px;
-  line-height: 1.4;
+  font-size: var(--text-caption);
+  line-height: var(--leading-caption);
   color: var(--color-text-brand);
+  direction: ltr;
+  unicode-bidi: isolate;
   text-align: center;
   text-decoration: underline;
-  text-underline-offset: 2px;
+  text-decoration-thickness: 1px;
+  text-underline-offset: var(--space-2xs);
+  transition: background var(--t-fast) var(--ease-standard);
 }
 
-/* ─── Actions-Bottom (2:8072) ─────────────────────────────────────────────── */
+.repo-link:hover {
+  background: var(--color-bg-selected);
+}
 
-/* `margin-top: auto` pins the group to the bottom padding edge, exactly as the
-   frame draws it, and absorbs any leftover slack above. */
+/* ─── Update action ─────────────────────────────────────────────────────── */
+
+/* The action stack is independently bottom-anchored. A status line therefore
+   consumes the reserved lower breathing room instead of tightening every gap
+   in the identity stack or pushing the copyright out of view. */
 .actions-bottom {
+  width: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
-  width: 100%;
-  margin-top: auto;
+  gap: var(--space-md);
+  margin-top: var(--space-4xl);
+  padding-top: 0;
   flex: none;
 }
 
-/* Push Button, style Bordered Neutral — full width, 24 tall, radius 6. */
+/* A visible status adds a fourth line to the bottom stack. Compact only that
+   transient state so all content remains inside the fixed 360 × 400 window;
+   the approved hidden-status rhythm above remains unchanged. */
+.about.has-status .actions-bottom {
+  margin-top: var(--space-xl);
+}
+
 .push-btn {
   width: 100%;
-  height: 24px;
+  height: 30px;
+  padding: 0 var(--space-xl);
+  border: 1px solid var(--color-border-default);
   border-radius: var(--radius-control);
   background: var(--color-bg-primary);
-  border: 1px solid var(--color-border-default);
   font-family: var(--font-ar);
-  font-weight: 400;
+  font-weight: 500;
   font-size: var(--text-body);
   line-height: normal;
   color: var(--color-text-primary);
-  transition: background var(--t-fast) var(--ease-standard);
+  transition:
+    background var(--t-fast) var(--ease-standard),
+    border-color var(--t-fast) var(--ease-standard),
+    color var(--t-fast) var(--ease-standard);
 }
 
 .push-btn:hover:not(:disabled) {
   background: var(--color-bg-selected);
+  border-color: var(--color-interactive-primary);
+  color: var(--color-text-brand);
+}
+
+.push-btn:active:not(:disabled) {
+  background: var(--color-bg-field);
 }
 
 .push-btn:disabled {
-  opacity: 0.6;
+  opacity: 0.48;
 }
 
-/* The update outcome, in Arabic, directly under the button it belongs to. */
 .update-status {
-  margin: 0;
   max-width: 100%;
+  margin: 0;
   font-family: var(--font-ar);
   font-weight: 400;
   font-size: var(--text-caption);
-  line-height: 1.3;
+  line-height: var(--leading-caption);
   color: var(--color-text-secondary);
   text-align: center;
+  text-wrap: balance;
 }
 
 .update-status[hidden] {
   display: none;
 }
 
-/* Copyright (2:8077) */
 .copyright {
   margin: 0;
   font-family: var(--font-ar);
   font-weight: 400;
-  font-size: 9px;
-  line-height: 1.4;
+  font-size: var(--text-caption);
+  line-height: var(--leading-caption);
   color: var(--color-text-tertiary);
   text-align: center;
+  white-space: nowrap;
 }

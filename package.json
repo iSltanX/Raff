@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "tauri": "tauri",
+    "build:frontend": "node scripts/build-frontend.mjs",
     "icons": "node scripts/gen-icons.mjs",
     "test": "node --test --test-force-exit tests/*.test.mjs"
   },

@@ -6,7 +6,7 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_autostart::ManagerExt as AutostartExt;
 
-use crate::storage::{AppIconPref, Appearance, ItemKind, Settings};
+use crate::storage::{Appearance, ItemKind, Settings, Store};
 use crate::{macos, panel, paste, AppState};
 
 const PREVIEW_MAX_CHARS: usize = 1000;
@@ -22,6 +22,7 @@ pub struct ItemDto {
     pub source_app_bundle_id: String,
     pub created_at: u64,
     pub is_pinned: bool,
+    pub pinned_order: Option<u32>,
     pub copy_count: u32,
     pub paste_count: u32,
     pub last_used_at: u64,
@@ -42,6 +43,7 @@ impl ItemDto {
             source_app_bundle_id: item.source_app_bundle_id.clone(),
             created_at: item.created_at,
             is_pinned: item.is_pinned,
+            pinned_order: item.pinned_order,
             copy_count: item.copy_count,
             paste_count: item.paste_count,
             last_used_at: item.last_used_at,
@@ -75,12 +77,8 @@ pub fn get_state(app: AppHandle, state: State<AppState>) -> StatePayload {
 }
 
 #[tauri::command]
-pub fn paste_item(app: AppHandle, id: String, plain: bool) -> Result<(), String> {
-    if paste::paste_item(&app, &id, plain) {
-        Ok(())
-    } else {
-        Err("العنصر غير موجود".into())
-    }
+pub async fn paste_item(app: AppHandle, id: String, plain: bool) -> Result<bool, String> {
+    paste::paste_item(&app, &id, plain).await
 }
 
 #[tauri::command]
@@ -94,48 +92,74 @@ pub fn copy_item(app: AppHandle, id: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn toggle_pin(app: AppHandle, state: State<AppState>, id: String) {
-    {
+pub fn toggle_pin(
+    app: AppHandle,
+    state: State<AppState>,
+    id: String,
+    is_pinned: bool,
+) -> Result<bool, String> {
+    let is_pinned = {
         let mut store = state.store.lock().unwrap();
-        if store.toggle_pin(&id) {
-            store.save_history();
-            store.save_pinned();
-        }
-    }
+        store.set_pin_persisted(&id, is_pinned)?
+    };
     notify(&app);
+    Ok(is_pinned)
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeleteReceiptDto {
+    pub token: String,
 }
 
 #[tauri::command]
-pub fn delete_item(app: AppHandle, state: State<AppState>, id: String) {
-    {
+pub fn delete_item(
+    app: AppHandle,
+    state: State<AppState>,
+    id: String,
+) -> Result<DeleteReceiptDto, String> {
+    let token = {
         let mut store = state.store.lock().unwrap();
-        if store.delete(&id) {
-            store.save_history();
-            store.save_pinned();
-        }
-    }
+        store.delete_reversible(&id)?
+    };
     notify(&app);
+    Ok(DeleteReceiptDto { token })
 }
 
 #[tauri::command]
-pub fn clear_history(app: AppHandle, state: State<AppState>) {
+pub fn undo_delete(app: AppHandle, state: State<AppState>, token: String) -> Result<(), String> {
     {
         let mut store = state.store.lock().unwrap();
-        store.clear_history();
-        store.save_history();
+        store.undo_delete(&token)?;
     }
     notify(&app);
+    Ok(())
 }
 
 #[tauri::command]
-pub fn clear_learning(app: AppHandle, state: State<AppState>) {
+pub fn commit_delete(state: State<AppState>, token: String) -> Result<(), String> {
+    let mut store = state.store.lock().unwrap();
+    store.commit_delete(&token)
+}
+
+#[tauri::command]
+pub fn clear_history(app: AppHandle, state: State<AppState>) -> Result<(), String> {
     {
         let mut store = state.store.lock().unwrap();
-        store.clear_learning();
-        store.save_history();
-        store.save_pinned();
+        store.clear_history_persisted()?;
     }
     notify(&app);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn clear_learning(app: AppHandle, state: State<AppState>) -> Result<(), String> {
+    {
+        let mut store = state.store.lock().unwrap();
+        store.clear_learning_persisted()?;
+    }
+    notify(&app);
+    Ok(())
 }
 
 #[derive(Serialize)]
@@ -180,6 +204,7 @@ pub fn update_settings(
     state: State<AppState>,
     settings: Settings,
 ) -> Result<(), String> {
+    validate_settings(&settings)?;
     let old = {
         let store = state.store.lock().unwrap();
         store.settings.clone()
@@ -195,17 +220,7 @@ pub fn update_settings(
         }
     }
 
-    // Persist before any other side effect: whatever happens next — including
-    // the controlled relaunch below — the chosen settings are already on disk
-    // and survive into the next process.
-    {
-        let mut store = state.store.lock().unwrap();
-        store.settings = settings.clone();
-        store.trim_history(); // the cap may have shrunk — enforce it now
-        store.save_settings();
-        store.save_history();
-    }
-
+    let mut autostart_changed = false;
     if settings.launch_at_login != old.launch_at_login {
         let autolaunch = app.autolaunch();
         let result = if settings.launch_at_login {
@@ -213,28 +228,83 @@ pub fn update_settings(
         } else {
             autolaunch.disable()
         };
-        if let Err(e) = result {
-            eprintln!("raff: autostart: {e}");
-        }
+        result.map_err(|err| {
+            if settings.hotkey != old.hotkey {
+                let _ = register_hotkey(&app, &old.hotkey);
+            }
+            format!("تعذّر تحديث التشغيل عند تسجيل الدخول: {err}")
+        })?;
+        autostart_changed = true;
     }
 
-    if settings.app_icon != old.app_icon
-        || settings.follow_system != old.follow_system
-        || settings.appearance != old.appearance
+    // Persist only after fallible system integration succeeds. If storage
+    // fails, restore both external side effects so Settings cannot claim a
+    // configuration macOS or the next launch will not actually honor.
+    if let Err(err) = state
+        .store
+        .lock()
+        .unwrap()
+        .update_settings_persisted(settings.clone())
     {
-        sync_appearance_and_icon(&app);
+        if autostart_changed {
+            let autolaunch = app.autolaunch();
+            let _ = if old.launch_at_login {
+                autolaunch.enable()
+            } else {
+                autolaunch.disable()
+            };
+        }
+        if settings.hotkey != old.hotkey {
+            let _ = register_hotkey(&app, &old.hotkey);
+        }
+        return Err(err);
+    }
+
+    if settings.follow_system != old.follow_system || settings.appearance != old.appearance {
+        sync_appearance(&app);
     }
 
     notify(&app);
     Ok(())
 }
 
+fn validate_settings(settings: &Settings) -> Result<(), String> {
+    if !matches!(settings.history_limit, 200 | 500 | 1000) {
+        return Err("حد السجل غير صالح".into());
+    }
+    if settings.hotkey.is_empty() || settings.hotkey.len() > 128 {
+        return Err("اختصار لوحة المفاتيح غير صالح".into());
+    }
+    if settings.excluded_apps.len() > 128
+        || settings.excluded_apps.iter().any(|bundle| {
+            bundle.is_empty()
+                || bundle.len() > 255
+                || bundle.chars().any(char::is_control)
+                || bundle.chars().any(char::is_whitespace)
+        })
+    {
+        return Err("قائمة التطبيقات المستثناة غير صالحة".into());
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub fn get_image(state: State<AppState>, id: String) -> Option<String> {
     let store = state.store.lock().unwrap();
-    let item = store.find(&id)?;
-    let file = item.thumb_file.as_ref().or(item.image_file.as_ref())?;
-    let bytes = std::fs::read(store.images_dir().join(file)).ok()?;
+    image_data_url(&store, &id)
+}
+
+/// Prefer the compact preview, but recover from an interrupted/failed
+/// thumbnail write by reading the original image. Older history files can
+/// legitimately contain a stale `thumbFile`, so fallback happens on read
+/// failure rather than only when the field is absent.
+fn image_data_url(store: &Store, id: &str) -> Option<String> {
+    let item = store.find(id)?;
+    let bytes = item
+        .thumb_file
+        .iter()
+        .chain(item.image_file.iter())
+        .find_map(|file| std::fs::read(store.images_dir().join(file)).ok())?;
     Some(format!(
         "data:image/png;base64,{}",
         base64::engine::general_purpose::STANDARD.encode(bytes)
@@ -247,12 +317,12 @@ static APP_ICON_CACHE: std::sync::OnceLock<
     std::sync::Mutex<std::collections::HashMap<String, Option<String>>>,
 > = std::sync::OnceLock::new();
 
-/// The 32×32 icon of the app a clip came from, as a `data:` URL.
+/// The 40×40 pixel Retina source for the app a clip came from, as a `data:` URL.
 /// Figma «08 — Product Screens» draws it in the row's trailing chip.
 /// `None` when the app is unknown or its icon cannot be rendered — the panel
-/// then keeps the app-initial fallback, so this is always decorative.
+/// then uses the design system's generic-app fallback, so this is decorative.
 #[tauri::command]
-pub fn source_app_icon(app: AppHandle, bundle_id: String) -> Option<String> {
+pub async fn source_app_icon(app: AppHandle, bundle_id: String) -> Option<String> {
     let cache = APP_ICON_CACHE.get_or_init(Default::default);
     if let Ok(map) = cache.lock() {
         if let Some(hit) = map.get(&bundle_id) {
@@ -260,24 +330,28 @@ pub fn source_app_icon(app: AppHandle, bundle_id: String) -> Option<String> {
         }
     }
 
-    // NSWorkspace icon lookup is AppKit work; IPC handlers are off-main.
-    let (tx, rx) = std::sync::mpsc::channel();
+    // NSWorkspace icon lookup is AppKit work. An async Tauri command returns
+    // control to WKWebView immediately; its blocking waiter lives on a worker,
+    // so the closure dispatched to the macOS main thread can actually run.
+    // Waiting inline in a synchronous IPC handler deadlocks the event loop and
+    // stalls the panel for the full timeout on every uncached bundle id.
     let wanted = bundle_id.clone();
-    if app
-        .run_on_main_thread(move || {
-            let _ = tx.send(macos::app_icon_tiff(&wanted));
+    let png = tauri::async_runtime::spawn_blocking(move || {
+        let (tx, rx) = std::sync::mpsc::channel();
+        app.run_on_main_thread(move || {
+            let _ = tx.send(macos::app_icon_png(&wanted));
         })
-        .is_err()
-    {
-        return None;
-    }
-    let tiff = rx
-        .recv_timeout(std::time::Duration::from_millis(1500))
-        .ok()
-        .flatten();
+        .ok()?;
+        rx.recv_timeout(std::time::Duration::from_millis(1500))
+            .ok()
+            .flatten()
+    })
+    .await
+    .ok()
+    .flatten();
 
-    let data_url = tiff.and_then(|bytes| {
-        let decoded = image::load_from_memory_with_format(&bytes, image::ImageFormat::Tiff).ok()?;
+    let data_url = png.and_then(|bytes| {
+        let decoded = image::load_from_memory_with_format(&bytes, image::ImageFormat::Png).ok()?;
         let small = decoded.thumbnail(APP_ICON_PX, APP_ICON_PX);
         let mut out = std::io::Cursor::new(Vec::new());
         small.write_to(&mut out, image::ImageFormat::Png).ok()?;
@@ -293,8 +367,8 @@ pub fn source_app_icon(app: AppHandle, bundle_id: String) -> Option<String> {
     data_url
 }
 
-/// The row chip renders at 18pt; 32px covers it on a 2x display.
-const APP_ICON_PX: u32 = 32;
+/// The row glyph renders at 20pt; 40px preserves native detail at 2x.
+const APP_ICON_PX: u32 = 40;
 
 #[tauri::command]
 pub fn hide_panel(app: AppHandle) {
@@ -317,15 +391,15 @@ pub fn open_accessibility_settings() {
 }
 
 #[tauri::command]
-pub fn firstrun_done(app: AppHandle, state: State<AppState>) {
+pub fn firstrun_done(app: AppHandle, state: State<AppState>) -> Result<(), String> {
     {
         let mut store = state.store.lock().unwrap();
-        store.settings.first_run_shown = true;
-        store.save_settings();
+        store.mark_first_run_shown_persisted()?;
     }
     if let Some(w) = app.get_webview_window("firstrun") {
-        let _ = w.close();
+        w.close().map_err(|err| err.to_string())?;
     }
+    Ok(())
 }
 
 #[derive(Serialize)]
@@ -362,132 +436,12 @@ pub fn theme_for(settings: &Settings) -> Option<tauri::Theme> {
     }
 }
 
-// ─── Appearance & app icon ────────────────────────────────────────────────────
-//
-// The theme itself is runtime-safe: `NSApp.appearance` is an AppKit-guaranteed
-// override that every window, vibrancy layer, and webview media query follows
-// synchronously. The *bundle icon* is not: `NSWorkspace.setIcon` writes the
-// resource fork correctly, but what Finder/the Dock *display* for a running
-// app goes through icon caches macOS gives no invalidation guarantee for.
-// So a settings change that needs a different bundle icon triggers a controlled
-// relaunch: the fresh launch applies the icon on one ordered path (before any
-// window or theme event can interleave), which is the only moment macOS
-// refreshes it dependably.
+// ─── Appearance ───────────────────────────────────────────────────────────────
 
-use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
-
-/// Bundle-icon variant tags. `ICON_UNKNOWN` = never applied / last apply failed.
-const ICON_UNKNOWN: u8 = 0;
-const ICON_LIGHT: u8 = 1;
-const ICON_DARK: u8 = 2;
-
-/// The variant this process last wrote successfully onto the bundle.
-static APPLIED_ICON: AtomicU8 = AtomicU8::new(ICON_UNKNOWN);
-/// Set once a controlled relaunch is scheduled: every later icon path stands
-/// down (the fresh launch owns the icon), and no second relaunch can start.
-static RELAUNCH_PENDING: AtomicBool = AtomicBool::new(false);
-
-/// Grace period between announcing the relaunch (the settings window shows
-/// «سيُعاد تشغيل رفّ لتطبيق التغيير.») and performing it.
-const RELAUNCH_NOTICE_MS: u64 = 1400;
-
-/// The variant a settings snapshot asks for. Pure — `appearance_dark` is the
-/// explicit setting, `system_dark` the effective appearance — so the relaunch
-/// decision is unit-testable.
-fn icon_variant(
-    pref: AppIconPref,
-    follow_system: bool,
-    appearance_dark: bool,
-    system_dark: bool,
-) -> u8 {
-    let dark = match pref {
-        AppIconPref::Light => false,
-        AppIconPref::Dark => true,
-        AppIconPref::Auto => {
-            if follow_system {
-                system_dark
-            } else {
-                appearance_dark
-            }
-        }
-    };
-    if dark {
-        ICON_DARK
-    } else {
-        ICON_LIGHT
-    }
-}
-
-/// Main-thread only (reads `NSApp.effectiveAppearance` for the Auto+follow
-/// case, which is current at launch, after `set_theme`, and at `ThemeChanged`).
-fn wanted_icon_variant(app: &AppHandle) -> u8 {
-    let state = app.state::<AppState>();
-    let store = state.store.lock().unwrap();
-    let s = &store.settings;
-    icon_variant(
-        s.app_icon,
-        s.follow_system,
-        s.appearance == Appearance::Dark,
-        macos::app_appearance_is_dark(),
-    )
-}
-
-/// Main-thread only: writes the variant's .icns onto the bundle unless the
-/// bundle already shows it. On failure the guard returns to `ICON_UNKNOWN` so
-/// the next call does not wrongly dedup-skip.
-fn apply_icon_variant(app: &AppHandle, wanted: u8) {
-    if APPLIED_ICON.swap(wanted, Ordering::SeqCst) == wanted {
-        return; // already showing this variant
-    }
-    let file = if wanted == ICON_DARK {
-        "icons/icon-dark.icns"
-    } else {
-        "icons/icon-light.icns"
-    };
-    match app
-        .path()
-        .resolve(file, tauri::path::BaseDirectory::Resource)
-    {
-        Ok(path) => {
-            if !macos::set_bundle_icon(&path) {
-                APPLIED_ICON.store(ICON_UNKNOWN, Ordering::SeqCst);
-            }
-        }
-        Err(err) => {
-            eprintln!("raff: icon resource missing ({file}): {err}");
-            APPLIED_ICON.store(ICON_UNKNOWN, Ordering::SeqCst);
-        }
-    }
-}
-
-/// Runtime icon sync for the paths where a relaunch is impossible or needless:
-/// cold launch (single ordered path — the reliable moment) and system
-/// appearance flips in Auto+follow mode (`ThemeChanged`; the app cannot
-/// restart itself every time macOS switches appearance). Deterministic and
-/// dedup-guarded; stands down entirely once a relaunch is pending.
-pub fn apply_app_icon(app: &AppHandle) {
-    let handle = app.clone();
-    let _ = app.run_on_main_thread(move || {
-        if RELAUNCH_PENDING.load(Ordering::SeqCst) {
-            return; // the fresh launch owns the icon from here
-        }
-        let wanted = wanted_icon_variant(&handle);
-        apply_icon_variant(&handle, wanted);
-    });
-}
-
-/// Settings-driven appearance/icon change, as ONE main-thread task so nothing
-/// can interleave between its steps:
-///   1. `set_theme` — runtime-safe, applied immediately (AppKit-native).
-///   2. Decide the icon: `NSApp.effectiveAppearance` now already reflects the
-///      theme set in step 1, and the `ThemeChanged` events that theme change
-///      produces are delivered only after this task returns — by then either
-///      the relaunch is pending (they stand down) or the variant is unchanged
-///      (they dedup to a no-op). The old two-task version left exactly this
-///      window open, which is where the remaining desyncs lived.
-///   3. If the bundle must change icon → controlled relaunch (packaged app);
-///      in dev mode there is no bundle icon to show, so best-effort apply.
-fn sync_appearance_and_icon(app: &AppHandle) {
+/// Applies the native appearance override on the main thread. Raff v4 has one
+/// approved application icon, so appearance changes never rewrite the bundle
+/// icon or relaunch the process.
+fn sync_appearance(app: &AppHandle) {
     let handle = app.clone();
     let _ = app.run_on_main_thread(move || {
         let theme = {
@@ -496,50 +450,6 @@ fn sync_appearance_and_icon(app: &AppHandle) {
             theme_for(&store.settings)
         };
         handle.set_theme(theme);
-
-        let wanted = wanted_icon_variant(&handle);
-        if wanted == APPLIED_ICON.load(Ordering::SeqCst) {
-            return; // bundle already shows it — nothing needs a full refresh
-        }
-        if macos::app_bundle_path().is_some() {
-            begin_relaunch(&handle);
-        } else {
-            apply_icon_variant(&handle, wanted); // dev mode: no bundle, best effort
-        }
-    });
-}
-
-/// The controlled relaunch: announce → grace period → close windows cleanly →
-/// spawn the pid-waiting relauncher → normal quit. The `RELAUNCH_PENDING`
-/// swap makes the whole sequence run at most once per process, so no relaunch
-/// loop and no duplicate instance is possible even if more settings writes
-/// land during the grace period (they are already on disk and simply ride
-/// along into the next launch).
-fn begin_relaunch(app: &AppHandle) {
-    if RELAUNCH_PENDING.swap(true, Ordering::SeqCst) {
-        return;
-    }
-    let _ = app.emit("raff://relaunching", ());
-    let handle = app.clone();
-    std::thread::spawn(move || {
-        std::thread::sleep(std::time::Duration::from_millis(RELAUNCH_NOTICE_MS));
-        let inner = handle.clone();
-        let _ = handle.run_on_main_thread(move || {
-            panel::hide(&inner);
-            for (label, window) in inner.webview_windows() {
-                if label != panel::PANEL_LABEL {
-                    let _ = window.close();
-                }
-            }
-            if let Some(bundle) = macos::app_bundle_path() {
-                macos::spawn_relauncher(&bundle, std::process::id());
-            }
-            // Normal quit: RunEvent::Exit runs (single-instance socket is
-            // released), the store is already saved, the monitor thread dies
-            // with the process. The relauncher waits for the pid to vanish
-            // before `open`ing the bundle again.
-            inner.exit(0);
-        });
     });
 }
 
@@ -656,8 +566,10 @@ pub fn open_settings_window(app: &AppHandle) {
             "settings",
             "settings.html",
             "إعدادات رفّ",
-            // Figma «08 — Product Screens», screen ٥ (macOS-Settings-Window).
-            (480.0, 520.0),
+            // Compact macOS preferences shell: the five page tabs expose one
+            // settings group at a time, so the window never becomes a tall
+            // scrolling document or a two-column dashboard.
+            (600.0, 520.0),
             Chrome::Designed,
         );
     });
@@ -675,8 +587,10 @@ pub fn open_about_window(app: &AppHandle) {
             "about",
             "about.html",
             "عن رفّ",
-            // Figma «08 — Product Screens», screen ٦ (macOS-About-Window).
-            (320.0, 400.0),
+            // Figma's 400pt height is sufficient for the transient status
+            // line and removes the dead lower band found in the live 460pt
+            // translation. The width stays optically widened for Arabic text.
+            (360.0, 400.0),
             Chrome::Designed,
         );
     });
@@ -729,55 +643,44 @@ pub fn open_update_window(app: &AppHandle) {
 mod tests {
     use super::*;
 
-    #[test]
-    fn pinned_variants_ignore_both_appearances() {
-        for follow in [false, true] {
-            for app_dark in [false, true] {
-                for sys_dark in [false, true] {
-                    assert_eq!(
-                        icon_variant(AppIconPref::Light, follow, app_dark, sys_dark),
-                        ICON_LIGHT
-                    );
-                    assert_eq!(
-                        icon_variant(AppIconPref::Dark, follow, app_dark, sys_dark),
-                        ICON_DARK
-                    );
-                }
-            }
+    fn image_store(original: &[u8], thumb: Option<(&str, &[u8])>) -> (Store, String) {
+        let root = std::env::temp_dir().join(format!("raff-image-test-{}", uuid::Uuid::new_v4()));
+        let mut store = Store::load(root);
+        std::fs::write(store.images_dir().join("original.png"), original).unwrap();
+        if let Some((name, bytes)) = thumb {
+            std::fs::write(store.images_dir().join(name), bytes).unwrap();
         }
+        store.capture(
+            ItemKind::Image,
+            "image".into(),
+            None,
+            None,
+            Some("original.png".into()),
+            Some("preview.thumb.png".into()),
+            Some("hash".into()),
+            ("Test".into(), "com.test".into()),
+        );
+        let id = store.history[0].id.clone();
+        (store, id)
     }
 
     #[test]
-    fn auto_follows_explicit_appearance_when_not_following_system() {
+    fn get_image_prefers_the_persisted_thumbnail() {
+        let (store, id) = image_store(b"original", Some(("preview.thumb.png", b"thumbnail")));
+        let expected = base64::engine::general_purpose::STANDARD.encode(b"thumbnail");
         assert_eq!(
-            icon_variant(AppIconPref::Auto, false, true, false),
-            ICON_DARK
-        );
-        assert_eq!(
-            icon_variant(AppIconPref::Auto, false, false, true),
-            ICON_LIGHT
+            image_data_url(&store, &id),
+            Some(format!("data:image/png;base64,{expected}"))
         );
     }
 
     #[test]
-    fn auto_follows_system_when_following_system() {
+    fn get_image_falls_back_when_the_recorded_thumbnail_is_missing() {
+        let (store, id) = image_store(b"original", None);
+        let expected = base64::engine::general_purpose::STANDARD.encode(b"original");
         assert_eq!(
-            icon_variant(AppIconPref::Auto, true, false, true),
-            ICON_DARK
+            image_data_url(&store, &id),
+            Some(format!("data:image/png;base64,{expected}"))
         );
-        assert_eq!(
-            icon_variant(AppIconPref::Auto, true, true, false),
-            ICON_LIGHT
-        );
-    }
-
-    #[test]
-    fn variant_is_never_unknown() {
-        for pref in [AppIconPref::Auto, AppIconPref::Light, AppIconPref::Dark] {
-            for follow in [false, true] {
-                assert_ne!(icon_variant(pref, follow, false, false), ICON_UNKNOWN);
-                assert_ne!(icon_variant(pref, follow, true, true), ICON_UNKNOWN);
-            }
-        }
     }
 }

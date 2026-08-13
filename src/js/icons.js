@@ -1,47 +1,81 @@
-// Raff v4.0.0 icon set.
+// Raff v4 production assets.
 //
-// Every glyph below is the EXACT path data exported from the approved Figma
-// file (j3EzLpDw4tIHQQSRQm8ZDM) — nothing here was drawn by hand:
-//   • BRAND_MARK / SETTINGS / PIN  ← «08 — Product Screens» (2:8082, 2:8094, 2:8079)
-//   • SEARCH / X_CIRCLE / PIN_OFF / ALERT  ← «05 — Iconography» (4:7592, 4:7517,
-//     4:7520, 4:7577), the sanctioned Product Core Icon Library
-//   • SHELF  ← «08 — Product Screens» Shelf-Illustration (2:7907)
-//
-// Figma hardcodes a stroke colour on each export; here it is bound to
-// `currentColor` so the token layer drives it — the design itself specifies the
-// stroke as varying by state and appearance.
-//
-// These are injected with innerHTML, so they MUST stay static author-controlled
-// strings. Never interpolate clipboard data into them.
+// Every URL below resolves to approved Figma geometry. Each production file is
+// either an isolated layer export or a geometry-only crop made necessary when
+// Figma included the surrounding presentation frame in the download. UI colour
+// is supplied through a semantic CSS mask, so one sanctioned drawing works in
+// Light, Dark and component states.
 
-/** «08» panel header + menu-bar brand glyph — bar-chart-horizontal, 14×14. */
-export const BRAND_MARK = `<svg viewBox="0 0 14 14" fill="none" aria-hidden="true"><path d="M1.75 1.75V11.0833C1.75 11.3928 1.87292 11.6895 2.09171 11.9083C2.3105 12.1271 2.60725 12.25 2.91667 12.25H12.25M4.08333 9.33333H8.75M4.08333 6.41667H11.0833M4.08333 3.5H5.83333" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`;
+const asset = (path) => new URL(path, import.meta.url).href;
 
-/** «08» header action — settings gear, 14×14. */
-export const SETTINGS = `<svg viewBox="0 0 14 14" fill="none" aria-hidden="true"><path d="M5.64116 2.41323C5.6733 2.0751 5.83035 1.76109 6.08164 1.53256C6.33292 1.30403 6.66037 1.1774 7.00003 1.1774C7.33969 1.1774 7.66715 1.30403 7.91843 1.53256C8.16972 1.76109 8.32677 2.0751 8.35891 2.41323C8.37823 2.63167 8.44989 2.84223 8.56782 3.0271C8.68576 3.21197 8.84649 3.36571 9.03643 3.4753C9.22637 3.58489 9.43991 3.6471 9.65898 3.65668C9.87806 3.66626 10.0962 3.62291 10.295 3.53032C10.6036 3.39019 10.9534 3.36991 11.2762 3.47343C11.5989 3.57696 11.8716 3.79687 12.0412 4.09038C12.2108 4.38389 12.2651 4.72998 12.1935 5.06132C12.122 5.39265 11.9297 5.68551 11.6542 5.8829C11.4747 6.00881 11.3282 6.17609 11.2271 6.37058C11.126 6.56508 11.0732 6.78106 11.0732 7.00028C11.0732 7.21949 11.126 7.43548 11.2271 7.62997C11.3282 7.82446 11.4747 7.99174 11.6542 8.11765C11.9297 8.31504 12.122 8.6079 12.1935 8.93924C12.2651 9.27057 12.2108 9.61667 12.0412 9.91017C11.8716 10.2037 11.5989 10.4236 11.2762 10.5271C10.9534 10.6306 10.6036 10.6104 10.295 10.4702C10.0962 10.3776 9.87806 10.3343 9.65898 10.3439C9.43991 10.3535 9.22637 10.4157 9.03643 10.5253C8.84649 10.6348 8.68576 10.7886 8.56782 10.9735C8.44989 11.1583 8.37823 11.3689 8.35891 11.5873C8.32677 11.9255 8.16972 12.2395 7.91843 12.468C7.66715 12.6965 7.33969 12.8232 7.00003 12.8232C6.66037 12.8232 6.33292 12.6965 6.08164 12.468C5.83035 12.2395 5.6733 11.9255 5.64116 11.5873C5.62188 11.3688 5.55022 11.1582 5.43225 10.9732C5.31428 10.7883 5.15348 10.6345 4.96346 10.5249C4.77345 10.4153 4.55982 10.3531 4.34066 10.3436C4.12151 10.3341 3.90329 10.3775 3.70449 10.4702C3.39584 10.6104 3.0461 10.6306 2.72333 10.5271C2.40055 10.4236 2.12784 10.2037 1.95827 9.91017C1.78871 9.61667 1.73441 9.27057 1.80595 8.93924C1.8775 8.6079 2.06976 8.31504 2.34533 8.11765C2.52477 7.99174 2.67125 7.82446 2.77238 7.62997C2.8735 7.43548 2.9263 7.21949 2.9263 7.00028C2.9263 6.78106 2.8735 6.56508 2.77238 6.37058C2.67125 6.17609 2.52477 6.00881 2.34533 5.8829C2.07015 5.68541 1.87822 5.39266 1.80685 5.06156C1.73548 4.73045 1.78976 4.38463 1.95915 4.09132C2.12854 3.798 2.40093 3.57814 2.72338 3.47446C3.04583 3.37078 3.39532 3.39069 3.70391 3.53032C3.90268 3.62291 4.12084 3.66626 4.33992 3.65668C4.55899 3.6471 4.77254 3.58489 4.96247 3.4753C5.15241 3.36571 5.31315 3.21197 5.43108 3.0271C5.54902 2.84223 5.62067 2.63167 5.63999 2.41323M8.74957 7.00048C8.74957 7.96698 7.96606 8.75048 6.99957 8.75048C6.03307 8.75048 5.24957 7.96698 5.24957 7.00048C5.24957 6.03398 6.03307 5.25048 6.99957 5.25048C7.96606 5.25048 8.74957 6.03398 8.74957 7.00048Z" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`;
+// «02 — Logo System», SECTION "LIBRARY • Approved Brand Assets" (43:10) →
+// COMPONENT_SET "Brand / Logo Mark" (46:27), variant Tone=Brand (43:9).
+// Verified 2026-08-13: the file had been renumbered since this comment was
+// last written and the previously-cited node (4:7981) no longer resolves;
+// 43:9's own geometry (72/61/47-wide bars) is an exact match to this SVG's.
+// This is the descending shelf logo, deliberately distinct from the
+// equal-shelf app and menu icons.
+export const BRAND_MARK = asset('../assets/v4/raff-logo-mark.svg');
 
-/** «08» pinned-row indicator, 10×10. */
-export const PIN = `<svg viewBox="0 0 10 10" fill="none" aria-hidden="true"><path d="M5 7.0835V9.167M3.74986 4.48329C3.74977 4.63834 3.70644 4.79029 3.62473 4.92206C3.54301 5.05383 3.42616 5.16019 3.2873 5.22918L2.54555 5.60421C2.4067 5.67321 2.28984 5.77957 2.20813 5.91134C2.12642 6.04311 2.08308 6.19506 2.083 6.35011V6.6668C2.083 6.77732 2.1269 6.8833 2.20505 6.96145C2.2832 7.0396 2.38919 7.0835 2.49971 7.0835H7.50029C7.61081 7.0835 7.7168 7.0396 7.79495 6.96145C7.8731 6.8833 7.917 6.77732 7.917 6.6668V6.35011C7.91692 6.19506 7.87358 6.04311 7.79187 5.91134C7.71015 5.77957 7.5933 5.67321 7.45445 5.60421L6.7127 5.22918C6.57384 5.16019 6.45699 5.05383 6.37527 4.92206C6.29356 4.79029 6.25023 4.63834 6.25014 4.48329V2.9165C6.25014 2.80598 6.29405 2.69999 6.3722 2.62185C6.45034 2.5437 6.55634 2.4998 6.66686 2.4998C6.8879 2.4998 7.09988 2.412 7.25618 2.2557C7.41248 2.09941 7.50029 1.88743 7.50029 1.6664C7.50029 1.44537 7.41248 1.23339 7.25618 1.0771C7.09988 0.920804 6.8879 0.833 6.66686 0.833H3.33314C3.1121 0.833 2.90012 0.920804 2.74382 1.0771C2.58752 1.23339 2.49971 1.44537 2.49971 1.6664C2.49971 1.88743 2.58752 2.09941 2.74382 2.2557C2.90012 2.412 3.1121 2.4998 3.33314 2.4998C3.44366 2.4998 3.54966 2.5437 3.6278 2.62185C3.70595 2.69999 3.74986 2.80598 3.74986 2.9165V4.48329Z" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`;
+// «08 — Product Screens» → panel Settings control (2:8094).
+export const SETTINGS = asset('../assets/v4/panel-settings.svg');
 
-/** «05» search — the field's magnifier. */
-export const SEARCH = `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M21.0002 21.0002L16.6602 16.6602M19 11C19 15.4183 15.4183 19 11 19C6.58172 19 3 15.4183 3 11C3 6.58172 6.58172 3 11 3C15.4183 3 19 6.58172 19 11Z" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`;
+// «05 — Iconography» → Product Core Icon Library.
+export const SEARCH = asset('../assets/v4/icons/search.svg');
+export const CLEAR = asset('../assets/v4/icons/x-circle.svg');
+// «06 — Components» → Row / Action Button (77:603), exact 16px exports.
+export const PIN_TOGGLE = asset('../assets/v4/icons/pin-off.svg');
+export const TRASH = asset('../assets/v4/icons/trash.svg');
+export const ALERT = asset('../assets/v4/icons/alert-triangle.svg');
+export const IMAGE = asset('../assets/v4/icons/image.svg');
+export const KEYBOARD = asset('../assets/v4/icons/keyboard.svg');
+export const CHECK = asset('../assets/v4/icons/check-circle.svg');
 
-/** «05» x-circle — the search field's clear control. */
-export const CLEAR = `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15.0002 8.99976L8.99976 15.0002M8.99976 8.99976L15.0002 15.0002M22.0008 12C22.0008 17.5233 17.5233 22.0008 12 22.0008C6.47671 22.0008 1.9992 17.5233 1.9992 12C1.9992 6.47671 6.47671 1.9992 12 1.9992C17.5233 1.9992 22.0008 6.47671 22.0008 12Z" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`;
+// «06 — Components» → Row / Action Button (77:603), Pin geometry.
+export const PIN = asset('../assets/v4/pin.svg');
 
-/** «05» pin-off — the row's pin toggle. */
-export const PIN_TOGGLE = `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 17.0004V22.0008M14.9999 9.33979V6.9996C14.9999 6.73436 15.1053 6.47999 15.2928 6.29244C15.4804 6.10489 15.7347 5.99952 16 5.99952C16.5304 5.99952 17.0392 5.78879 17.4143 5.41369C17.7894 5.03858 18.0001 4.52984 18.0001 3.99936C18.0001 3.46888 17.7894 2.96014 17.4143 2.58503C17.0392 2.20993 16.5304 1.9992 16 1.9992H7.88932M1.9992 1.9992L22.0008 22.0008M8.99976 8.99976V10.7599C8.99956 11.132 8.89556 11.4967 8.69946 11.8129C8.50335 12.1292 8.22291 12.3845 7.88967 12.55L6.10953 13.4501C5.77629 13.6157 5.49585 13.871 5.29974 14.1872C5.10364 14.5035 4.99964 14.8681 4.99944 15.2403V16.0003C4.99944 16.2656 5.10481 16.5199 5.29236 16.7075C5.47991 16.895 5.73428 17.0004 5.99952 17.0004H17.0004" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`;
+// «08 — Product Screens» → the actual empty-panel shelf composition (2:7907).
+// Figma's full-frame export carries the presentation background, so production
+// composes the three original transparent line-layer exports instead.
+export const SHELF = Object.freeze([
+  asset('../assets/v4/empty-shelf-line-1.svg'),
+  asset('../assets/v4/empty-shelf-line-2.svg'),
+  asset('../assets/v4/empty-shelf-line-3.svg'),
+]);
 
-/** «05» alert-triangle — the recoverable-failure state. */
-export const ALERT = `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 8.99927V12.9993M12 16.9993H12.01M21.7304 17.9995L13.7304 3.9995C13.556 3.6917 13.303 3.43568 12.9973 3.25757C12.6916 3.07945 12.3442 2.9856 11.9904 2.9856C11.6366 2.9856 11.2892 3.07945 10.9835 3.25757C10.6778 3.43568 10.4248 3.6917 10.2504 3.9995L2.2504 17.9995C2.07408 18.3049 1.98162 18.6514 1.9824 19.004C1.98319 19.3566 2.07717 19.7027 2.25484 20.0073C2.43251 20.3119 2.68754 20.5641 2.99409 20.7383C3.30064 20.9126 3.6478 21.0027 4.0004 20.9995H20.0004C20.3513 20.9991 20.6959 20.9065 20.9997 20.7308C21.3034 20.5551 21.5556 20.3026 21.7309 19.9986C21.9062 19.6946 21.9984 19.3499 21.9983 18.999C21.9983 18.6481 21.9058 18.3034 21.7304 17.9995Z" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`;
+// «14 — App & Content Icons» → fallback glyphs used only when NSWorkspace
+// cannot resolve installed native artwork. A category glyph never replaces a
+// real ChatGPT, Claude, Chrome, Figma, or other application icon.
+export const SOURCE_APP_ICONS = Object.freeze({
+  figma: asset('../assets/v4/source-app/figma.svg'),
+  chrome: asset('../assets/v4/source-app/chrome.svg'),
+  safari: asset('../assets/v4/source-app/safari.svg'),
+  notes: asset('../assets/v4/source-app/notes.svg'),
+  vscode: asset('../assets/v4/source-app/app-window.svg'),
+  unknown: asset('../assets/v4/source-app/app-window.svg'),
+});
 
-/** «05» keyboard — the first-run screen's subject: the Accessibility grant
- *  exists so رفّ can press ⌘V for you. */
-export const KEYBOARD = `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9.99984 8.0004H10.0098M12 12H12.01M14.0002 8.0004H14.0102M16.0003 12H16.0103M18.0005 8.0004H18.0105M5.99952 8.0004H6.00952M6.9996 15.9996H17.0004M7.99968 12H8.00968M3.99936 4.0008H20.0006C21.1053 4.0008 22.0008 4.89614 22.0008 6.0006V17.9994C22.0008 19.1039 21.1053 19.9992 20.0006 19.9992H3.99936C2.8947 19.9992 1.9992 19.1039 1.9992 17.9994V6.0006C1.9992 4.89614 2.8947 4.0008 3.99936 4.0008Z" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`;
+/** Resolves the fallback identities explicitly drawn in the Figma examples. */
+export function sourceAppAsset(bundleId = '', appName = '') {
+  const identity = `${bundleId} ${appName}`.toLocaleLowerCase('en');
+  if (identity.includes('figma')) return SOURCE_APP_ICONS.figma;
+  if (/google\.chrome|\bchrome\b|chromium/u.test(identity)) return SOURCE_APP_ICONS.chrome;
+  if (/apple\.safari|\bsafari\b|سفاري/u.test(identity)) return SOURCE_APP_ICONS.safari;
+  if (/apple\.notes|\bnotes\b|الملاحظات/u.test(identity)) return SOURCE_APP_ICONS.notes;
+  if (/microsoft\.vscode|visual studio code|\bvs code\b/u.test(identity)) {
+    return SOURCE_APP_ICONS.vscode;
+  }
+  return null;
+}
 
-/** «05» check-circle — success and reassurance. */
-export const CHECK = `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M21.8003 10.0002C22.257 12.2415 21.9315 14.5716 20.8781 16.602C19.8247 18.6324 18.1072 20.2403 16.0118 21.1575C13.9164 22.0748 11.5699 22.246 9.36356 21.6426C7.15723 21.0392 5.22445 19.6976 3.88753 17.8416C2.55062 15.9857 1.89038 13.7274 2.01692 11.4436C2.14346 9.15974 3.04914 6.9883 4.58291 5.29138C6.11668 3.59446 8.18584 2.47464 10.4453 2.11866C12.7048 1.76268 15.018 2.19207 16.9993 3.33521M8.99965 10.9997L11.9996 13.9997L21.9996 3.99973" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`;
-
-/** «08» Shelf-Illustration (2:7907) — the empty shelf. Three tapering rules,
- *  160 / 120 / 80 wide, 14px apart, centred. This is the empty-state art. */
-export const SHELF = `<svg viewBox="0 0 160 32" fill="none" aria-hidden="true"><path d="M1 1H159M21 15H139M41 29H119" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`;
+/**
+ * Creates a colour-adaptive icon from an original Figma SVG asset.
+ * The source remains external instead of being copied into application code.
+ */
+export function createIcon(source, className = '') {
+  const icon = document.createElement('span');
+  icon.className = `figma-icon ${className}`.trim();
+  icon.setAttribute('aria-hidden', 'true');
+  icon.style.setProperty('--figma-icon', `url(${source})`);
+  return icon;
+}

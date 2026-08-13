@@ -1,7 +1,7 @@
 // The «عن رفّ» window — Figma «08 — Product Screens», screen ٦ (2:8059).
 //
-// Everything on this window is static except three things: the version line
-// (read from the running app, never hardcoded), the repository control (the URL
+// Everything on this window is static except three things: the compact version
+// label (read from the running app), the repository control (the URL
 // lives in Rust — nothing but the command name crosses IPC), and the update
 // check, which reports its outcome as one Arabic line under the button. The
 // full download/install/restart cycle is deliberately NOT reimplemented here;
@@ -20,9 +20,9 @@ const statusEl = el('update-status');
 const updateBtn = el('update-btn');
 
 // The outcome is always one of these three short lines. A raw message from the
-// updater is never rendered: it can be long enough to wrap to a second line —
-// which this 400px-tall window has no room for — and it is not written in
-// Arabic. Same rule as the panel's failure view.
+// updater is never rendered: it can be long enough to upset the designed
+// vertical rhythm, and it is not written in Arabic. Same rule as the panel's
+// failure view.
 const CHECKING = 'جارٍ التحقق…';
 const UP_TO_DATE = 'أنت على أحدث إصدار من رفّ.';
 const CHECK_FAILED = 'تعذّر التحقق من التحديث.';
@@ -47,7 +47,7 @@ async function loadVersion() {
     const state = await api.getState();
     const version = state?.version;
     if (!version) return; // no version, no line — never a fake number
-    versionEl.textContent = `Version ${version} (الإصدار ${arabicDigits(version)})`;
+    versionEl.textContent = `Version ${version}`;
   } catch {
     // A version we could not read is simply not shown.
   }

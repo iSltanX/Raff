@@ -24,16 +24,56 @@ const item = (id, type, text, sourceApp, bundleId, agoMs, isPinned = false) => (
 });
 
 const PINNED = [
-  item('p1', 'text', 'قائمة المهام اليومية للفريق البرمجي', 'الملاحظات', 'com.apple.Notes', 15 * MIN, true),
+  item(
+    'p1',
+    'text',
+    'قائمة المهام اليومية للفريق البرمجي ومراجعة ملاحظات الإصدار قبل الاجتماع الأسبوعي مع فريق المنتج',
+    'الملاحظات',
+    'com.apple.Notes',
+    15 * MIN,
+    true
+  ),
 ];
 
 const RECENT = [
-  item('r1', 'text', 'مراجعة تصميم واجهة المستخدم للتطبيق الجديد', 'سفاري', 'com.apple.Safari', 2 * MIN),
-  item('r2', 'link', 'https://example.com/arabic-typography-article', 'سفاري', 'com.apple.Safari', HOUR),
+  item(
+    'r1',
+    'text',
+    'مراجعة تصميم واجهة المستخدم للتطبيق الجديد — Raff v4 final visual QA at normal desktop scale',
+    'ChatGPT Classic',
+    'com.openai.chat',
+    2 * MIN
+  ),
+  item(
+    'r2',
+    'link',
+    'https://developer.apple.com/design/human-interface-guidelines/menus-and-actions/context-menus?language=objc',
+    'Safari',
+    'com.apple.Safari',
+    HOUR
+  ),
   item('r3', 'image', 'صورة 420×315', 'الصور', 'com.apple.Photos', 2 * HOUR),
-  item('r4', 'text', 'ألوان الهوية البصرية الأساسية للمشروع', 'الملاحظات', 'com.apple.Notes', 4 * HOUR),
+  item(
+    'r4',
+    'text',
+    'Meeting notes: Q3 roadmap — focus on Arabic onboarding, retrieval speed, and retention.',
+    'Notion Calendar',
+    'notion.id',
+    4 * HOUR
+  ),
   item('r5', 'code', "git commit -m 'feat: add native RTL panel support'", 'الطرفية', 'com.apple.Terminal', 25 * HOUR),
+  item(
+    'r6',
+    'text',
+    'هذه فقرة عربية طويلة لاختبار قابلية القراءة والاقتطاع عند اختلاف طول المحتوى واسم التطبيق وبيانات الوقت في العرض الحقيقي.',
+    'معاينة',
+    'com.apple.Preview',
+    48 * HOUR
+  ),
 ];
+
+let pendingDelete = null;
+let deleteSequence = 0;
 
 const SETTINGS = {
   hotkey: 'shift+super+v',
@@ -46,19 +86,59 @@ const SETTINGS = {
   firstRunShown: false,
   appearance: 'light',
   followSystem: true,
-  appIcon: 'auto',
 };
 
 export function mockInvoke(cmd, args = {}) {
   switch (cmd) {
     case 'get_state':
-      return Promise.resolve({
+      return Promise.resolve(structuredClone({
         pinned: PINNED,
         history: RECENT,
         settings: SETTINGS,
         axTrusted: true,
         version: '4.0.0',
-      });
+      }));
+    case 'paste_item':
+      return Promise.resolve(true);
+    case 'toggle_pin': {
+      const pinnedIndex = PINNED.findIndex((entry) => entry.id === args.id);
+      if (pinnedIndex >= 0 && args.isPinned === false) {
+        const [entry] = PINNED.splice(pinnedIndex, 1);
+        entry.isPinned = false;
+        RECENT.push(entry);
+        RECENT.sort((a, b) => b.createdAt - a.createdAt);
+        return Promise.resolve(false);
+      }
+      const recentIndex = RECENT.findIndex((entry) => entry.id === args.id);
+      if (recentIndex >= 0 && args.isPinned === true) {
+        const [entry] = RECENT.splice(recentIndex, 1);
+        entry.isPinned = true;
+        PINNED.push(entry);
+        return Promise.resolve(true);
+      }
+      if (pinnedIndex >= 0) return Promise.resolve(true);
+      if (recentIndex >= 0) return Promise.resolve(false);
+      return Promise.reject(new Error('العنصر غير موجود'));
+    }
+    case 'delete_item': {
+      const layer = PINNED.some((entry) => entry.id === args.id) ? PINNED : RECENT;
+      const index = layer.findIndex((entry) => entry.id === args.id);
+      if (index < 0) return Promise.reject(new Error('العنصر غير موجود'));
+      const [entry] = layer.splice(index, 1);
+      const token = `mock-delete-${++deleteSequence}`;
+      pendingDelete = { token, layer, index, entry };
+      return Promise.resolve({ token });
+    }
+    case 'undo_delete':
+      if (pendingDelete?.token !== args.token) {
+        return Promise.reject(new Error('انتهت مهلة التراجع عن الحذف'));
+      }
+      pendingDelete.layer.splice(pendingDelete.index, 0, pendingDelete.entry);
+      pendingDelete = null;
+      return Promise.resolve(null);
+    case 'commit_delete':
+      if (pendingDelete?.token === args.token) pendingDelete = null;
+      return Promise.resolve(null);
     case 'learning_summary':
       return Promise.resolve(
         [...PINNED, ...RECENT].slice(0, 5).map((i) => ({

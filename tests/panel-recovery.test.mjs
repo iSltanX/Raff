@@ -52,15 +52,19 @@ test('panel recovery: first load retries, then ⌘R re-initialises in place', as
     assert.doesNotMatch(listText(dom), /تعذّر عرض محتوى رفّ/);
   });
 
-  await t.test('one chronological list — pinned items are marked, not lifted to the top', () => {
+  await t.test('one chronological list — pinned items stay in place with one clear action', () => {
     // `pin1` is the oldest clip, so it sorts last even though it is pinned.
     assert.deepEqual(rowIds(dom), ['r1', 'r2', 'pin1']);
     const pinned = dom.window.document.querySelector('.row[data-id="pin1"]');
-    assert.ok(pinned.querySelector('.row-time .pin-indicator'), 'the pin marker sits in place on the row');
+    const pinAction = pinned.querySelector('.pin-btn.is-pinned');
+    assert.ok(pinAction, 'the pinned row keeps its unpin action visible');
+    assert.equal(pinAction.title, 'إلغاء تثبيت العنصر');
+    assert.equal(pinAction.getAttribute('aria-label'), 'إلغاء تثبيت العنصر');
+    assert.equal(pinAction.getAttribute('aria-pressed'), 'true');
     assert.equal(
       dom.window.document.querySelector('.row[data-id="r1"] .pin-indicator'),
       null,
-      'unpinned rows carry no marker'
+      'rows never duplicate pin state with a second status marker'
     );
     assert.equal(
       dom.window.document.querySelectorAll('.section-header').length,
@@ -76,6 +80,12 @@ test('panel recovery: first load retries, then ⌘R re-initialises in place', as
     const close = dom.window.document.getElementById('panel-close');
     assert.equal(close.title, 'إغلاق');
     assert.equal(close.getAttribute('aria-label'), 'إغلاق رفّ');
+    const toast = dom.window.document.getElementById('toast');
+    assert.equal(toast.getAttribute('role'), 'group');
+    const announcer = dom.window.document.getElementById('feedback-announcer');
+    assert.equal(announcer.getAttribute('role'), 'status');
+    assert.equal(announcer.getAttribute('aria-live'), 'polite');
+    assert.equal(announcer.getAttribute('aria-atomic'), 'true');
   });
 
   await t.test('the header actions are wired to their commands', async () => {
@@ -148,6 +158,11 @@ test('panel recovery: first load retries, then ⌘R re-initialises in place', as
       null,
       'the empty shelf is not the failure view'
     );
+    const empty = dom.window.document.querySelector('.state-view:not(.is-failure):not(.is-no-results)');
+    assert.equal(empty.getAttribute('role'), 'status');
+    assert.equal(empty.getAttribute('aria-live'), 'polite');
+    assert.equal(empty.getAttribute('aria-atomic'), 'true');
+    assert.equal(dom.window.document.getElementById('list').getAttribute('role'), 'region');
   });
 
   await t.test('the panel exposes no English "Reload" affordance', () => {
@@ -305,9 +320,33 @@ test('panel recovery: first load retries, then ⌘R re-initialises in place', as
     clickFilter(dom, 'image');
     assert.deepEqual(rowIds(dom), []);
     assert.match(listText(dom), /لا نتائج/);
+    assert.equal(
+      dom.window.document.querySelector('.state-view.is-no-results .state-art'),
+      null,
+      'search-empty is textual and never borrows the shelf illustration'
+    );
     assert.doesNotMatch(listText(dom), /الرفّ فارغ/, 'a narrowed list is not an empty shelf');
     assert.doesNotMatch(listText(dom), /تعذّر عرض محتوى رفّ/, 'and never the failure state');
+    const noResults = dom.window.document.querySelector('.state-view.is-no-results');
+    assert.equal(noResults.getAttribute('role'), 'status');
+    assert.equal(noResults.getAttribute('aria-live'), 'polite');
+    assert.equal(noResults.getAttribute('aria-atomic'), 'true');
+    assert.equal(dom.window.document.getElementById('list').getAttribute('role'), 'region');
     clickFilter(dom, 'all');
+  });
+
+  await t.test('the source uses one enlarged icon without duplicating its visible name', () => {
+    const source = dom.window.document.querySelector('.row .row-source');
+    const icon = dom.window.document.querySelector('.row .source-icon');
+    assert.ok(icon, 'the stable icon slot remains in the row grid');
+    assert.equal(icon.textContent, '', 'the fallback stays visually quiet');
+    assert.equal(icon.getAttribute('aria-hidden'), 'true');
+    assert.equal(icon.hidden, false, 'the approved source glyph is visible');
+    assert.ok(icon.querySelector('.source-app-glyph'), 'the icon comes from the Figma source set');
+    assert.equal(dom.window.document.querySelector('.row .source-name'), null);
+    assert.equal(source?.getAttribute('role'), 'gridcell');
+    assert.equal(source?.getAttribute('aria-label'), 'المصدر: Notes');
+    assert.equal(source?.title, 'Notes');
   });
 
   await t.test('no uncaught errors during the whole session', () => {

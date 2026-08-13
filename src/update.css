@@ -45,7 +45,7 @@ body {
 }
 
 .update-status.error {
-  color: var(--color-error);
+  color: var(--color-status-error);
 }
 
 .update-available {

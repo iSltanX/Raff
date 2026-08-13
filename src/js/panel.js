@@ -1,32 +1,53 @@
 // Floating panel behavior: instant filter, full keyboard control, paste.
 // Clip content is ALWAYS rendered via textContent — never innerHTML.
 //
-// View structure follows Figma «08 — Product Screens» (2:7684 / 2:7791 / 2:7880):
-// timestamp on the left, preview in the centre, source app on the right, with
-// a filter row above the list and a hint footer below it.
+// View structure adapts the approved Raff row language to production density:
+// the copied preview owns the flexible space, one source-app icon identifies
+// provenance, and the paired Figma actions sit together at the trailing edge.
 
 import { api, on } from './store.js';
-import { arabicDigits, filterItems, relativeTimeAr } from './logic.js';
-import { BRAND_MARK, SETTINGS, SEARCH, CLEAR, PIN, PIN_TOGGLE, ALERT, SHELF } from './icons.js';
+import { arabicDigits, filterItems } from './logic.js';
+import {
+  BRAND_MARK,
+  SETTINGS,
+  SEARCH,
+  CLEAR,
+  PIN,
+  PIN_TOGGLE,
+  TRASH,
+  CHECK,
+  ALERT,
+  IMAGE,
+  SHELF,
+  SOURCE_APP_ICONS,
+  sourceAppAsset,
+  createIcon,
+} from './icons.js';
 import { diag, installGlobalTraps } from './diag.js';
 
 diag('module:start');
 
 const panelEl = document.getElementById('panel');
+const panelHeaderEl = document.getElementById('panel-header');
 const searchEl = document.getElementById('search');
 const searchClearEl = document.getElementById('search-clear');
 const listEl = document.getElementById('list');
+const panelFeedbackEl = document.getElementById('panel-feedback');
+const feedbackAnnouncerEl = document.getElementById('feedback-announcer');
 const toastEl = document.getElementById('toast');
+const toastIconEl = document.getElementById('toast-icon');
+const toastMessageEl = document.getElementById('toast-message');
+const toastUndoEl = document.getElementById('toast-undo');
 const footerHintEl = document.getElementById('footer-hint');
 const filtersEl = document.getElementById('filters');
 const settingsBtn = document.getElementById('settings-btn');
 const closeBtn = document.getElementById('panel-close');
 
-// Static, author-controlled SVG constants — safe as innerHTML.
-document.getElementById('brand-mark').innerHTML = BRAND_MARK;
-document.getElementById('search-glyph').innerHTML = SEARCH;
-settingsBtn.innerHTML = SETTINGS;
-searchClearEl.innerHTML = CLEAR;
+// Original, author-controlled exports from the approved Figma layers.
+document.getElementById('brand-mark').replaceChildren(createIcon(BRAND_MARK));
+document.getElementById('search-glyph').replaceChildren(createIcon(SEARCH));
+settingsBtn.replaceChildren(createIcon(SETTINGS));
+searchClearEl.replaceChildren(createIcon(CLEAR));
 
 let state = { pinned: [], history: [], settings: null, axTrusted: false };
 let query = '';
@@ -34,8 +55,21 @@ let filter = 'all';
 let selectedId = null;
 let visible = []; // flat filtered list, newest first
 const thumbs = new Map(); // item id → data URL
-const appIcons = new Map(); // bundle id → data URL | null
+const appIcons = new Map(); // bundle id → Promise<data URL | null> | data URL | null
+const optimisticDeletedIds = new Set();
+const optimisticPins = new Map(); // item id → { generation, value }
+const optimisticRestores = new Map(); // item id → deleted-row snapshot during Undo IPC
+let pinMutationGeneration = 0;
 let toastTimer = null;
+let toastExitTimer = null;
+let toastGeneration = 0;
+let activeDelete = null; // { token, snapshot }
+const feedbackQueue = [];
+let mutationQueue = Promise.resolve();
+
+const PIN_TOAST_MS = 3000;
+const DELETE_TOAST_MS = 5000;
+const TOAST_EXIT_MS = 120;
 
 // The list area has three distinct states and they must never be confused:
 //   'loading' — the first fetch has not answered yet
@@ -46,12 +80,44 @@ let phase = 'loading';
 
 // ─── Rendering ────────────────────────────────────────────────────────────
 
+/**
+ * The search field keeps DOM focus so typing always remains instant. It is a
+ * combobox whose active descendant points into this interactive grid; visual selection,
+ * aria-selected, and the announced row therefore stay as one state.
+ */
+function setListStructure(hasOptions) {
+  listEl.removeAttribute('aria-live');
+  listEl.removeAttribute('aria-atomic');
+  if (hasOptions) {
+    listEl.setAttribute('role', 'grid');
+    listEl.setAttribute('aria-label', 'عناصر الحافظة');
+  } else {
+    // Loading and empty/error views are status content, so expose the
+    // container as a labelled region instead of an empty grid.
+    listEl.setAttribute('role', 'region');
+    listEl.setAttribute('aria-label', 'حالة عناصر الحافظة');
+    listEl.removeAttribute('aria-rowcount');
+  }
+}
+
+function syncActiveOption() {
+  const selected = listEl.querySelector('.row.selected[role="row"]');
+  if (selected) {
+    searchEl.setAttribute('aria-activedescendant', selected.id);
+    searchEl.setAttribute('aria-expanded', 'true');
+  } else {
+    searchEl.removeAttribute('aria-activedescendant');
+    searchEl.setAttribute('aria-expanded', 'false');
+  }
+}
+
 function stateView(art, title, sub, extraClass = '') {
   const view = document.createElement('div');
   view.className = `state-view ${extraClass}`.trim();
-  const artEl = document.createElement('div');
-  artEl.className = 'state-art';
-  artEl.innerHTML = art; // static SVG constant
+  const isFailure = extraClass.split(/\s+/).includes('is-failure');
+  view.setAttribute('role', isFailure ? 'alert' : 'status');
+  view.setAttribute('aria-live', isFailure ? 'assertive' : 'polite');
+  view.setAttribute('aria-atomic', 'true');
   const text = document.createElement('div');
   text.className = 'state-text';
   const titleEl = document.createElement('div');
@@ -61,7 +127,61 @@ function stateView(art, title, sub, extraClass = '') {
   subEl.className = 'state-sub';
   subEl.textContent = sub;
   text.append(titleEl, subEl);
-  view.append(artEl, text);
+  if (art) {
+    const artEl = document.createElement('div');
+    artEl.className = 'state-art';
+    if (Array.isArray(art)) {
+      artEl.classList.add('shelf-illustration');
+      artEl.replaceChildren(...art.map((line) => createIcon(line)));
+    } else {
+      artEl.replaceChildren(createIcon(art));
+    }
+    view.append(artEl);
+  }
+  view.append(text);
+  return view;
+}
+
+/**
+ * Loading is a structural state, not an empty-content state. Figma «07 —
+ * Patterns & States» uses row skeletons here, keeping the eventual list
+ * geometry stable while the first native-store read is in flight.
+ */
+function loadingView() {
+  const view = document.createElement('div');
+  view.className = 'loading-state';
+
+  const status = document.createElement('span');
+  status.className = 'sr-only';
+  status.setAttribute('role', 'status');
+  status.textContent = 'جارٍ التحميل…';
+  view.append(status);
+
+  for (let index = 0; index < 4; index++) {
+    const row = document.createElement('div');
+    row.className = 'skeleton-row';
+    row.setAttribute('aria-hidden', 'true');
+
+    const preview = document.createElement('span');
+    preview.className = 'skeleton-preview';
+    const primary = document.createElement('span');
+    primary.className = 'skeleton-block skeleton-line skeleton-line-primary';
+    const secondary = document.createElement('span');
+    secondary.className = 'skeleton-block skeleton-line skeleton-line-secondary';
+    preview.append(primary, secondary);
+
+    const source = document.createElement('span');
+    source.className = 'skeleton-source';
+    const sourceIcon = document.createElement('span');
+    sourceIcon.className = 'skeleton-block skeleton-source-icon';
+    source.append(sourceIcon);
+
+    const action = document.createElement('span');
+    action.className = 'skeleton-block skeleton-action';
+    row.append(preview, source, action);
+    view.append(row);
+  }
+
   return view;
 }
 
@@ -84,67 +204,100 @@ function failureView() {
   return view;
 }
 
-/** Lazily resolve the source app's real icon; fall back to its initial. */
-async function loadAppIcon(bundleId, host) {
-  if (!bundleId) return;
-  if (appIcons.has(bundleId)) {
-    const cached = appIcons.get(bundleId);
-    if (cached) paintAppIcon(host, cached);
+/** Resolve the installed macOS icon first for every bundle. The approved
+ * Raff/Figma glyph is used only when AppKit cannot return native artwork. */
+async function loadAppIcon(bundleId, appName, host) {
+  const approvedAsset = sourceAppAsset(bundleId, appName);
+  const fallbackAsset = approvedAsset ?? SOURCE_APP_ICONS.unknown;
+  if (!bundleId) {
+    paintFigmaAppIcon(host, fallbackAsset);
     return;
   }
-  try {
-    const url = await api.sourceAppIcon(bundleId);
-    appIcons.set(bundleId, url || null);
-    if (url) paintAppIcon(host, url);
-  } catch {
-    appIcons.set(bundleId, null); // the initial stays — decorative either way
+  if (appIcons.has(bundleId)) {
+    const cached = await appIcons.get(bundleId);
+    if (cached) paintAppIcon(host, cached);
+    else paintFigmaAppIcon(host, fallbackAsset);
+    return;
   }
+  // Install the in-flight promise before yielding. A 500-row history from one
+  // app must produce one AppKit lookup, not hundreds queued on the main thread.
+  const request = api
+    .sourceAppIcon(bundleId)
+    .then((url) => url || null)
+    .catch(() => null);
+  appIcons.set(bundleId, request);
+  const url = await request;
+  appIcons.set(bundleId, url);
+  if (url) paintAppIcon(host, url);
+  else paintFigmaAppIcon(host, fallbackAsset);
+}
+
+function revealAppIcon(host) {
+  host.hidden = false;
+}
+
+function paintFigmaAppIcon(host, source) {
+  host.replaceChildren(createIcon(source, 'source-app-glyph'));
+  revealAppIcon(host);
 }
 
 function paintAppIcon(host, url) {
   const img = document.createElement('img');
   img.alt = '';
-  img.width = 14;
-  img.height = 14;
+  img.width = 20;
+  img.height = 20;
   img.src = url;
   host.replaceChildren(img);
+  revealAppIcon(host);
 }
 
-function buildRow(item) {
+function textScriptClass(value) {
+  const text = String(value || '');
+  const hasArabic = /[\u0600-\u06ff]/.test(text);
+  const hasLatin = /[A-Za-z]/.test(text);
+  if (hasArabic && hasLatin) return 'is-mixed';
+  if (hasLatin) return 'is-latin';
+  return 'is-arabic';
+}
+
+function buildRow(item, index) {
   const row = document.createElement('div');
   row.className = 'row';
+  row.id = `raff-option-${index + 1}`;
   row.dataset.id = item.id;
-  row.setAttribute('role', 'option');
+  row.dataset.type = item.type;
+  row.setAttribute('role', 'row');
   row.setAttribute('aria-selected', String(item.id === selectedId));
+  row.setAttribute('aria-rowindex', String(index + 1));
   if (item.id === selectedId) row.classList.add('selected');
 
-  // ── left: timestamp, and the pin marker when the item is pinned
-  const timeWrap = document.createElement('div');
-  timeWrap.className = 'row-time';
-  const time = document.createElement('span');
-  time.className = 'time';
-  time.textContent = relativeTimeAr(item.createdAt);
-  timeWrap.append(time);
-  if (item.isPinned) {
-    const pin = document.createElement('span');
-    pin.className = 'pin-indicator';
-    pin.title = 'مثبّت';
-    pin.innerHTML = PIN; // static SVG constant
-    timeWrap.append(pin);
-  }
-
-  // ── centre: the clip preview
+  // ── flexible centre: the copied content is the row's primary information.
   const preview = document.createElement('div');
   preview.className = 'row-preview';
+  preview.setAttribute('role', 'gridcell');
 
   if (item.type === 'image') {
     const thumb = document.createElement('div');
     thumb.className = 'preview-thumb';
+    thumb.dataset.state = 'loading';
+    thumb.setAttribute('role', 'img');
+    thumb.setAttribute('aria-label', arabicDigits(item.text));
+    const placeholder = document.createElement('span');
+    placeholder.className = 'preview-thumb-placeholder';
+    placeholder.setAttribute('aria-hidden', 'true');
+    placeholder.append(createIcon(IMAGE, 'preview-thumb-icon'));
     const img = document.createElement('img');
-    img.alt = arabicDigits(item.text); // "صورة ٤٢٠×٣١٥"
+    img.alt = '';
+    img.decoding = 'async';
+    img.addEventListener('load', () => {
+      thumb.dataset.state = 'ready';
+    });
+    img.addEventListener('error', () => {
+      thumb.dataset.state = 'unavailable';
+    });
     if (thumbs.has(item.id)) img.src = thumbs.get(item.id);
-    else loadThumb(item.id, img);
-    thumb.append(img);
+    else loadThumb(item.id, img, thumb);
+    thumb.append(placeholder, img);
     preview.append(thumb);
   } else {
     // «08» renders text and code identically — Cairo Medium 12, right-aligned,
@@ -153,33 +306,58 @@ function buildRow(item) {
     const title = document.createElement('div');
     title.className = 'preview-title';
     if (item.type === 'link') title.classList.add('is-link');
-    else title.dir = 'auto';
+    else {
+      title.classList.add(textScriptClass(item.text));
+      if (item.type === 'code') title.classList.add('is-code');
+      title.dir = 'auto';
+    }
     title.textContent = item.text; // clip content → textContent
     preview.append(title);
   }
 
-  // ── right: the source application
+  // ── source: icon only. The accessible name and tooltip preserve the app
+  // identity without spending a second visual slot on duplicate text.
   const source = document.createElement('div');
   source.className = 'row-source';
-  const name = document.createElement('span');
-  name.className = 'source-name';
-  name.textContent = item.sourceApp || '';
+  source.setAttribute('role', 'gridcell');
+  const sourceName = item.sourceApp || 'تطبيق غير معروف';
+  source.title = sourceName;
+  source.setAttribute('aria-label', `المصدر: ${sourceName}`);
   const icon = document.createElement('span');
   icon.className = 'source-icon';
-  icon.textContent = (item.sourceApp || '؟').trim().charAt(0);
-  loadAppIcon(item.sourceAppBundleId, icon);
-  source.append(name, icon);
+  icon.setAttribute('aria-hidden', 'true');
+  icon.hidden = true;
+  loadAppIcon(item.sourceAppBundleId, item.sourceApp, icon);
+  source.append(icon);
+
+  const actions = document.createElement('div');
+  actions.className = 'row-actions';
+  actions.setAttribute('role', 'gridcell');
+  actions.setAttribute('aria-label', 'إجراءات العنصر');
 
   const pinBtn = document.createElement('button');
   pinBtn.type = 'button';
-  pinBtn.className = 'pin-btn' + (item.isPinned ? ' is-pinned' : '');
-  pinBtn.innerHTML = PIN_TOGGLE; // static SVG constant
-  pinBtn.title = item.isPinned ? 'إلغاء التثبيت' : 'تثبيت';
-  pinBtn.tabIndex = -1;
+  pinBtn.className = 'row-action pin-btn' + (item.isPinned ? ' is-pinned' : '');
+  pinBtn.replaceChildren(createIcon(item.isPinned ? PIN_TOGGLE : PIN));
+  pinBtn.title = item.isPinned ? 'إلغاء تثبيت العنصر' : 'تثبيت العنصر';
+  pinBtn.setAttribute('aria-label', pinBtn.title);
+  pinBtn.setAttribute('aria-pressed', String(item.isPinned));
   pinBtn.addEventListener('click', (e) => {
     e.stopPropagation();
-    api.togglePin(item.id);
+    togglePinItem(item.id, { restoreFocus: document.activeElement === pinBtn });
   });
+
+  const deleteBtn = document.createElement('button');
+  deleteBtn.type = 'button';
+  deleteBtn.className = 'row-action delete-btn';
+  deleteBtn.title = 'حذف العنصر';
+  deleteBtn.setAttribute('aria-label', 'حذف العنصر');
+  deleteBtn.replaceChildren(createIcon(TRASH));
+  deleteBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    deleteItem(item.id, { restoreFocus: document.activeElement === deleteBtn });
+  });
+  actions.append(pinBtn, deleteBtn);
 
   row.addEventListener('click', () => {
     selectedId = item.id;
@@ -187,7 +365,7 @@ function buildRow(item) {
   });
   row.addEventListener('dblclick', () => paste(item.id, false));
 
-  row.append(timeWrap, preview, source, pinBtn);
+  row.append(preview, source, actions);
   return row;
 }
 
@@ -209,14 +387,20 @@ function matchesFilter(item) {
 
 function renderList() {
   if (phase === 'loading') {
-    listEl.replaceChildren(stateView(SHELF, 'جارٍ التحميل…', 'لحظة من فضلك'));
+    listEl.setAttribute('aria-busy', 'true');
+    setListStructure(false);
+    listEl.replaceChildren(loadingView());
     visible = [];
+    syncActiveOption();
     syncChrome();
     return;
   }
+  listEl.setAttribute('aria-busy', 'false');
   if (phase === 'error') {
+    setListStructure(false);
     listEl.replaceChildren(failureView());
     visible = [];
+    syncActiveOption();
     syncChrome();
     return;
   }
@@ -226,16 +410,26 @@ function renderList() {
   const all = [...state.pinned, ...state.history].sort((a, b) => b.createdAt - a.createdAt);
   visible = filterItems(all, query).filter(matchesFilter);
 
-  if (!visible.some((i) => i.id === selectedId)) {
+  const selectionIsVisible = visible.some((item) => item.id === selectedId);
+  if (query && !selectionIsVisible) {
+    // Search is a choose-from-results mode: its documented Enter action needs
+    // one active result. Outside search, `null` is an intentional idle state
+    // whose footer offers only Search and Settings.
     selectedId = visible[0]?.id ?? null;
+  } else if (selectedId !== null && !selectionIsVisible) {
+    selectedId = null;
   }
 
   listEl.replaceChildren();
   syncChrome();
 
   if (visible.length === 0) {
+    setListStructure(false);
+    syncActiveOption();
     if (query || filter !== 'all') {
-      listEl.append(stateView(SHELF, 'لا نتائج', 'جرّب كلمة أخرى أو صنفًا مختلفًا'));
+      // Search-empty is text-only in «07 — Patterns & States»; the shelf
+      // illustration belongs exclusively to a genuinely empty collection.
+      listEl.append(stateView(null, 'لا نتائج', 'جرّب كلمة أخرى أو صنفًا مختلفًا', 'is-no-results'));
     } else {
       // Genuinely nothing saved yet — never shown for a failed fetch.
       listEl.append(
@@ -245,8 +439,10 @@ function renderList() {
     return;
   }
 
+  setListStructure(true);
+  listEl.setAttribute('aria-rowcount', String(visible.length));
   const fragment = document.createDocumentFragment();
-  visible.forEach((item) => fragment.append(buildRow(item)));
+  visible.forEach((item, index) => fragment.append(buildRow(item, index)));
   if (query) {
     const end = document.createElement('div');
     end.className = 'results-end';
@@ -254,27 +450,59 @@ function renderList() {
     fragment.append(end);
   }
   listEl.append(fragment);
+  syncActiveOption();
   scrollSelectedIntoView();
 }
 
 /** Footer copy and the clear button follow the current view state. */
 function syncChrome() {
   searchClearEl.hidden = query.length === 0;
-  if (toastEl.hidden) {
-    footerHintEl.hidden = false;
-    if (phase !== 'ready') {
-      footerHintEl.textContent = '';
-    } else if (query) {
-      footerHintEl.textContent = 'اضغط ↵ للصق النتيجة المحددة';
-    } else if (visible.length === 0) {
-      footerHintEl.textContent = 'في انتظار نسخك الأول…';
-    } else {
-      footerHintEl.replaceChildren();
-      const kbd = document.createElement('kbd');
-      kbd.textContent = '⌘V';
-      footerHintEl.append(kbd, document.createTextNode(' للصق الفوري'));
-    }
+  syncShortcutBar();
+}
+
+function shortcutHint(keys, label) {
+  const hint = document.createElement('span');
+  hint.className = 'shortcut-hint';
+  const keycap = document.createElement('kbd');
+  keycap.textContent = keys;
+  const text = document.createElement('span');
+  text.className = 'shortcut-label';
+  text.textContent = label;
+  hint.append(keycap, text);
+  return hint;
+}
+
+/** Contextual keyboard legend. It advertises only actions that can run in the
+ * current state, and uses the selected item's real pin state for the label. */
+function syncShortcutBar() {
+  const selected = visible.find((item) => item.id === selectedId) ?? null;
+  const independentFocus = isIndependentControl(document.activeElement);
+  let actions;
+
+  if (query) {
+    actions = selected && !independentFocus
+      ? [
+          ['↑↓', 'تنقّل'],
+          ['↵', 'اختيار'],
+          ['Esc', 'مسح البحث'],
+        ]
+      : [['Esc', 'مسح البحث']];
+  } else if (selected) {
+    actions = [
+      ...(!independentFocus ? [['↵', 'لصق']] : []),
+      ...(!independentFocus ? [['⌘C', 'نسخ']] : []),
+      ['⌥P', selected.isPinned ? 'إلغاء التثبيت' : 'تثبيت'],
+      ['⌘⌫', 'حذف'],
+    ];
+  } else {
+    actions = [
+      ['⌘F', 'بحث'],
+      ['⌘,', 'الإعدادات'],
+    ];
   }
+
+  footerHintEl.replaceChildren(...actions.map(([keys, label]) => shortcutHint(keys, label)));
+  footerHintEl.hidden = false;
 }
 
 /**
@@ -292,68 +520,387 @@ function render() {
     if (phase === 'error') return; // already showing the failure state
     phase = 'error';
     try {
+      setListStructure(false);
       listEl.replaceChildren(failureView());
+      syncActiveOption();
     } catch {
       // Last resort: the failure view itself could not be built.
       listEl.textContent = 'تعذّر عرض محتوى رفّ';
+      listEl.setAttribute('role', 'alert');
+      listEl.setAttribute('aria-live', 'assertive');
+      listEl.setAttribute('aria-atomic', 'true');
+      syncActiveOption();
     }
   }
 }
 
-async function loadThumb(id, img) {
+async function loadThumb(id, img, thumb) {
   try {
     const url = await api.getImage(id);
     if (url) {
       thumbs.set(id, url);
       img.src = url;
+    } else {
+      thumb.dataset.state = 'unavailable';
     }
   } catch {
-    /* thumbnail is decorative */
+    thumb.dataset.state = 'unavailable';
   }
 }
 
 function scrollSelectedIntoView() {
-  listEl.querySelector('.row.selected')?.scrollIntoView({ block: 'nearest' });
+  const row = listEl.querySelector('.row.selected');
+  if (!row) return;
+
+  // `Element.scrollIntoView()` may choose the WebView document as an ancestor
+  // in WebKit even though the list is the intended scroller. That shifts the
+  // entire fixed panel upward and visually drops the header/filters. Adjust
+  // only the list's own scroll position so chrome can never move.
+  const listRect = listEl.getBoundingClientRect();
+  const rowRect = row.getBoundingClientRect();
+  if (rowRect.top < listRect.top) {
+    listEl.scrollTop -= listRect.top - rowRect.top;
+  } else if (rowRect.bottom > listRect.bottom) {
+    listEl.scrollTop += rowRect.bottom - listRect.bottom;
+  }
 }
 
-function showToast(message) {
-  toastEl.textContent = message;
-  toastEl.hidden = false;
-  footerHintEl.hidden = true;
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => {
-    toastEl.hidden = true;
-    syncChrome();
-  }, 2200);
+function enqueueMutation(task) {
+  const run = mutationQueue.then(task, task);
+  mutationQueue = run.catch((err) => diag('mutation:failed', err));
+  return run;
 }
+
+function reducedMotion() {
+  return window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches ?? false;
+}
+
+function dismissFeedback({ animate = false } = {}) {
+  clearTimeout(toastTimer);
+  clearTimeout(toastExitTimer);
+  toastTimer = null;
+  toastExitTimer = null;
+  const generation = ++toastGeneration;
+
+  const finish = () => {
+    if (generation !== toastGeneration) return;
+    toastEl.classList.remove('is-leaving');
+    panelFeedbackEl.hidden = true;
+    toastEl.hidden = true;
+    toastMessageEl.textContent = '';
+    toastUndoEl.hidden = true;
+    toastUndoEl.disabled = false;
+  };
+
+  if (animate && !panelFeedbackEl.hidden && !reducedMotion()) {
+    toastEl.classList.add('is-leaving');
+    toastExitTimer = setTimeout(finish, TOAST_EXIT_MS);
+  } else {
+    finish();
+  }
+}
+
+function presentToast(
+  message,
+  { duration = PIN_TOAST_MS, undo = false, kind = 'success' } = {}
+) {
+  clearTimeout(toastTimer);
+  clearTimeout(toastExitTimer);
+  toastEl.classList.remove('is-leaving');
+  const generation = ++toastGeneration;
+  toastEl.dataset.kind = kind;
+  const icon =
+    kind === 'delete'
+      ? TRASH
+      : kind === 'error'
+        ? ALERT
+        : kind === 'pin'
+          ? PIN
+          : kind === 'unpin'
+            ? PIN_TOGGLE
+            : CHECK;
+  toastIconEl.replaceChildren(createIcon(icon));
+  toastMessageEl.textContent = message;
+  toastUndoEl.hidden = !undo;
+  toastUndoEl.disabled = false;
+  toastEl.hidden = false;
+  panelFeedbackEl.hidden = false;
+  // Clear then insert in a microtask so even identical consecutive feedback
+  // produces a fresh live-region mutation while the announcer stays mounted.
+  feedbackAnnouncerEl.textContent = '';
+  queueMicrotask(() => {
+    if (generation === toastGeneration) feedbackAnnouncerEl.textContent = message;
+  });
+
+  toastTimer = setTimeout(() => {
+    if (generation !== toastGeneration) return;
+    const pending = undo ? activeDelete : null;
+    if (pending) {
+      activeDelete = null;
+      enqueueMutation(async () => {
+        try {
+          await api.commitDelete(pending.token);
+        } catch (err) {
+          // A stale expiry is harmless (a newer delete or Undo owns the only
+          // receipt); keep technical detail out of the user-facing live region.
+          diag('delete:commit-failed', err);
+        }
+      });
+    }
+    dismissFeedback({ animate: true });
+    scheduleFeedbackDrain();
+  }, duration);
+}
+
+function scheduleFeedbackDrain() {
+  if (feedbackQueue.length === 0 || activeDelete) return;
+  const drain = () => {
+    if (activeDelete || feedbackQueue.length === 0) return;
+    const next = feedbackQueue.shift();
+    presentToast(next.message, next.options);
+  };
+  if (reducedMotion()) queueMicrotask(drain);
+  else setTimeout(drain, TOAST_EXIT_MS);
+}
+
+function deliverFeedback(message, options = {}) {
+  if (activeDelete) {
+    feedbackQueue.push({ message, options });
+    return;
+  }
+  presentToast(message, options);
+}
+
+async function finalizeActiveDelete() {
+  const pending = activeDelete;
+  if (!pending) return;
+  activeDelete = null;
+  dismissFeedback();
+  try {
+    await api.commitDelete(pending.token);
+  } catch (err) {
+    diag('delete:commit-failed', err);
+  }
+}
+
+/** General feedback waits behind an active five-second delete receipt. All
+ * callers share the serialized lane, so one toast is visible at a time without
+ * shortening the user's Undo protection. */
+function showToast(message, duration = PIN_TOAST_MS, kind = 'success') {
+  enqueueMutation(async () => {
+    deliverFeedback(message, { duration, kind });
+  });
+}
+
+function locateStateItem(id) {
+  for (const layer of ['pinned', 'history']) {
+    const index = state[layer].findIndex((item) => item.id === id);
+    if (index >= 0) return { layer, index, item: state[layer][index] };
+  }
+  return null;
+}
+
+function removeLocalItem(id) {
+  const location = locateStateItem(id);
+  if (!location) return null;
+  const layer = state[location.layer];
+  const before = layer[location.index - 1];
+  const after = layer[location.index + 1];
+  const [item] = state[location.layer].splice(location.index, 1);
+  return {
+    layer: location.layer,
+    index: location.index,
+    before: before ? { id: before.id, createdAt: before.createdAt } : null,
+    after: after ? { id: after.id, createdAt: after.createdAt } : null,
+    item: { ...item },
+  };
+}
+
+function restoreSnapshot(target, snapshot) {
+  if (!snapshot) return;
+  if ([...(target.pinned ?? []), ...(target.history ?? [])].some((item) => item.id === snapshot.item.id)) {
+    return;
+  }
+  const layer = target[snapshot.layer];
+  const order = snapshot.item.pinnedOrder ?? Number.MAX_SAFE_INTEGER;
+  let index;
+  if (snapshot.layer === 'history') {
+    // Equal-millisecond captures retain their exact stable order, but only
+    // while the anchor itself has not been re-captured and moved. Otherwise
+    // createdAt remains the authoritative chronological order.
+    const stableAfter =
+      snapshot.after?.createdAt === snapshot.item.createdAt
+        ? layer.findIndex(
+            (item) => item.id === snapshot.after.id && item.createdAt === snapshot.after.createdAt
+          )
+        : -1;
+    const stableBefore =
+      snapshot.before?.createdAt === snapshot.item.createdAt
+        ? layer.findIndex(
+            (item) => item.id === snapshot.before.id && item.createdAt === snapshot.before.createdAt
+          )
+        : -1;
+    index = stableAfter >= 0 ? stableAfter : stableBefore >= 0 ? stableBefore + 1 : -1;
+    if (index < 0) index = layer.findIndex((item) => item.createdAt < snapshot.item.createdAt);
+  } else {
+    index = layer.findIndex((item) => (item.pinnedOrder ?? Number.MAX_SAFE_INTEGER) > order);
+  }
+  if (index < 0) index = Math.min(snapshot.index, layer.length);
+  layer.splice(index, 0, { ...snapshot.item });
+}
+
+function restoreLocalItem(snapshot) {
+  restoreSnapshot(state, snapshot);
+}
+
+function focusRowAction(id, selector) {
+  [...listEl.querySelectorAll('.row')]
+    .find((row) => row.dataset.id === id)
+    ?.querySelector(selector)
+    ?.focus({ preventScroll: true });
+}
+
+function togglePinItem(id, { restoreFocus = false } = {}) {
+  const location = locateStateItem(id);
+  if (!location) return;
+  const previous = location.item.isPinned;
+  const next = !previous;
+  const generation = ++pinMutationGeneration;
+  optimisticPins.set(id, { generation, value: next });
+  location.item.isPinned = next;
+  render();
+  if (restoreFocus) focusRowAction(id, '.pin-btn');
+
+  enqueueMutation(async () => {
+    try {
+      const result = await api.togglePin(id, next);
+      const isPinned = typeof result === 'boolean' ? result : next;
+      if (optimisticPins.get(id)?.generation === generation) optimisticPins.delete(id);
+      await refresh();
+      if (restoreFocus) focusRowAction(id, '.pin-btn');
+      deliverFeedback(isPinned ? 'تم تثبيت العنصر' : 'تم إلغاء تثبيت العنصر', {
+        duration: PIN_TOAST_MS,
+        kind: isPinned ? 'pin' : 'unpin',
+      });
+    } catch (err) {
+      if (optimisticPins.get(id)?.generation === generation) optimisticPins.delete(id);
+      const current = locateStateItem(id);
+      if (current) current.item.isPinned = previous;
+      render();
+      if (restoreFocus) focusRowAction(id, '.pin-btn');
+      deliverFeedback(String(err), { duration: PIN_TOAST_MS, kind: 'error' });
+    }
+  });
+}
+
+function deleteItem(id, { restoreFocus = false } = {}) {
+  if (!id || optimisticDeletedIds.has(id)) return;
+  const visibleIndex = visible.findIndex((item) => item.id === id);
+  const snapshot = removeLocalItem(id);
+  if (!snapshot) return;
+
+  optimisticDeletedIds.add(id);
+  if (selectedId === id) {
+    selectedId = visible[visibleIndex + 1]?.id ?? visible[visibleIndex - 1]?.id ?? null;
+  }
+  render();
+  if (restoreFocus) searchEl.focus({ preventScroll: true });
+
+  enqueueMutation(async () => {
+    await finalizeActiveDelete();
+    try {
+      const receipt = await api.deleteItem(id);
+      if (!receipt?.token) throw new Error('تعذّر إنشاء مهلة التراجع');
+      optimisticDeletedIds.delete(id);
+      await refresh();
+      activeDelete = { token: receipt.token, snapshot };
+      presentToast('تم حذف العنصر', {
+        duration: DELETE_TOAST_MS,
+        undo: true,
+        kind: 'delete',
+      });
+      if (restoreFocus) toastUndoEl.focus({ preventScroll: true });
+    } catch (err) {
+      optimisticDeletedIds.delete(id);
+      restoreLocalItem(snapshot);
+      selectedId = id;
+      render();
+      presentToast(String(err), { duration: PIN_TOAST_MS, kind: 'error' });
+    }
+  });
+}
+
+function undoLastDelete() {
+  const pending = activeDelete;
+  if (!pending) return;
+  activeDelete = null;
+  dismissFeedback();
+
+  // Paint the exact receipt position immediately; native storage remains the
+  // authority and the refresh below verifies the durable restoration.
+  restoreLocalItem(pending.snapshot);
+  optimisticRestores.set(pending.snapshot.item.id, pending.snapshot);
+  selectedId = pending.snapshot.item.id;
+  render();
+  // Undo removes its own focused button from the accessibility tree. Return
+  // focus to the persistent combobox, whose active descendant now points at
+  // the restored selected row, instead of leaving focus on a hidden element.
+  searchEl.focus({ preventScroll: true });
+  scheduleFeedbackDrain();
+
+  enqueueMutation(async () => {
+    try {
+      await api.undoDelete(pending.token);
+      await refresh();
+      optimisticRestores.delete(pending.snapshot.item.id);
+    } catch (err) {
+      optimisticRestores.delete(pending.snapshot.item.id);
+      removeLocalItem(pending.snapshot.item.id);
+      render();
+      presentToast(String(err), { duration: PIN_TOAST_MS, kind: 'error' });
+    }
+  });
+}
+
+toastUndoEl.addEventListener('click', undoLastDelete);
 
 // ─── Actions ──────────────────────────────────────────────────────────────
 
 function paste(id, plain) {
   if (!id) return;
-  api.pasteItem(id, plain).catch((err) => showToast(String(err)));
-  if (!state.axTrusted) {
-    showToast('نُسخ إلى الحافظة — الصقه بـ ⌘V');
-  }
+  api
+    .pasteItem(id, plain)
+    .then((pasted) => {
+      if (!pasted) showToast('نُسخ إلى الحافظة — الصقه بـ ⌘V');
+    })
+    .catch((err) => showToast(String(err), PIN_TOAST_MS, 'error'));
 }
 
 function moveSelection(delta) {
   if (visible.length === 0) return;
   const index = visible.findIndex((i) => i.id === selectedId);
-  const next = Math.min(visible.length - 1, Math.max(0, index + delta));
+  const next =
+    index < 0
+      ? delta < 0
+        ? visible.length - 1
+        : 0
+      : Math.min(visible.length - 1, Math.max(0, index + delta));
   selectedId = visible[next].id;
   render();
 }
 
 function setFilter(next) {
-  if (filter === next) return;
+  const segments = [...filtersEl.querySelectorAll('.segment')];
+  if (!segments.some((segment) => segment.dataset.filter === next)) return;
+  const changed = filter !== next;
   filter = next;
-  for (const seg of filtersEl.querySelectorAll('.segment')) {
+  for (const seg of segments) {
     const on = seg.dataset.filter === next;
     seg.classList.toggle('is-active', on);
     seg.setAttribute('aria-selected', String(on));
+    seg.tabIndex = on ? 0 : -1;
   }
-  render();
+  if (changed) render();
 }
 
 // Bumped on every refresh() call so a slower in-flight request can never
@@ -393,7 +940,19 @@ async function refresh({ retry = false } = {}) {
     try {
       const next = await api.getState();
       if (token !== refreshToken) return 'superseded'; // a newer refresh already won
-      state = next;
+      // Keep local, immediately-painted mutations stable while their serialized
+      // native commands are still in flight. The authoritative refresh after
+      // each command clears these overlays.
+      state = {
+        ...next,
+        pinned: (next.pinned ?? []).filter((item) => !optimisticDeletedIds.has(item.id)),
+        history: (next.history ?? []).filter((item) => !optimisticDeletedIds.has(item.id)),
+      };
+      for (const item of [...state.pinned, ...state.history]) {
+        const optimistic = optimisticPins.get(item.id);
+        if (optimistic) item.isPinned = optimistic.value;
+      }
+      for (const snapshot of optimisticRestores.values()) restoreSnapshot(state, snapshot);
       phase = 'ready';
       diag('refresh:ok', {
         items: (next?.pinned?.length ?? 0) + (next?.history?.length ?? 0),
@@ -481,10 +1040,24 @@ async function recover() {
 
 // ─── Chrome actions ───────────────────────────────────────────────────────
 
+// Tauri's declarative drag-region listener is unreliable after this Webview
+// window is promoted to a non-activating NSPanel. Start the native drag
+// explicitly from the painted header instead. Interactive descendants remain
+// ordinary controls, and no resize API or NSPanel style flag is touched.
+panelHeaderEl.addEventListener('mousedown', (event) => {
+  if (event.button !== 0 || event.target.closest('button, input, select, textarea, a')) return;
+  const nativeWindow = window.__TAURI__?.window;
+  nativeWindow
+    ?.getCurrentWindow()
+    .startDragging()
+    .catch((err) => diag('panel:drag-failed', err));
+});
+
 settingsBtn.addEventListener('click', () => api.openSettings());
 closeBtn.addEventListener('click', () => api.hidePanel());
 searchClearEl.addEventListener('click', () => {
   query = '';
+  selectedId = null;
   searchEl.value = '';
   searchEl.focus();
   render();
@@ -494,9 +1067,100 @@ filtersEl.addEventListener('click', (e) => {
   if (seg) setFilter(seg.dataset.filter);
 });
 
+filtersEl.addEventListener('keydown', (e) => {
+  const segments = [...filtersEl.querySelectorAll('.segment')];
+  const current = e.target.closest?.('.segment');
+  const index = segments.indexOf(current);
+  if (index < 0) return;
+
+  let nextIndex = null;
+  // The tablist is RTL: ArrowLeft advances through the visually leftward
+  // sequence, while ArrowRight returns toward the right edge.
+  if (e.key === 'ArrowLeft') nextIndex = (index + 1) % segments.length;
+  else if (e.key === 'ArrowRight') nextIndex = (index - 1 + segments.length) % segments.length;
+  else if (e.key === 'Home') nextIndex = 0;
+  else if (e.key === 'End') nextIndex = segments.length - 1;
+
+  if (nextIndex === null) return;
+  e.preventDefault();
+  e.stopPropagation();
+  const next = segments[nextIndex];
+  setFilter(next.dataset.filter);
+  next.focus();
+});
+
 // ─── Keyboard (full control — mouse optional) ─────────────────────────────
 
 window.addEventListener('keydown', (e) => {
+  if (e.metaKey && (e.code === 'Comma' || e.key === ',')) {
+    e.preventDefault();
+    api.openSettings();
+    return;
+  }
+  if (e.metaKey && e.code === 'KeyF') {
+    e.preventDefault();
+    searchEl.focus();
+    searchEl.select();
+    return;
+  }
+  if (e.metaKey && e.code === 'KeyR') {
+    e.preventDefault();
+    recover();
+    return;
+  }
+  if (
+    e.metaKey &&
+    !e.altKey &&
+    !e.ctrlKey &&
+    !e.shiftKey &&
+    e.code === 'KeyZ' &&
+    activeDelete
+  ) {
+    e.preventDefault();
+    undoLastDelete();
+    return;
+  }
+  if (
+    !query &&
+    selectedId &&
+    e.altKey &&
+    !e.metaKey &&
+    !e.ctrlKey &&
+    !e.shiftKey &&
+    e.code === 'KeyP'
+  ) {
+    e.preventDefault();
+    togglePinItem(selectedId);
+    return;
+  }
+  if (e.metaKey && !e.shiftKey && !e.altKey && !e.ctrlKey && e.key === 'Backspace') {
+    // A text field (the search input) owns ⌘⌫ for native delete-to-start while
+    // it contains a query. With an empty query, the contextual selected-row
+    // delete is genuinely enabled even while search retains DOM focus.
+    if (query || (isWritable(document.activeElement) && searchEl.value.length > 0)) return;
+    e.preventDefault();
+    if (selectedId) deleteItem(selectedId, { restoreFocus: true });
+    return;
+  }
+
+  // Buttons and the roving filter tabs own their native activation keys. The
+  // search input is the one exception: Arrow/Page/Enter intentionally operate
+  // the active grid row while its text caret keeps DOM focus.
+  if (isIndependentControl(e.target)) {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      if (query) {
+        query = '';
+        selectedId = null;
+        searchEl.value = '';
+        render();
+      } else {
+        api.hidePanel();
+      }
+    }
+    return;
+  }
+
   switch (e.key) {
     case 'ArrowDown':
       e.preventDefault();
@@ -522,6 +1186,7 @@ window.addEventListener('keydown', (e) => {
       e.preventDefault();
       if (query) {
         query = '';
+        selectedId = null;
         searchEl.value = '';
         render();
       } else {
@@ -529,50 +1194,36 @@ window.addEventListener('keydown', (e) => {
       }
       return;
   }
-  if (e.altKey && e.code === 'KeyP') {
-    e.preventDefault();
-    if (selectedId) api.togglePin(selectedId);
-    return;
-  }
-  if (e.metaKey && e.code === 'KeyF') {
-    e.preventDefault();
-    searchEl.focus();
-    searchEl.select();
-    return;
-  }
-  if (e.metaKey && e.code === 'KeyR') {
-    e.preventDefault();
-    recover();
-    return;
-  }
-  if (e.metaKey && e.key === 'Backspace') {
-    // A text field (the search input) owns ⌘⌫ for its own native editing —
-    // delete-to-start-of-line, or a no-op when empty. Item deletion must
-    // never steal that away while the user is typing.
-    if (isWritable(document.activeElement)) return;
-    e.preventDefault();
-    if (selectedId) {
-      // Keep the selection at the same list position instead of snapping
-      // back to the first row after the refresh.
-      const index = visible.findIndex((i) => i.id === selectedId);
-      const doomed = selectedId;
-      selectedId = visible[index + 1]?.id ?? visible[index - 1]?.id ?? null;
-      api.deleteItem(doomed);
+  if (e.metaKey && !e.altKey && !e.ctrlKey && !e.shiftKey && e.code === 'KeyC') {
+    // Search mode deliberately exposes only navigation, Choose and Clear.
+    // Do not leave an undisclosed row-copy action live behind that toolbar.
+    if (query) return;
+    // Preserve native copy for an actual text selection in the search field.
+    // With no selection, ⌘C remains Raff's fast copy-item shortcut even though
+    // the panel deliberately keeps search focused while it is open.
+    if (isWritable(document.activeElement)) {
+      const start = searchEl.selectionStart;
+      const end = searchEl.selectionEnd;
+      if (start !== null && end !== null && start !== end) return;
     }
-    return;
-  }
-  if (e.metaKey && e.code === 'KeyC') {
     e.preventDefault();
     if (selectedId) {
       api
         .copyItem(selectedId)
         .then(() => showToast('نُسخ إلى الحافظة'))
-        .catch((err) => showToast(String(err)));
+        .catch((err) => showToast(String(err), PIN_TOAST_MS, 'error'));
     }
     return;
   }
-  // Any printable key goes to the search field.
-  if (!e.metaKey && !e.ctrlKey && document.activeElement !== searchEl) {
+  // Route actual printable input only. Modifier keys, navigation keys, dead
+  // keys and IME composition must keep their native macOS behaviour.
+  if (
+    !e.metaKey &&
+    !e.ctrlKey &&
+    !e.isComposing &&
+    e.key.length === 1 &&
+    !isWritable(document.activeElement)
+  ) {
     searchEl.focus();
   }
 });
@@ -581,6 +1232,12 @@ searchEl.addEventListener('input', () => {
   query = searchEl.value;
   render();
 });
+
+// A focused row action or filter owns Enter/arrow keys natively. Refresh the
+// legend on focus transitions so it never advertises those keys while the
+// browser correctly routes them to that control.
+window.addEventListener('focusin', syncShortcutBar);
+window.addEventListener('focusout', () => queueMicrotask(syncShortcutBar));
 
 // ─── Events from Rust ─────────────────────────────────────────────────────
 
@@ -617,11 +1274,6 @@ window.addEventListener('focus', () => {
   refresh();
 });
 
-// Keep relative times fresh while the panel is open.
-setInterval(() => {
-  if (document.visibilityState === 'visible' && visible.length > 0) render();
-}, 30000);
-
 // The native WKWebView page menu is English and offers a technical reload that
 // has no place in an Arabic panel. But it is suppressed ONLY over inert areas:
 // inside a writable field, or when text is selected, WebKit shows the editing
@@ -632,6 +1284,12 @@ function isWritable(node) {
   // global that only exists inside a browser realm.
   const el = node?.nodeType === 1 ? node : node?.parentElement;
   return !!el?.closest('input, textarea, [contenteditable=""], [contenteditable="true"]');
+}
+
+function isIndependentControl(node) {
+  const el = node?.nodeType === 1 ? node : node?.parentElement;
+  const control = el?.closest('button, select, textarea, [role="tab"]');
+  return Boolean(control && control !== searchEl);
 }
 
 window.addEventListener('contextmenu', (e) => {

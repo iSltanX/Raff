@@ -1,13 +1,16 @@
 //! Thin macOS boundary: NSPasteboard, frontmost app, ⌘V synthesis, Accessibility.
 //!
-//! Everything here goes through the audited safe bindings of `objc2-app-kit` /
-//! `core-graphics`. The only `unsafe` in the whole crate is the Accessibility
-//! (AX) C FFI at the bottom of this file, each call documented with a SAFETY note.
+//! Everything here goes through audited `objc2-app-kit` / `core-graphics`
+//! bindings. The two unavoidable `unsafe` boundaries (an AppKit dictionary's
+//! erased value type and the Accessibility C FFI) each carry a local SAFETY
+//! argument.
 
+use objc2::runtime::AnyObject;
 use objc2_app_kit::{
-    NSApplicationActivationOptions, NSPasteboard, NSRunningApplication, NSWorkspace,
+    NSApplicationActivationOptions, NSBitmapImageFileType, NSBitmapImageRep,
+    NSBitmapImageRepPropertyKey, NSPasteboard, NSRunningApplication, NSWorkspace,
 };
-use objc2_foundation::{NSData, NSString};
+use objc2_foundation::{NSData, NSDictionary, NSString};
 
 /// Pasteboard flags set by password managers and other sensitive sources.
 /// Content carrying these must never be stored (see plan §5).
@@ -89,28 +92,30 @@ pub fn read_clip() -> RawClip {
 }
 
 /// Writes the given representations to the general pasteboard and returns the
-/// new change count (so the monitor can skip our own write).
+/// new change count only when at least one requested representation was
+/// accepted (so callers never report copy/paste success for a rejected write).
 pub fn write_clip(
     text: Option<&str>,
     html: Option<&str>,
     rtf: Option<&[u8]>,
     png: Option<&[u8]>,
-) -> isize {
+) -> Option<isize> {
     let pb = NSPasteboard::generalPasteboard();
     pb.clearContents();
+    let mut accepted = false;
     if let Some(t) = text {
-        pb.setString_forType(&NSString::from_str(t), &NSString::from_str(TYPE_TEXT));
+        accepted |= pb.setString_forType(&NSString::from_str(t), &NSString::from_str(TYPE_TEXT));
     }
     if let Some(h) = html {
-        pb.setString_forType(&NSString::from_str(h), &NSString::from_str(TYPE_HTML));
+        accepted |= pb.setString_forType(&NSString::from_str(h), &NSString::from_str(TYPE_HTML));
     }
     if let Some(r) = rtf {
-        pb.setData_forType(Some(&NSData::with_bytes(r)), &NSString::from_str(TYPE_RTF));
+        accepted |= pb.setData_forType(Some(&NSData::with_bytes(r)), &NSString::from_str(TYPE_RTF));
     }
     if let Some(p) = png {
-        pb.setData_forType(Some(&NSData::with_bytes(p)), &NSString::from_str(TYPE_PNG));
+        accepted |= pb.setData_forType(Some(&NSData::with_bytes(p)), &NSString::from_str(TYPE_PNG));
     }
-    pb.changeCount()
+    accepted.then(|| pb.changeCount())
 }
 
 pub fn frontmost_app() -> FrontApp {
@@ -131,14 +136,16 @@ pub fn frontmost_app() -> FrontApp {
     }
 }
 
-/// The Finder icon of an installed application, as TIFF bytes.
+/// The Finder icon of an installed application, normalized to PNG bytes.
 ///
-/// Figma «08 — Product Screens» puts the real source-app icon in an 18×18 chip
-/// at the end of every clipboard row, so the row needs more than the app's
-/// name. Resolved through the documented `NSWorkspace` pair
+/// Raff renders the real source-app icon at 20pt inside a compact 30pt slot at
+/// the end of every clipboard row. Resolved through the documented `NSWorkspace` pair
 /// (`URLForApplicationWithBundleIdentifier` → `iconForFile`); returns `None`
-/// when the bundle id is unknown or not installed. AppKit — main thread only.
-pub fn app_icon_tiff(bundle_id: &str) -> Option<Vec<u8>> {
+/// when the bundle id is unknown or not installed. AppKit owns the TIFF → PNG
+/// conversion because some modern app icons (including OpenAI's) use TIFF
+/// representations the Rust `image` decoder cannot reliably read. AppKit —
+/// main thread only.
+pub fn app_icon_png(bundle_id: &str) -> Option<Vec<u8>> {
     if bundle_id.is_empty() {
         return None;
     }
@@ -146,7 +153,16 @@ pub fn app_icon_tiff(bundle_id: &str) -> Option<Vec<u8>> {
     let url = ws.URLForApplicationWithBundleIdentifier(&NSString::from_str(bundle_id))?;
     let path = url.path()?;
     let image = ws.iconForFile(&path);
-    image.TIFFRepresentation().map(|d| d.to_vec())
+    let tiff = image.TIFFRepresentation()?;
+    let bitmap = NSBitmapImageRep::imageRepWithData(&tiff)?;
+    let properties = NSDictionary::<NSBitmapImageRepPropertyKey, AnyObject>::dictionary();
+    // SAFETY: AppKit requires an NSDictionary whose values match known image
+    // property keys. The dictionary is empty, so it cannot contain a value of
+    // the wrong type and merely requests the default PNG representation.
+    let png = unsafe {
+        bitmap.representationUsingType_properties(NSBitmapImageFileType::PNG, &properties)
+    }?;
+    Some(png.to_vec())
 }
 
 /// Ordinary (Dock-visible) running apps, for the exclusion-list picker.
@@ -201,33 +217,6 @@ pub fn send_cmd_v() -> bool {
     true
 }
 
-/// Applies an .icns file as the app bundle's Finder icon via
-/// `NSWorkspace.setIcon(_:forFile:options:)` — the official, documented
-/// custom-icon mechanism (same as pasting an icon in Finder's Get Info).
-/// Persistent, reversible, and does not touch LaunchServices or caches.
-/// Returns false when not running from an .app bundle (dev mode) or on error.
-pub fn set_bundle_icon(icns_path: &std::path::Path) -> bool {
-    use objc2::AllocAnyThread;
-    use objc2_app_kit::{NSImage, NSWorkspace, NSWorkspaceIconCreationOptions};
-
-    let Some(bundle) = app_bundle_path() else {
-        return false; // dev mode: bare binary, no bundle to decorate
-    };
-    let Some(icns) = icns_path.to_str() else {
-        return false;
-    };
-    let Some(image) = NSImage::initWithContentsOfFile(NSImage::alloc(), &NSString::from_str(icns))
-    else {
-        eprintln!("raff: could not load icon image: {icns}");
-        return false;
-    };
-    NSWorkspace::sharedWorkspace().setIcon_forFile_options(
-        Some(&image),
-        &NSString::from_str(&bundle.to_string_lossy()),
-        NSWorkspaceIconCreationOptions(0),
-    )
-}
-
 /// The .app bundle containing the running executable, if any
 /// (…/Raff.app/Contents/MacOS/raff → …/Raff.app). `None` in dev mode.
 pub fn app_bundle_path() -> Option<std::path::PathBuf> {
@@ -244,48 +233,24 @@ pub fn app_bundle_path() -> Option<std::path::PathBuf> {
 /// and exit (i.e. no relaunch at all). `open` without `-n` never creates a
 /// second process: if the cap is ever hit with the old instance alive, it
 /// merely activates it — no duplicate tray, no relaunch loop. `--settings`
-/// is forwarded so the fresh instance reopens the window the user was in.
-pub fn spawn_relauncher(bundle: &std::path::Path, pid: u32) {
+/// is forwarded so the fresh instance reopens the settings surface.
+pub fn spawn_relauncher(bundle: &std::path::Path, pid: u32) -> Result<(), String> {
     use std::process::{Command, Stdio};
     // The bundle path travels as "$0" (never interpolated into the script).
     let script = format!(
         "i=0; while kill -0 {pid} 2>/dev/null && [ $i -lt 200 ]; do sleep 0.1; i=$((i+1)); done; \
          exec /usr/bin/open \"$0\" --args --settings"
     );
-    let result = Command::new("/bin/sh")
+    Command::new("/bin/sh")
         .arg("-c")
         .arg(script)
         .arg(bundle)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
-        .spawn();
-    if let Err(err) = result {
-        eprintln!("raff: relauncher spawn failed: {err}");
-    }
-}
-
-/// Whether the app's effective appearance is Dark, read from
-/// `NSApp.effectiveAppearance` — the authoritative, in-process signal that is
-/// already current by the time Tauri emits its `ThemeChanged` event (that event
-/// is derived from this same appearance). Used to pick the Automatic app-icon
-/// variant while following the system. Must be called on the main thread.
-pub fn app_appearance_is_dark() -> bool {
-    use objc2::MainThreadMarker;
-    use objc2_app_kit::{NSAppearanceNameAqua, NSAppearanceNameDarkAqua, NSApplication};
-    use objc2_foundation::NSArray;
-
-    let Some(mtm) = MainThreadMarker::new() else {
-        return false;
-    };
-    let appearance = NSApplication::sharedApplication(mtm).effectiveAppearance();
-    // SAFETY: the two names are constant NSString globals owned by AppKit.
-    let (aqua, dark) = unsafe { (NSAppearanceNameAqua, NSAppearanceNameDarkAqua) };
-    let names = NSArray::from_slice(&[aqua, dark]);
-    match appearance.bestMatchFromAppearancesWithNames(&names) {
-        Some(best) => *best == *dark,
-        None => false,
-    }
+        .spawn()
+        .map(|_| ())
+        .map_err(|err| format!("تعذّر تشغيل Raff بعد التحديث: {err}"))
 }
 
 /// The official Raff repository. Hardcoded on purpose: the About window's link

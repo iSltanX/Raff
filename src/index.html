@@ -5,12 +5,14 @@
   <title>رفّ</title>
   <script src="theme.js"></script>
   <link rel="stylesheet" href="tokens.css" />
+  <link rel="stylesheet" href="controls.css" />
   <link rel="stylesheet" href="panel.css" />
 </head>
 <body>
-  <!-- Figma «08 — Product Screens» → macOS-Panel-Shell (2:7684), 360 × 580. -->
+  <!-- Figma establishes the visual language; production is optically sized
+       at 560 × 640 so real clipboard content remains scannable on macOS. -->
   <main class="panel" id="panel">
-    <header class="panel-header">
+    <header class="panel-header" id="panel-header">
       <!-- Window Controls/Utility (2:7686). Physically left, as on every macOS
            window — the traffic lights never mirror in RTL. -->
       <div class="window-controls">
@@ -31,7 +33,7 @@
           id="settings-btn"
           title="الإعدادات"
           aria-label="فتح إعدادات رفّ"
-          tabindex="-1"
+          aria-keyshortcuts="Meta+,"
         ></button>
       </div>
     </header>
@@ -48,6 +50,11 @@
           autocorrect="off"
           spellcheck="false"
           aria-label="ابحث في رفّك"
+          role="combobox"
+          aria-autocomplete="list"
+          aria-haspopup="grid"
+          aria-controls="list"
+          aria-expanded="false"
         />
         <button
           type="button"
@@ -63,18 +70,60 @@
 
     <!-- Filters (2:7710). RTL reading order: الكل is the rightmost segment. -->
     <div class="filters" id="filters" role="tablist" aria-label="تصفية العناصر">
-      <button type="button" class="segment is-active" data-filter="all" role="tab" aria-selected="true" tabindex="-1">الكل</button>
-      <button type="button" class="segment" data-filter="text" role="tab" aria-selected="false" tabindex="-1">نص</button>
-      <button type="button" class="segment" data-filter="link" role="tab" aria-selected="false" tabindex="-1">روابط</button>
-      <button type="button" class="segment" data-filter="image" role="tab" aria-selected="false" tabindex="-1">صور</button>
-      <button type="button" class="segment" data-filter="pinned" role="tab" aria-selected="false" tabindex="-1">مثبّت</button>
+      <button type="button" class="segment is-active" data-filter="all" role="tab" aria-selected="true" aria-controls="list" tabindex="0">الكل</button>
+      <button type="button" class="segment" data-filter="text" role="tab" aria-selected="false" aria-controls="list" tabindex="-1">نص</button>
+      <button type="button" class="segment" data-filter="link" role="tab" aria-selected="false" aria-controls="list" tabindex="-1">روابط</button>
+      <button type="button" class="segment" data-filter="image" role="tab" aria-selected="false" aria-controls="list" tabindex="-1">صور</button>
+      <button type="button" class="segment" data-filter="pinned" role="tab" aria-selected="false" aria-controls="list" tabindex="-1">مثبّت</button>
     </div>
 
-    <div class="items-list" id="list" role="listbox" aria-label="عناصر الحافظة"></div>
+    <div
+      class="items-list"
+      id="list"
+      role="region"
+      aria-label="حالة عناصر الحافظة"
+      aria-busy="true"
+    ></div>
+
+    <!-- Always mounted: messages inserted into a hidden toast are not
+         reliably announced by VoiceOver because that subtree is absent from
+         the accessibility tree at mutation time. -->
+    <span
+      class="sr-only"
+      id="feedback-announcer"
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+    ></span>
+
+    <div class="panel-feedback" id="panel-feedback" hidden>
+      <div
+        class="toast"
+        id="toast"
+        role="group"
+        aria-label="رسالة حالة"
+        hidden
+      >
+        <span class="toast-icon" id="toast-icon" aria-hidden="true"></span>
+        <span class="toast-message" id="toast-message"></span>
+        <button
+          type="button"
+          class="toast-undo"
+          id="toast-undo"
+          aria-label="تراجع"
+          aria-keyshortcuts="Meta+Z"
+          title="تراجع (⌘Z)"
+          hidden
+        >تراجع</button>
+      </div>
+    </div>
 
     <footer class="panel-footer">
-      <span class="footer-hint" id="footer-hint"><kbd>⌘V</kbd> للصق الفوري</span>
-      <span class="toast" id="toast" hidden></span>
+      <nav
+        class="footer-shortcuts"
+        id="footer-hint"
+        aria-label="اختصارات السياق الحالي"
+      ></nav>
     </footer>
   </main>
   <script type="module" src="js/panel.js"></script>

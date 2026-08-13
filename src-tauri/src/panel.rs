@@ -2,30 +2,66 @@
 //! above everything, joins all Spaces, never steals focus from the app the
 //! user is working in, and hides when it loses key status.
 
-use tauri::{AppHandle, Emitter, LogicalPosition, Manager};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Mutex, OnceLock};
+use std::time::Duration;
+
+use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize};
 use tauri_nspanel::cocoa::appkit::NSWindowCollectionBehavior;
 use tauri_nspanel::{panel_delegate, ManagerExt, WebviewWindowExt};
 
+use crate::storage::PanelPlacement;
 use crate::{macos, AppState};
 
 pub const PANEL_LABEL: &str = "panel";
-/// Figma «08 — Product Screens»: macOS-Panel-Shell is 360 × 580.
-/// MUST stay in sync with `app.windows[0].width` in tauri.conf.json — this
-/// constant is what centres the panel horizontally.
-const PANEL_WIDTH: f64 = 360.0;
+/// Production width after optical QA at normal macOS scale. The 360px Figma
+/// frame documents hierarchy, not a usable physical width for real clipboard
+/// content. MUST stay in sync with `app.windows[0].width` in tauri.conf.json.
+const PANEL_WIDTH: f64 = 560.0;
+const PANEL_HEIGHT: f64 = 640.0;
+const PANEL_EDGE_MARGIN: f64 = 12.0;
 /// NSWindowStyleMaskNonActivatingPanel — the panel can become key (receive
 /// keyboard) without activating the app that owns it.
 const STYLE_MASK_NON_ACTIVATING_PANEL: i32 = 1 << 7;
 /// Just above NSMainMenuWindowLevel (24), like Spotlight.
 const PANEL_LEVEL: i32 = 25;
 
+// Ignore startup movement events until the panel has received its deliberate
+// first position. A short generation-based debounce keeps live dragging fluid
+// without rewriting the placement file for every mouse-move event.
+static PLACEMENT_READY: AtomicBool = AtomicBool::new(false);
+static PLACEMENT_DEBOUNCE: OnceLock<Mutex<Option<std::sync::mpsc::Sender<()>>>> = OnceLock::new();
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct Rect {
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+}
+
+fn clamp_origin(origin: (f64, f64), window: (f64, f64), area: Rect, margin: f64) -> (f64, f64) {
+    let min_x = area.x + margin;
+    let min_y = area.y + margin;
+    let max_x = (area.x + area.width - window.0 - margin).max(min_x);
+    let max_y = (area.y + area.height - window.1 - margin).max(min_y);
+    (origin.0.clamp(min_x, max_x), origin.1.clamp(min_y, max_y))
+}
+
+fn centered_origin(window: (f64, f64), area: Rect) -> (f64, f64) {
+    (
+        area.x + (area.width - window.0) / 2.0,
+        area.y + (area.height - window.1) / 2.0,
+    )
+}
+
 pub fn init(app: &AppHandle) -> tauri::Result<()> {
     let window = app
         .get_webview_window(PANEL_LABEL)
         .expect("panel window missing from tauri.conf.json");
 
-    // No vibrancy: the Figma panel is an opaque warm surface
-    // (`#FAF8F6` light / `#1E1A17` dark) with a 1px border and a 16px radius,
+    // No vibrancy: the product panel is an opaque semantic surface with a
+    // 1px border and a 16px radius in both appearances,
     // all painted by CSS. A frosted NSVisualEffectView underneath would only
     // be visible at the corners, where its own radius never matched the CSS
     // shell's. The window stays `transparent: true` so the rounded CSS corners
@@ -42,19 +78,24 @@ pub fn init(app: &AppHandle) -> tauri::Result<()> {
     panel.set_hides_on_deactivate(false);
 
     let delegate = panel_delegate!(RaffPanelDelegate {
-        window_did_resign_key
+        window_did_resign_key,
+        window_did_move
     });
     let handle = app.clone();
     delegate.set_listener(Box::new(move |delegate_name: String| {
-        if delegate_name.as_str() == "window_did_resign_key" {
-            hide(&handle);
+        match delegate_name.as_str() {
+            "window_did_resign_key" => hide(&handle),
+            // Once a Tauri window becomes NSPanel, Tao's ordinary Moved event is
+            // not consistently forwarded. The native delegate is authoritative.
+            "window_did_move" => remember_position(&handle),
+            _ => {}
         }
     }));
     panel.set_delegate(delegate);
     Ok(())
 }
 
-/// Shows the panel centered on the screen the cursor is on (Spotlight-style),
+/// Shows the panel at its last safe origin, or centred on first launch, while
 /// remembering the frontmost app so paste can restore focus to it.
 /// Callable from any thread — NSPanel work runs on the main thread.
 pub fn show(app: &AppHandle) {
@@ -67,13 +108,43 @@ pub fn show(app: &AppHandle) {
         }
 
         if let Some(window) = handle.get_webview_window(PANEL_LABEL) {
-            position_on_cursor_screen(&handle, &window);
+            restore_or_center(&handle, &window);
+            PLACEMENT_READY.store(true, Ordering::Release);
         }
         if let Ok(panel) = handle.get_webview_panel(PANEL_LABEL) {
             panel.show();
         }
         let _ = handle.emit_to(PANEL_LABEL, "panel://shown", ());
     });
+}
+
+/// Records a user drag without changing any NSPanel flags or window sizing.
+/// Called by the NSPanel's native move delegate (and the ordinary Tauri event
+/// stream as a fallback) after WebKit/Tauri has moved the panel.
+pub fn remember_position(app: &AppHandle) {
+    if !PLACEMENT_READY.load(Ordering::Acquire) {
+        return;
+    }
+    let slot = PLACEMENT_DEBOUNCE.get_or_init(|| Mutex::new(None));
+    let mut slot = slot.lock().unwrap();
+    if slot.is_none() {
+        let (tx, rx) = std::sync::mpsc::channel();
+        *slot = Some(tx);
+        let handle = app.clone();
+        std::thread::spawn(move || loop {
+            match rx.recv_timeout(Duration::from_millis(180)) {
+                Ok(()) => continue,
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                    let main_handle = handle.clone();
+                    let _ = handle.run_on_main_thread(move || constrain_and_save(&main_handle));
+                }
+                Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => return,
+            }
+        });
+    }
+    if let Some(tx) = slot.as_ref() {
+        let _ = tx.send(());
+    }
 }
 
 pub fn hide(app: &AppHandle) {
@@ -97,20 +168,148 @@ pub fn toggle(app: &AppHandle) {
     });
 }
 
-fn position_on_cursor_screen(app: &AppHandle, window: &tauri::WebviewWindow) {
-    let monitor = app
-        .cursor_position()
-        .ok()
-        .and_then(|pos| app.monitor_from_point(pos.x, pos.y).ok().flatten())
+fn restore_or_center(app: &AppHandle, window: &tauri::WebviewWindow) {
+    let saved = {
+        let state = app.state::<AppState>();
+        let placement = state.store.lock().unwrap().load_panel_placement();
+        placement
+    };
+    let size = window
+        .outer_size()
+        .unwrap_or_else(|_| PhysicalSize::new(PANEL_WIDTH as u32, PANEL_HEIGHT as u32));
+    let window_size = (size.width as f64, size.height as f64);
+
+    // A saved window belongs to the monitor containing its centre. If that
+    // monitor no longer exists, use the cursor's screen and clamp there.
+    let saved_monitor = saved.and_then(|p| {
+        app.monitor_from_point(p.x + window_size.0 / 2.0, p.y + window_size.1 / 2.0)
+            .ok()
+            .flatten()
+    });
+    let monitor = saved_monitor
+        .or_else(|| {
+            app.cursor_position()
+                .ok()
+                .and_then(|pos| app.monitor_from_point(pos.x, pos.y).ok().flatten())
+        })
         .or_else(|| window.primary_monitor().ok().flatten());
     let Some(monitor) = monitor else {
         let _ = window.center();
         return;
     };
+    let work = monitor.work_area();
+    let area = Rect {
+        x: work.position.x as f64,
+        y: work.position.y as f64,
+        width: work.size.width as f64,
+        height: work.size.height as f64,
+    };
     let scale = monitor.scale_factor();
-    let size = monitor.size().to_logical::<f64>(scale);
-    let pos = monitor.position().to_logical::<f64>(scale);
-    let x = pos.x + (size.width - PANEL_WIDTH) / 2.0;
-    let y = pos.y + size.height * 0.22;
-    let _ = window.set_position(LogicalPosition::new(x, y));
+    let margin = PANEL_EDGE_MARGIN * scale;
+    let requested = saved
+        .map(|p| (p.x, p.y))
+        .unwrap_or_else(|| centered_origin(window_size, area));
+    let (x, y) = clamp_origin(requested, window_size, area, margin);
+    let _ = window.set_position(PhysicalPosition::new(x.round() as i32, y.round() as i32));
+}
+
+fn constrain_and_save(app: &AppHandle) {
+    let Some(window) = app.get_webview_window(PANEL_LABEL) else {
+        return;
+    };
+    let Ok(position) = window.outer_position() else {
+        return;
+    };
+    let size = window
+        .outer_size()
+        .unwrap_or_else(|_| PhysicalSize::new(PANEL_WIDTH as u32, PANEL_HEIGHT as u32));
+    let window_size = (size.width as f64, size.height as f64);
+
+    // Prefer the monitor under the window centre; when the user releases the
+    // pointer beyond a display edge, the pointer's monitor is the best target.
+    let monitor = app
+        .monitor_from_point(
+            position.x as f64 + window_size.0 / 2.0,
+            position.y as f64 + window_size.1 / 2.0,
+        )
+        .ok()
+        .flatten()
+        .or_else(|| {
+            app.cursor_position()
+                .ok()
+                .and_then(|cursor| app.monitor_from_point(cursor.x, cursor.y).ok().flatten())
+        })
+        .or_else(|| window.primary_monitor().ok().flatten());
+    let Some(monitor) = monitor else {
+        return;
+    };
+
+    let work = monitor.work_area();
+    let area = Rect {
+        x: work.position.x as f64,
+        y: work.position.y as f64,
+        width: work.size.width as f64,
+        height: work.size.height as f64,
+    };
+    let corrected = clamp_origin(
+        (position.x as f64, position.y as f64),
+        window_size,
+        area,
+        PANEL_EDGE_MARGIN * monitor.scale_factor(),
+    );
+    let corrected = PhysicalPosition::new(corrected.0.round() as i32, corrected.1.round() as i32);
+    if corrected != position {
+        let _ = window.set_position(corrected);
+    }
+
+    let state = app.state::<AppState>();
+    let store = state.store.lock().unwrap();
+    store.save_panel_placement(PanelPlacement {
+        x: corrected.x as f64,
+        y: corrected.y as f64,
+    });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn centers_first_position_in_visible_area() {
+        let area = Rect {
+            x: 0.0,
+            y: 25.0,
+            width: 1440.0,
+            height: 875.0,
+        };
+        assert_eq!(centered_origin((560.0, 640.0), area), (440.0, 142.5));
+    }
+
+    #[test]
+    fn restored_position_is_clamped_inside_positive_screen() {
+        let area = Rect {
+            x: 0.0,
+            y: 25.0,
+            width: 1440.0,
+            height: 875.0,
+        };
+        assert_eq!(
+            clamp_origin((1400.0, -80.0), (560.0, 640.0), area, 12.0),
+            (868.0, 37.0)
+        );
+    }
+
+    #[test]
+    fn clamp_supports_monitors_left_of_primary() {
+        let area = Rect {
+            x: -1920.0,
+            y: 0.0,
+            width: 1920.0,
+            height: 1080.0,
+        };
+        assert_eq!(
+            clamp_origin((-2400.0, 900.0), (560.0, 640.0), area, 12.0),
+            (-1908.0, 428.0)
+        );
+    }
 }

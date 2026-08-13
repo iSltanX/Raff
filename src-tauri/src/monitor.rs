@@ -8,13 +8,15 @@ use std::time::Duration;
 use base64::Engine;
 use tauri::{AppHandle, Emitter, Manager};
 
-use crate::storage::{detect_kind, CaptureOutcome, ItemKind};
+use crate::storage::{detect_kind, ItemKind};
 use crate::{macos, AppState};
 
 const POLL_MS: u64 = 350;
-/// Thumbnails are capped to this box (logical 200×40 at 2x).
-const THUMB_MAX_W: u32 = 400;
-const THUMB_MAX_H: u32 = 80;
+/// The panel displays image previews at 136×72 logical pixels. Store at 2x
+/// for Retina screens while preserving the source aspect ratio; `thumbnail`
+/// fits inside this box and never crops.
+const THUMB_MAX_W: u32 = 272;
+const THUMB_MAX_H: u32 = 144;
 
 pub fn start(app: AppHandle) {
     std::thread::spawn(move || {
@@ -71,7 +73,9 @@ fn capture_current(app: &AppHandle, front: macos::FrontApp) -> bool {
             .rtf
             .map(|r| base64::engine::general_purpose::STANDARD.encode(r));
         let mut store = state.store.lock().unwrap();
-        let outcome = store.capture(
+        let old_history = store.history.clone();
+        let old_pinned = store.pinned.clone();
+        let capture = store.capture(
             detect_kind(&text),
             text,
             raw.html,
@@ -81,10 +85,9 @@ fn capture_current(app: &AppHandle, front: macos::FrontApp) -> bool {
             None,
             (front.name, front.bundle_id),
         );
-        store.save_history();
-        if outcome == CaptureOutcome::Deduped {
-            store.save_pinned(); // the bump may have touched a pinned item
-        }
+        let Ok(_outcome) = store.persist_capture(capture, old_history, old_pinned) else {
+            return false;
+        };
         return true;
     }
 
@@ -120,18 +123,18 @@ fn capture_current(app: &AppHandle, front: macos::FrontApp) -> bool {
         let dir = store.images_dir();
         let id_base = uuid::Uuid::new_v4().to_string();
         let image_file = format!("{id_base}.png");
-        let thumb_file = format!("{id_base}.thumb.png");
+        let thumb_name = format!("{id_base}.thumb.png");
         if std::fs::write(dir.join(&image_file), &png).is_err() {
             return false;
         }
-        let thumb = decoded.thumbnail(THUMB_MAX_W, THUMB_MAX_H);
-        if let Some(bytes) = encode_png(&thumb) {
-            let _ = std::fs::write(dir.join(&thumb_file), bytes);
-        }
-        (Some(image_file), Some(thumb_file))
+        let thumb_file = write_thumbnail(&dir, thumb_name, &decoded);
+        (Some(image_file), thumb_file)
     };
 
-    let outcome = store.capture(
+    let old_history = store.history.clone();
+    let old_pinned = store.pinned.clone();
+    let created_files = [image_file.clone(), thumb_file.clone()];
+    let capture = store.capture(
         ItemKind::Image,
         label,
         None,
@@ -141,9 +144,16 @@ fn capture_current(app: &AppHandle, front: macos::FrontApp) -> bool {
         Some(hash),
         (front.name, front.bundle_id),
     );
-    store.save_history();
-    if outcome == CaptureOutcome::Deduped {
-        store.save_pinned();
+    if store
+        .persist_capture(capture, old_history, old_pinned)
+        .is_err()
+    {
+        // These files were created for this failed capture and are not
+        // referenced by the restored metadata snapshot.
+        for file in created_files.into_iter().flatten() {
+            let _ = std::fs::remove_file(store.images_dir().join(file));
+        }
+        return false;
     }
     true
 }
@@ -154,8 +164,61 @@ fn encode_png(img: &image::DynamicImage) -> Option<Vec<u8>> {
     Some(out.into_inner())
 }
 
+/// Writes an aspect-preserving Retina thumbnail and returns its persisted
+/// filename. A failed encode or write must not leave a dangling `thumbFile`
+/// entry in history; `get_image` can then fall back to the original PNG.
+fn write_thumbnail(
+    dir: &std::path::Path,
+    filename: String,
+    decoded: &image::DynamicImage,
+) -> Option<String> {
+    let thumb = decoded.thumbnail(THUMB_MAX_W, THUMB_MAX_H);
+    let bytes = encode_png(&thumb)?;
+    std::fs::write(dir.join(&filename), bytes).ok()?;
+    Some(filename)
+}
+
 fn content_hash(bytes: &[u8]) -> String {
     let mut hasher = std::hash::DefaultHasher::new();
     bytes.hash(&mut hasher);
     format!("{:016x}", hasher.finish())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use image::GenericImageView;
+
+    #[test]
+    fn retina_thumbnail_fits_without_cropping() {
+        let wide = image::DynamicImage::new_rgba8(1000, 100);
+        let wide_thumb = wide.thumbnail(THUMB_MAX_W, THUMB_MAX_H);
+        assert_eq!(wide_thumb.dimensions(), (272, 27));
+
+        let tall = image::DynamicImage::new_rgba8(100, 1000);
+        let tall_thumb = tall.thumbnail(THUMB_MAX_W, THUMB_MAX_H);
+        assert_eq!(tall_thumb.dimensions(), (14, 144));
+
+        let square = image::DynamicImage::new_rgba8(800, 800);
+        let square_thumb = square.thumbnail(THUMB_MAX_W, THUMB_MAX_H);
+        assert_eq!(square_thumb.dimensions(), (144, 144));
+    }
+
+    #[test]
+    fn thumbnail_filename_is_returned_only_after_a_successful_write() {
+        let root = std::env::temp_dir().join(format!("raff-thumb-test-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&root).unwrap();
+        let source = image::DynamicImage::new_rgba8(640, 480);
+
+        let name = "preview.thumb.png".to_string();
+        assert_eq!(write_thumbnail(&root, name.clone(), &source), Some(name));
+        let decoded = image::open(root.join("preview.thumb.png")).unwrap();
+        assert_eq!(decoded.dimensions(), (192, 144));
+
+        let missing_parent = root.join("missing");
+        assert_eq!(
+            write_thumbnail(&missing_parent, "never-written.png".into(), &source),
+            None
+        );
+    }
 }

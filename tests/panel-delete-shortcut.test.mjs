@@ -18,9 +18,15 @@ import {
   click,
 } from './helpers/panel-harness.mjs';
 
-function pressCmdBackspace(dom) {
+function pressCmdBackspace(dom, modifiers = {}) {
   dom.window.dispatchEvent(
-    new dom.window.KeyboardEvent('keydown', { key: 'Backspace', metaKey: true, bubbles: true, cancelable: true })
+    new dom.window.KeyboardEvent('keydown', {
+      key: 'Backspace',
+      metaKey: true,
+      bubbles: true,
+      cancelable: true,
+      ...modifiers,
+    })
   );
 }
 
@@ -48,24 +54,55 @@ function selectRow(dom, id) {
 
 test('delete shortcut: ⌘⌫ removes the selected item', async (t) => {
   const { dom, fake, uncaught } = await mountPanel({
-    pinned: [],
+    pinned: [sampleItem('r3', { isPinned: true, createdAt: minutesAgo(30) })],
     history: [
       sampleItem('r1', { createdAt: minutesAgo(10) }),
       sampleItem('r2', { createdAt: minutesAgo(20) }),
-      sampleItem('r3', { createdAt: minutesAgo(30) }),
     ],
     settings: null,
     axTrusted: true,
   });
 
-  // «08 — Product Screens» replaced the old shortcut-chip strip with a single
-  // hint line, so there is no ⌘⌫ chip to assert any more. The shortcut itself
-  // is covered in full by the behavioural tests below.
-  await t.test('the footer carries the designed single Arabic hint', () => {
-    const hint = dom.window.document.getElementById('footer-hint');
-    assert.equal(hint.hidden, false, 'the hint line is visible in the ready state');
-    assert.equal(hint.querySelector('kbd').textContent, '⌘V');
-    assert.equal(hint.textContent, '⌘V للصق الفوري');
+  const shortcutPairs = () =>
+    [...dom.window.document.querySelectorAll('#footer-hint .shortcut-hint')].map((hint) => [
+      hint.querySelector('kbd')?.textContent,
+      hint.querySelector('.shortcut-label')?.textContent,
+    ]);
+
+  await t.test('idle content exposes only Search and Settings', () => {
+    assert.deepEqual(shortcutPairs(), [
+      ['⌘F', 'بحث'],
+      ['⌘,', 'الإعدادات'],
+    ]);
+    assert.equal(dom.window.document.querySelector('.row.selected'), null);
+  });
+
+  await t.test('selected items expose exactly the four live row actions', () => {
+    selectRow(dom, 'r1');
+    const bar = dom.window.document.getElementById('footer-hint');
+    assert.equal(bar.tagName, 'NAV');
+    assert.equal(bar.getAttribute('aria-label'), 'اختصارات السياق الحالي');
+    assert.deepEqual(shortcutPairs(), [
+      ['↵', 'لصق'],
+      ['⌘C', 'نسخ'],
+      ['⌥P', 'تثبيت'],
+      ['⌘⌫', 'حذف'],
+    ]);
+  });
+
+  await t.test('the pin shortcut label follows the selected item state', () => {
+    selectRow(dom, 'r3');
+    assert.deepEqual(shortcutPairs()[2], ['⌥P', 'إلغاء التثبيت']);
+    assert.equal(
+      dom.window.document.querySelector('.row[data-id="r3"] .pin-btn')?.getAttribute('aria-pressed'),
+      'true'
+    );
+    selectRow(dom, 'r1');
+    assert.deepEqual(shortcutPairs()[2], ['⌥P', 'تثبيت']);
+    assert.equal(
+      dom.window.document.querySelector('.row[data-id="r1"] .pin-btn')?.getAttribute('aria-pressed'),
+      'false'
+    );
   });
 
   await t.test('does not delete anything when nothing is selected', async () => {
@@ -75,6 +112,11 @@ test('delete shortcut: ⌘⌫ removes the selected item', async (t) => {
     search.value = 'no such clip at all';
     search.dispatchEvent(new dom.window.Event('input'));
     await flush();
+    assert.deepEqual(
+      shortcutPairs(),
+      [['Esc', 'مسح البحث']],
+      'a zero-result query advertises neither navigation nor selection'
+    );
     search.blur();
 
     pressCmdBackspace(dom);
@@ -92,14 +134,20 @@ test('delete shortcut: ⌘⌫ removes the selected item', async (t) => {
     await flush();
 
     const search = dom.window.document.getElementById('search');
-    search.value = 'something typed';
+    search.value = 'item';
+    search.dispatchEvent(new dom.window.Event('input'));
     search.focus();
+    assert.deepEqual(shortcutPairs(), [
+      ['↑↓', 'تنقّل'],
+      ['↵', 'اختيار'],
+      ['Esc', 'مسح البحث'],
+    ]);
     pressCmdBackspace(dom);
     await flush();
 
     assert.deepEqual(fake.deletedIds(), [], 'no delete_item call while typing in the search field');
     assert.deepEqual(rowIds(dom), ['r1', 'r2', 'r3'], 'the list is untouched');
-    assert.equal(search.value, 'something typed', 'the search field keeps its own text-editing behaviour');
+    assert.equal(search.value, 'item', 'the search field keeps its own text-editing behaviour');
 
     search.value = '';
     search.dispatchEvent(new dom.window.Event('input'));
@@ -115,6 +163,17 @@ test('delete shortcut: ⌘⌫ removes the selected item', async (t) => {
     // not the delete branch.
     assert.deepEqual(fake.deletedIds(), [], '⌥P must never be treated as a delete');
     assert.deepEqual(rowIds(dom), ['r1', 'r2', 'r3']);
+  });
+
+  await t.test('extra modifier combinations never trigger the destructive shortcut', async () => {
+    selectRow(dom, 'r1');
+    const before = fake.deletedIds().length;
+    pressCmdBackspace(dom, { shiftKey: true });
+    pressCmdBackspace(dom, { altKey: true });
+    pressCmdBackspace(dom, { ctrlKey: true });
+    await flush();
+    assert.equal(fake.deletedIds().length, before);
+    assert.ok(dom.window.document.querySelector('.row[data-id="r1"]'));
   });
 
   await t.test('↩ (paste) still works and is not shadowed by the delete shortcut', async () => {
@@ -165,6 +224,10 @@ test('delete shortcut: ⌘⌫ removes the selected item', async (t) => {
       null,
       'an emptied shelf is never the failure state'
     );
+    assert.deepEqual(shortcutPairs(), [
+      ['⌘F', 'بحث'],
+      ['⌘,', 'الإعدادات'],
+    ]);
   });
 
   await t.test('no uncaught errors across the whole flow', () => {

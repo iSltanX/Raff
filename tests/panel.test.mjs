@@ -175,8 +175,8 @@ test('panel lifecycle: copy/paste an old item, hide, reopen — the list must su
   await t.test('initial load renders one chronological list, pinned marked in place', () => {
     assert.deepEqual(rowIds(dom), ['newest', 'pin1', 'old-text']);
     assert.ok(
-      dom.window.document.querySelector('.row[data-id="pin1"] .pin-indicator'),
-      'the pinned row carries its marker'
+      dom.window.document.querySelector('.row[data-id="pin1"] .pin-btn.is-pinned'),
+      'the pinned row keeps its single unpin affordance visible'
     );
     assert.equal(
       dom.window.document.querySelectorAll('.section-header').length,
@@ -240,8 +240,8 @@ test('panel lifecycle: copy/paste an old item, hide, reopen — the list must su
     await flush();
     assert.deepEqual(rowIds(dom), ['r1', 'pin1']);
     assert.ok(
-      dom.window.document.querySelector('.row[data-id="pin1"] .pin-indicator'),
-      'and is still marked as pinned'
+      dom.window.document.querySelector('.row[data-id="pin1"] .pin-btn.is-pinned'),
+      'and still exposes its unpin action'
     );
   });
 

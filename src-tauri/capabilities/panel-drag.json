@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "panel-drag",
+  "description": "The fixed non-activating NSPanel may start a native drag only from its audited header; it cannot close or resize itself.",
+  "windows": ["panel"],
+  "permissions": ["core:window:allow-start-dragging"]
+}

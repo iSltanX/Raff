@@ -11,6 +11,7 @@ import { createUpdateFlow } from './update-flow.js';
 window.addEventListener('contextmenu', (e) => e.preventDefault());
 
 const el = (id) => document.getElementById(id);
+const updateWindowEl = el('update-window');
 const statusEl = el('u-status');
 const availableEl = el('u-available');
 const newVersionEl = el('u-new-version');
@@ -28,16 +29,16 @@ let lastErrorFrom = 'check';
 
 // ─── Window sizing ─────────────────────────────────────────────────────────
 // Two fixed heights, never a continuous per-pixel resize: the "compact" tier
-// (checking/uptodate/installed/error — no version box) fits Rust's initial
+// (checking/uptodate/installed — no version box) fits Rust's initial
 // 280px build size exactly, so opening the window never jumps. "Expanded"
-// only kicks in for available/downloading/installing, where the version +
-// notes box actually need the room (measured up to ~415px with a maxed-out,
-// internally-scrolling notes box). A resize only fires when the tier
-// actually changes, so a run through available→downloading→installing is
-// one single grow, not a resize per state.
+// kicks in whenever the version/notes region can be present. This includes a
+// download/install error: that state deliberately keeps the release context
+// visible above its error and retry action, so shrinking it back to 280px
+// would clip the bottom controls. A resize only fires when the tier actually
+// changes, so available→downloading→error remains one single grow.
 const COMPACT_HEIGHT = 280;
 const EXPANDED_HEIGHT = 430;
-const EXPANDED_STATES = new Set(['available', 'downloading', 'installing']);
+const EXPANDED_STATES = new Set(['available', 'downloading', 'installing', 'error']);
 let currentTier = 'compact'; // matches the window's built size — see commands.rs
 
 function resizeForState(state) {
@@ -58,22 +59,40 @@ function setProgress(percent) {
   if (percent == null) {
     barEl.classList.add('indeterminate');
     barFillEl.style.width = '';
+    barEl.removeAttribute('aria-valuenow');
+    barEl.setAttribute('aria-valuetext', 'جارٍ التقدّم…');
   } else {
+    const numeric = Number(percent);
+    if (!Number.isFinite(numeric)) {
+      setProgress(null);
+      return;
+    }
+    const normalized = Math.max(0, Math.min(100, numeric));
     barEl.classList.remove('indeterminate');
-    barFillEl.style.width = `${percent}%`;
+    barFillEl.style.width = `${normalized}%`;
+    barEl.setAttribute('aria-valuenow', String(normalized));
+    barEl.setAttribute('aria-valuetext', `${arabicDigits(normalized)}٪`);
   }
 }
 
 function render(state, data = {}) {
   resizeForState(state);
+  updateWindowEl.setAttribute(
+    'aria-busy',
+    String(state === 'checking' || state === 'downloading' || state === 'installing')
+  );
   availableEl.hidden = true;
   progressEl.hidden = true;
   barEl.classList.remove('indeterminate');
+  barEl.removeAttribute('aria-valuenow');
+  barEl.removeAttribute('aria-valuetext');
   okBtn.hidden = true;
   downloadBtn.hidden = true;
   restartBtn.hidden = true;
   retryBtn.hidden = true;
   statusEl.classList.remove('error');
+  statusEl.setAttribute('role', 'status');
+  statusEl.setAttribute('aria-live', 'polite');
 
   switch (state) {
     case 'checking':
@@ -108,7 +127,7 @@ function render(state, data = {}) {
     case 'installing':
       availableEl.hidden = false;
       progressEl.hidden = false;
-      barEl.classList.add('indeterminate'); // install has no byte progress
+      setProgress(null); // install has no byte progress
       statusEl.textContent = 'جارٍ تثبيت التحديث…';
       break;
 
@@ -119,6 +138,8 @@ function render(state, data = {}) {
 
     case 'error':
       statusEl.classList.add('error');
+      statusEl.setAttribute('role', 'alert');
+      statusEl.setAttribute('aria-live', 'assertive');
       statusEl.textContent = data.message || 'حدث خطأ';
       lastErrorFrom = data.from || 'check';
       if (lastErrorFrom === 'restart') {

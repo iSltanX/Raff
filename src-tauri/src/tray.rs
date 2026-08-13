@@ -27,6 +27,9 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
     let icon = tauri::image::Image::from_bytes(include_bytes!("../icons/tray.png"))?;
     TrayIconBuilder::with_id(TRAY_ID)
         .icon(icon)
+        // Figma «14 — App & Content Icons», final 18pt Raff mark (14:234):
+        // the final Direction 3 identity mark is a monochrome template image.
+        // AppKit owns light/dark, active and inactive tinting; Raff never does.
         .icon_as_template(true)
         .tooltip("رفّ")
         .menu(&menu)

@@ -1,0 +1,10 @@
+<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="chromium" clip-path="url(#clip0_0_4)">
+<path id="Vector" d="M7.2532 14.6272L10.3068 9.33344M14.1138 5.33312H8M8 5.33312C6.52712 5.33312 5.33312 6.52712 5.33312 8C5.33312 9.47288 6.52712 10.6669 8 10.6669C9.47288 10.6669 10.6669 9.47288 10.6669 8C10.6669 6.52712 9.47288 5.33312 8 5.33312ZM2.63303 4.0394L5.69328 9.33315M14.6672 8C14.6672 11.6822 11.6822 14.6672 8 14.6672C4.31781 14.6672 1.3328 11.6822 1.3328 8C1.3328 4.31781 4.31781 1.3328 8 1.3328C11.6822 1.3328 14.6672 4.31781 14.6672 8Z" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+<defs>
+<clipPath id="clip0_0_4">
+<rect width="16" height="16" fill="white"/>
+</clipPath>
+</defs>
+</svg>

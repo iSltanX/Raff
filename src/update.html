@@ -9,11 +9,17 @@
   <link rel="stylesheet" href="update.css" />
 </head>
 <body>
-  <main class="update-window">
+  <main class="update-window" id="update-window" aria-busy="true">
     <img class="update-icon" src="assets/app-icon.png" alt="أيقونة رفّ" width="56" height="56" />
     <div class="update-app-name">رفّ</div>
 
-    <div class="update-status" id="u-status">جارٍ التحقق من وجود تحديثات…</div>
+    <div
+      class="update-status"
+      id="u-status"
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+    >جارٍ التحقق من وجود تحديثات…</div>
 
     <div class="update-available" id="u-available" hidden>
       <div class="update-new-version" id="u-new-version"></div>
@@ -22,14 +28,21 @@
     </div>
 
     <div class="update-progress" id="u-progress" hidden>
-      <div class="update-bar" id="u-bar"><div class="update-bar-fill" id="u-bar-fill"></div></div>
+      <div
+        class="update-bar"
+        id="u-bar"
+        role="progressbar"
+        aria-label="تقدّم تنزيل التحديث"
+        aria-valuemin="0"
+        aria-valuemax="100"
+      ><div class="update-bar-fill" id="u-bar-fill"></div></div>
     </div>
 
     <div class="update-actions">
-      <button class="btn" id="u-ok" hidden>حسنًا</button>
-      <button class="btn btn-primary" id="u-download" hidden>تنزيل التحديث وتثبيته</button>
-      <button class="btn btn-primary" id="u-restart" hidden>إعادة التشغيل</button>
-      <button class="btn" id="u-retry" hidden>إعادة المحاولة</button>
+      <button type="button" class="btn" id="u-ok" hidden>حسنًا</button>
+      <button type="button" class="btn btn-primary" id="u-download" hidden>تنزيل التحديث وتثبيته</button>
+      <button type="button" class="btn btn-primary" id="u-restart" hidden>إعادة التشغيل</button>
+      <button type="button" class="btn" id="u-retry" hidden>إعادة المحاولة</button>
     </div>
   </main>
   <script type="module" src="js/update.js"></script>

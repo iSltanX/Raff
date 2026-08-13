@@ -50,13 +50,17 @@ export function emptyState() {
  * times (or forever), so the retry / failure paths are driven exactly the way
  * a flaky or wedged IPC channel would drive them.
  */
-export function createFakeTauri(initialState, { failTimes = 0 } = {}) {
+export function createFakeTauri(initialState, { failTimes = 0, sourceAppIcons = {} } = {}) {
   let state = structuredClone(initialState);
   let remainingFailures = failTimes;
   const listeners = new Map();
   const listenCalls = new Map();
   const deletedIds = [];
+  const invocations = [];
   const invokeCounts = new Map();
+  const committedDeleteTokens = [];
+  let pendingDelete = null;
+  let deleteSequence = 0;
   let getStateCalls = 0;
 
   const notify = (event, payload = null) => {
@@ -66,6 +70,7 @@ export function createFakeTauri(initialState, { failTimes = 0 } = {}) {
   const tauri = {
     core: {
       invoke: (cmd, args) => {
+        invocations.push({ cmd, args: structuredClone(args) });
         invokeCounts.set(cmd, (invokeCounts.get(cmd) || 0) + 1);
         if (cmd === 'get_state') {
           getStateCalls++;
@@ -80,34 +85,82 @@ export function createFakeTauri(initialState, { failTimes = 0 } = {}) {
         // legitimately answer `null` (no icon on disk) — the row then keeps
         // its initial. Answering explicitly keeps rows from producing
         // unhandled rejections that the uncaught-error assertions would see.
-        if (cmd === 'source_app_icon') return Promise.resolve(null);
+        if (cmd === 'source_app_icon') {
+          const bundleId = args?.bundleId ?? '';
+          const icon = Object.hasOwn(sourceAppIcons, bundleId) ? sourceAppIcons[bundleId] : null;
+          return Promise.resolve(icon);
+        }
         if (
           cmd === 'open_settings' ||
           cmd === 'open_about' ||
           cmd === 'open_repository' ||
           cmd === 'hide_panel' ||
-          cmd === 'paste_item' ||
-          cmd === 'copy_item' ||
-          cmd === 'toggle_pin'
+          cmd === 'copy_item'
         ) {
           return Promise.resolve(null);
         }
+        if (cmd === 'paste_item') return Promise.resolve(Boolean(state.axTrusted));
+        if (cmd === 'toggle_pin') {
+          const id = args?.id;
+          const desired = args?.isPinned;
+          const pinnedIndex = state.pinned.findIndex((item) => item.id === id);
+          let isPinned;
+          if (pinnedIndex >= 0 && desired === false) {
+            const [item] = state.pinned.splice(pinnedIndex, 1);
+            item.isPinned = false;
+            state.history.push(item);
+            state.history.sort((a, b) => b.createdAt - a.createdAt);
+            isPinned = false;
+          } else if (pinnedIndex < 0 && desired === true) {
+            const historyIndex = state.history.findIndex((item) => item.id === id);
+            if (historyIndex < 0) return Promise.reject(new Error('العنصر غير موجود'));
+            const [item] = state.history.splice(historyIndex, 1);
+            item.isPinned = true;
+            state.pinned.push(item);
+            isPinned = true;
+          } else {
+            isPinned = pinnedIndex >= 0;
+          }
+          return Promise.resolve(isPinned).then((result) => {
+            notify('raff://changed');
+            return result;
+          });
+        }
         if (cmd === 'delete_item') {
-          // Mirrors the real `delete_item` command: mutate the store, persist
-          // (there is no disk here, but the mutation is permanent within this
-          // fake's `state`), then notify — so a later get_state (a refresh)
-          // never brings the deleted item back.
           const id = args?.id;
           deletedIds.push(id);
-          state = {
-            ...state,
-            pinned: state.pinned.filter((i) => i.id !== id),
-            history: state.history.filter((i) => i.id !== id),
-          };
+          if (pendingDelete) {
+            committedDeleteTokens.push(pendingDelete.token);
+            pendingDelete = null;
+          }
+          const layer = state.pinned.some((item) => item.id === id) ? 'pinned' : 'history';
+          const index = state[layer].findIndex((item) => item.id === id);
+          if (index < 0) return Promise.reject(new Error('العنصر غير موجود'));
+          const [item] = state[layer].splice(index, 1);
+          const token = `delete-${++deleteSequence}`;
+          pendingDelete = { token, layer, index, item };
+          return Promise.resolve({ token }).then((result) => {
+            notify('raff://changed');
+            return result;
+          });
+        }
+        if (cmd === 'undo_delete') {
+          if (pendingDelete?.token !== args?.token) {
+            return Promise.reject(new Error('انتهت مهلة التراجع عن الحذف'));
+          }
+          state[pendingDelete.layer].splice(pendingDelete.index, 0, pendingDelete.item);
+          pendingDelete = null;
           return Promise.resolve(null).then((result) => {
             notify('raff://changed');
             return result;
           });
+        }
+        if (cmd === 'commit_delete') {
+          if (pendingDelete?.token === args?.token) {
+            committedDeleteTokens.push(pendingDelete.token);
+            pendingDelete = null;
+          }
+          return Promise.resolve(null);
         }
         return Promise.resolve(null);
       },
@@ -142,11 +195,20 @@ export function createFakeTauri(initialState, { failTimes = 0 } = {}) {
     deletedIds() {
       return [...deletedIds];
     },
+    pendingDelete() {
+      return pendingDelete ? structuredClone(pendingDelete) : null;
+    },
+    committedDeleteTokens() {
+      return [...committedDeleteTokens];
+    },
     listenCallCount(event) {
       return listenCalls.get(event) ?? 0;
     },
     invokeCount(cmd) {
       return invokeCounts.get(cmd) ?? 0;
+    },
+    invocationArgs(cmd) {
+      return invocations.filter((call) => call.cmd === cmd).map((call) => structuredClone(call.args));
     },
     getStateCallCount() {
       return getStateCalls;
@@ -237,18 +299,32 @@ export async function mountPanel(initialState, options = {}) {
   dom.window.addEventListener('error', (e) => uncaught.push(String(e.error ?? e.message)));
   dom.window.addEventListener('unhandledrejection', (e) => uncaught.push(String(e.reason)));
 
-  // Real timer bookkeeping, installed before the module runs. Repeating timers
-  // are the leak-prone kind: one extra interval per show/hide cycle would go
-  // unnoticed for a whole session. `panel.js` calls the bare global (a browser
-  // global in production), so the counter must sit on `globalThis`, not on the
-  // jsdom window — instrumenting the window would silently count nothing.
-  // Timeouts are deliberately not counted: the harness's own waits use them,
-  // so the number would say nothing about the module.
-  const timers = { intervalsCreated: 0 };
+  // Timer bookkeeping is installed before the module runs. Repeating timers
+  // catch lifecycle leaks; module-owned feedback durations are captured by
+  // callback source so harness flush/retry timers do not pollute assertions.
+  const feedbackTimers = [];
+  const timers = {
+    intervalsCreated: 0,
+    feedbackTimeouts: [],
+    fireFeedback(duration) {
+      const entry = [...feedbackTimers].reverse().find((timer) => timer.ms === duration);
+      if (!entry) throw new Error(`no feedback timer scheduled for ${duration}ms`);
+      entry.fn();
+    },
+  };
   const realSetInterval = globalThis.setInterval;
+  const realSetTimeout = globalThis.setTimeout;
   globalThis.setInterval = (fn, ms, ...rest) => {
     timers.intervalsCreated++;
     return realSetInterval(fn, ms, ...rest);
+  };
+  globalThis.setTimeout = (fn, ms, ...rest) => {
+    const source = Function.prototype.toString.call(fn);
+    if (source.includes('generation !== toastGeneration')) {
+      timers.feedbackTimeouts.push(ms);
+      feedbackTimers.push({ fn, ms });
+    }
+    return realSetTimeout(fn, ms, ...rest);
   };
   await import('../../src/js/panel.js');
   await flush();

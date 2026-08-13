@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "designed-chrome",
-  "description": "Settings and About are drawn undecorated because the approved Figma design gives them their own title bar — traffic lights, centred title, 16px rounded shell. Since macOS is no longer drawing that chrome, these two windows need to close themselves and to move themselves when their title bar is dragged.",
+  "description": "Settings and About use custom title bars, so these two windows may close themselves and start native title-bar drags.",
   "windows": ["settings", "about"],
   "permissions": ["core:window:allow-close", "core:window:allow-start-dragging"]
 }

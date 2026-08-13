@@ -2,8 +2,8 @@
    Shared controls — the macOS 26 kit components as the approved Figma file
    composes them («08 — Product Screens», Push Button 2:8043 / 2:8050 / 2:8073;
    kit variables Button/Radius 6, Button/Padding-Horizontal 16, Global/Height
-   24, Global/Font Size 13, Controls/Tint #0d6fff, Controls/Destructive Red
-   #ff383c — all already tokenised in tokens.css).
+   24 and Global/Font Size 13. Native tints are semantic variables in
+   tokens.css, so controls never carry a second colour source.
 
    Any window that needs a button, a scroll pane or a keycap links this after
    tokens.css. Nothing here declares a literal.
@@ -35,7 +35,7 @@
 .btn:hover:not(:disabled) {
   background: var(--color-bg-selected);
   border-color: var(--color-interactive-primary);
-  color: var(--color-interactive-primary);
+  color: var(--color-text-brand);
 }
 
 .btn:disabled {
@@ -44,28 +44,28 @@
 
 /* Style: Default / Preferred — the affirmative action. */
 .btn-primary {
-  background: var(--color-control-tint);
-  border-color: var(--color-control-tint);
-  color: var(--color-text-on-accent);
+  background: var(--color-system-control-tint);
+  border-color: var(--color-system-control-tint);
+  color: var(--color-text-on-system-tint);
 }
 
 .btn-primary:hover:not(:disabled) {
-  background: var(--color-control-tint);
-  border-color: var(--color-control-tint);
-  color: var(--color-text-on-accent);
+  background: var(--color-system-control-tint);
+  border-color: var(--color-system-control-tint);
+  color: var(--color-text-on-system-tint);
   filter: brightness(1.08);
 }
 
 /* Style: Bordered Destructive — irreversible actions only. */
 .btn-destructive {
   background: transparent;
-  border-color: var(--color-control-destructive);
-  color: var(--color-control-destructive);
+  border-color: var(--color-status-error);
+  color: var(--color-status-error);
 }
 
 .btn-destructive:hover:not(:disabled) {
-  background: var(--color-control-destructive);
-  border-color: var(--color-control-destructive);
+  background: var(--color-system-destructive);
+  border-color: var(--color-system-destructive);
   color: var(--color-text-on-accent);
 }
 
@@ -132,11 +132,11 @@ kbd,
 }
 
 .dot-close {
-  background: var(--color-stoplight-close);
+  background: var(--color-system-stoplight-close);
 }
 .dot-min {
-  background: var(--color-stoplight-min);
+  background: var(--color-system-stoplight-minimize);
 }
 .dot-zoom {
-  background: var(--color-stoplight-zoom);
+  background: var(--color-system-stoplight-zoom);
 }

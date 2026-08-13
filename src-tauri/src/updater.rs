@@ -359,11 +359,11 @@ pub async fn download_and_install_update(app: AppHandle) -> Result<(), String> {
 /// Not `app.restart()`: that spawns the new process *before* this one exits, so
 /// the new process meets the still-held single-instance socket, forwards its
 /// argv and exits — leaving nothing running (the exact hazard documented on
-/// `macos::spawn_relauncher`). We reuse the app's proven pid-waiting relauncher,
-/// same as the icon-change relaunch: it `open`s the (updater-replaced) bundle
+/// `macos::spawn_relauncher`). We reuse the app's proven pid-waiting relauncher:
+/// it `open`s the updater-replaced bundle
 /// only after this process has fully exited and released the socket.
 #[tauri::command]
-pub fn restart_to_update(app: AppHandle) -> Result<(), String> {
+pub async fn restart_to_update(app: AppHandle) -> Result<(), String> {
     {
         let state = app.state::<UpdaterState>();
         let inner = state.inner.lock().unwrap();
@@ -371,20 +371,19 @@ pub fn restart_to_update(app: AppHandle) -> Result<(), String> {
             return Err("لا يوجد تحديث مثبَّت لإعادة التشغيل.".into());
         }
     }
-    let handle = app.clone();
-    let _ = app.run_on_main_thread(move || match crate::macos::app_bundle_path() {
-        // Packaged app: pid-waiting relaunch, then a clean exit that releases
-        // the single-instance socket for the relauncher's `open`.
-        Some(bundle) => {
-            crate::macos::spawn_relauncher(&bundle, std::process::id());
-            handle.exit(0);
-        }
-        // Dev mode: no .app bundle to hand to LaunchServices; the official
-        // primitive is the only option (and single-instance is not bundled the
-        // same way in `tauri dev`).
-        None => handle.restart(),
-    });
-    Ok(())
+    let bundle = crate::macos::app_bundle_path();
+    if let Some(bundle) = bundle {
+        // Do not exit unless the detached relauncher really exists.
+        crate::macos::spawn_relauncher(&bundle, std::process::id())?;
+        let handle = app.clone();
+        app.run_on_main_thread(move || handle.exit(0))
+            .map_err(|err| format!("تعذّر جدولة إعادة تشغيل Raff: {err}"))
+    } else {
+        // Dev mode has no packaged bundle for LaunchServices.
+        let handle = app.clone();
+        app.run_on_main_thread(move || handle.restart())
+            .map_err(|err| format!("تعذّر جدولة إعادة تشغيل Raff: {err}"))
+    }
 }
 
 // ─── Menu entry point ─────────────────────────────────────────────────────────

@@ -60,7 +60,7 @@ test('panel endurance: 30 show/hide cycles leak nothing and lose nothing', async
       intervalsAfterMount,
       'no cycle may create another interval — that would leak for the whole session'
     );
-    assert.equal(intervalsAfterMount, 1, 'exactly the one relative-time refresher exists');
+    assert.equal(intervalsAfterMount, 0, 'the time-free row needs no repeating refresher');
   });
 
   await t.test('no DOM accumulation across all 30 cycles', () => {

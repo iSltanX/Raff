@@ -45,7 +45,6 @@ const SETTINGS = {
   firstRunShown: true,
   appearance: 'light',
   followSystem: true,
-  appIcon: 'auto',
 };
 
 function createFakeTauri() {
