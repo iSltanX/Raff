@@ -2,9 +2,9 @@
 //! above everything, joins all Spaces, never steals focus from the app the
 //! user is working in, and hides when it loses key status.
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize};
 use tauri_nspanel::cocoa::appkit::NSWindowCollectionBehavior;
@@ -31,6 +31,29 @@ const PANEL_LEVEL: i32 = 25;
 // without rewriting the placement file for every mouse-move event.
 static PLACEMENT_READY: AtomicBool = AtomicBool::new(false);
 static PLACEMENT_DEBOUNCE: OnceLock<Mutex<Option<std::sync::mpsc::Sender<()>>>> = OnceLock::new();
+
+/// Milliseconds since the epoch at which the panel last hid itself because it
+/// resigned key status — 0 means "never". Clicking the tray icon to CLOSE an
+/// open panel routes the mouse-down through the status item first, which
+/// AppKit reports to the panel as losing key status before Tauri's own
+/// click-up reaches `toggle` below. Without this guard, `toggle` re-checks
+/// visibility after that resign-triggered `hide` has already run, finds the
+/// panel hidden, and immediately shows it again — the close the click asked
+/// for is undone in the same gesture, so the click appears to do nothing
+/// (or a second click is needed to see any visible effect at all).
+static LAST_RESIGN_HIDE_MS: AtomicU64 = AtomicU64::new(0);
+/// Comfortably above the AppKit resign-key -> Tauri click-up delivery gap
+/// (single-digit to low double-digit milliseconds in practice), while short
+/// enough that a deliberate, separate reopen click — which takes a human
+/// noticeably longer to land after watching the panel close — is unaffected.
+const RESIGN_REOPEN_GUARD_MS: u64 = 250;
+
+fn now_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct Rect {
@@ -84,7 +107,10 @@ pub fn init(app: &AppHandle) -> tauri::Result<()> {
     let handle = app.clone();
     delegate.set_listener(Box::new(move |delegate_name: String| {
         match delegate_name.as_str() {
-            "window_did_resign_key" => hide(&handle),
+            "window_did_resign_key" => {
+                LAST_RESIGN_HIDE_MS.store(now_ms(), Ordering::Release);
+                hide(&handle);
+            }
             // Once a Tauri window becomes NSPanel, Tao's ordinary Moved event is
             // not consistently forwarded. The native delegate is authoritative.
             "window_did_move" => remember_position(&handle),
@@ -160,12 +186,28 @@ pub fn hide(app: &AppHandle) {
 
 pub fn toggle(app: &AppHandle) {
     let handle = app.clone();
-    let _ = app.run_on_main_thread(move || match handle.get_webview_panel(PANEL_LABEL) {
-        Ok(panel) if panel.is_visible() => {
+    let _ = app.run_on_main_thread(move || {
+        let panel = match handle.get_webview_panel(PANEL_LABEL) {
+            Ok(panel) => panel,
+            Err(_) => return show(&handle),
+        };
+        if panel.is_visible() {
             panel.order_out(None);
+            return;
         }
-        _ => show(&handle),
+        // The panel is already hidden. If that happened moments ago because
+        // it resigned key status, THIS click is almost certainly the same
+        // gesture that caused it — the click landed on the tray icon while
+        // the panel was open, closing it. Showing it again here would undo
+        // that close instead of completing it. See `LAST_RESIGN_HIDE_MS`.
+        if !was_just_dismissed_by_resign(now_ms(), LAST_RESIGN_HIDE_MS.load(Ordering::Acquire)) {
+            show(&handle);
+        }
     });
+}
+
+fn was_just_dismissed_by_resign(now_ms: u64, last_resign_hide_ms: u64) -> bool {
+    last_resign_hide_ms != 0 && now_ms.saturating_sub(last_resign_hide_ms) < RESIGN_REOPEN_GUARD_MS
 }
 
 fn restore_or_center(app: &AppHandle, window: &tauri::WebviewWindow) {
@@ -311,5 +353,42 @@ mod tests {
             clamp_origin((-2400.0, 900.0), (560.0, 640.0), area, 12.0),
             (-1908.0, 428.0)
         );
+    }
+
+    // A tray click that closes an open panel makes it resign key status
+    // before the click-up reaches `toggle`; without this guard that same
+    // click's `toggle` call sees the panel already hidden and reopens it,
+    // so the close is silently undone and the click appears to do nothing.
+    #[test]
+    fn reopen_is_suppressed_immediately_after_a_resign_triggered_hide() {
+        assert!(was_just_dismissed_by_resign(1_000, 900));
+    }
+
+    #[test]
+    fn reopen_is_suppressed_right_up_to_the_guard_boundary() {
+        assert!(was_just_dismissed_by_resign(
+            900 + RESIGN_REOPEN_GUARD_MS - 1,
+            900
+        ));
+    }
+
+    #[test]
+    fn reopen_proceeds_once_the_guard_window_has_fully_elapsed() {
+        assert!(!was_just_dismissed_by_resign(
+            900 + RESIGN_REOPEN_GUARD_MS,
+            900
+        ));
+    }
+
+    #[test]
+    fn reopen_proceeds_for_an_unrelated_click_long_after_any_resign() {
+        assert!(!was_just_dismissed_by_resign(50_000, 900));
+    }
+
+    #[test]
+    fn reopen_is_never_suppressed_before_any_resign_has_happened() {
+        // 0 is the static's initial value — "never resigned" — not a real
+        // timestamp, so a fresh panel must be openable on its very first click.
+        assert!(!was_just_dismissed_by_resign(50, 0));
     }
 }
