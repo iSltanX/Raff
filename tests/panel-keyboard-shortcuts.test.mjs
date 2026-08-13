@@ -12,6 +12,7 @@ import {
   flush,
   rowIds,
   click,
+  selectRowByKeyboard,
 } from './helpers/panel-harness.mjs';
 
 function press(dom, init) {
@@ -39,8 +40,7 @@ function selectedId(dom) {
 }
 
 function selectRow(dom, id) {
-  dom.window.document.getElementById('search').blur();
-  click(dom, dom.window.document.querySelector(`.row[data-id="${id}"]`));
+  selectRowByKeyboard(dom, id);
 }
 
 function setSearch(dom, value) {
@@ -184,8 +184,14 @@ test('panel keyboard contract: navigation, actions, search routing, and native e
       return { top: 0, bottom: 0, left: 0, right: 0, width: 0, height: 0 };
     };
 
+    // Land on the row *before* the one under test first, then stage the
+    // scroll position, so exactly ONE selection move is measured. (Getting
+    // there is several arrow presses now that clicking a row pastes it, and
+    // every press re-runs the scroll adjustment.)
+    selectRow(dom, 'r1');
     list.scrollTop = 100;
-    selectRow(dom, 'r2');
+    press(dom, { key: 'ArrowDown' });
+    assert.equal(selectedId(dom), 'r2');
     assert.equal(list.scrollTop, 50, 'an item above the viewport adjusts the list itself');
     assert.equal(dom.window.scrollY, 0, 'panel chrome remains at the document origin');
     dom.window.Element.prototype.getBoundingClientRect = originalRect;

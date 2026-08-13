@@ -7,6 +7,7 @@ use std::time::Duration;
 
 use base64::Engine;
 use tauri::{AppHandle, Emitter, Manager};
+use tauri_nspanel::ManagerExt;
 
 use crate::storage::{now_ms, ItemKind};
 use crate::{macos, panel, AppState};
@@ -63,17 +64,24 @@ pub fn write_item_to_clipboard(app: &AppHandle, id: &str, plain: bool) -> bool {
 /// The boolean distinguishes a real synthesized paste from clipboard-only
 /// fallback, using a fresh Accessibility check instead of stale panel state.
 pub async fn paste_item(app: &AppHandle, id: &str, plain: bool) -> Result<bool, String> {
+    crate::startup_trace::mark(&format!("PASTE row_click_invoke id={id}"));
     if !write_item_to_clipboard(app, id, plain) {
+        crate::startup_trace::mark("PASTE write_item_to_clipboard FAILED (unknown id)");
         return Err("العنصر غير موجود".into());
     }
+    crate::startup_trace::mark("PASTE NSPasteboard write completed");
 
-    if !macos::ax_trusted() {
+    let trusted = macos::ax_trusted();
+    crate::startup_trace::mark(&format!("PASTE ax_trusted={trusted}"));
+    if !trusted {
+        crate::startup_trace::mark("PASTE STOPPED HERE: no Accessibility trust — panel stays visible, no hide, no activate, no paste");
         bump_paste_signals(app, id);
         return Ok(false);
     }
 
     let state = app.state::<AppState>();
     let previous_pid = state.previous_app.lock().unwrap().take();
+    crate::startup_trace::mark(&format!("PASTE previous_pid={previous_pid:?}"));
 
     let handle = app.clone();
     let id = id.to_string();
@@ -82,15 +90,40 @@ pub async fn paste_item(app: &AppHandle, id: &str, plain: bool) -> Result<bool, 
         let (tx, rx) = std::sync::mpsc::channel();
         worker
             .run_on_main_thread(move || {
+                crate::startup_trace::mark("PASTE panel_hide requested");
                 panel::hide(&handle);
+                crate::startup_trace::mark(&format!(
+                    "PASTE panel_hide done; panel.is_visible()={:?}",
+                    handle.get_webview_panel(panel::PANEL_LABEL).map(|p| p.is_visible())
+                ));
                 if let Some(pid) = previous_pid {
+                    crate::startup_trace::mark(&format!("PASTE activate_app requested pid={pid}"));
                     macos::activate_app(pid);
+                    crate::startup_trace::mark("PASTE activate_app call returned");
+                } else {
+                    crate::startup_trace::mark("PASTE NO previous_pid to activate — previous_app was never captured or already consumed");
                 }
+                let frontmost_now = macos::frontmost_app();
+                crate::startup_trace::mark(&format!(
+                    "PASTE frontmost immediately after activate: pid={} bundle={}",
+                    frontmost_now.pid, frontmost_now.bundle_id
+                ));
                 let handle2 = handle.clone();
                 std::thread::spawn(move || {
                     std::thread::sleep(Duration::from_millis(ACTIVATE_DELAY_MS));
-                    let pasted = macos::ax_trusted() && macos::send_cmd_v();
+                    let front_before_paste = macos::frontmost_app();
+                    crate::startup_trace::mark(&format!(
+                        "PASTE frontmost after {ACTIVATE_DELAY_MS}ms wait: pid={} bundle={}",
+                        front_before_paste.pid, front_before_paste.bundle_id
+                    ));
+                    let still_trusted = macos::ax_trusted();
+                    let sent = if still_trusted { macos::send_cmd_v() } else { false };
+                    crate::startup_trace::mark(&format!(
+                        "PASTE CGEvent cmd-v: still_trusted={still_trusted} sent={sent}"
+                    ));
+                    let pasted = still_trusted && sent;
                     bump_paste_signals(&handle2, &id);
+                    crate::startup_trace::mark(&format!("PASTE COMPLETE pasted={pasted}"));
                     let _ = tx.send(pasted);
                 });
             })
@@ -105,12 +138,14 @@ pub async fn paste_item(app: &AppHandle, id: &str, plain: bool) -> Result<bool, 
     let pasted = match attempt {
         Ok(pasted) => pasted,
         Err(err) => {
+            crate::startup_trace::mark(&format!("PASTE ERROR {err} — reshowing panel"));
             panel::show(app);
             return Err(err);
         }
     };
 
     if !pasted {
+        crate::startup_trace::mark("PASTE not pasted — reshowing panel");
         panel::show(app);
     }
     Ok(pasted)

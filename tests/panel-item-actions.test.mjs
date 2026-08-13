@@ -8,6 +8,7 @@ import {
   rowIds,
   sampleItem,
   wait,
+  selectRowByKeyboard,
 } from './helpers/panel-harness.mjs';
 
 const row = (dom, id) => dom.window.document.querySelector(`.row[data-id="${id}"]`);
@@ -114,7 +115,7 @@ test('row actions and feedback are transactional, accessible, and deterministic'
   });
 
   await t.test('mouse delete targets its own row and Undo restores the exact index', async () => {
-    click(dom, row(dom, 'r1'));
+    selectRowByKeyboard(dom, 'r1');
     assert.equal(row(dom, 'r1').getAttribute('aria-selected'), 'true');
     const before = rowIds(dom);
     click(dom, trash(dom, 'r2'));
@@ -223,7 +224,7 @@ test('row actions and feedback are transactional, accessible, and deterministic'
   });
 
   await t.test('Option-P and Command-Backspace use the same live paths', async () => {
-    click(dom, row(dom, 'r1'));
+    selectRowByKeyboard(dom, 'r1');
     const pinEvent = shortcut(dom, { key: 'p', code: 'KeyP', altKey: true });
     assert.equal(pinEvent.defaultPrevented, true);
     assert.equal(pin(dom, 'r1').getAttribute('aria-pressed'), 'true');

@@ -42,6 +42,7 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
                 ..
             } = event
             {
+                crate::startup_trace::mark("TRAY_CLICK_RECEIVED");
                 panel::toggle(tray.app_handle());
             }
         })

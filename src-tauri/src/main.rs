@@ -7,6 +7,7 @@ mod macos;
 mod monitor;
 mod panel;
 mod paste;
+mod startup_trace;
 mod storage;
 mod tray;
 mod updater;
@@ -26,6 +27,7 @@ pub struct AppState {
 }
 
 fn main() {
+    startup_trace::init();
     let mut app = tauri::Builder::default()
         // Must be the first plugin: a second launch exits immediately and this
         // callback runs in the surviving instance instead (no duplicate tray,
@@ -34,6 +36,7 @@ fn main() {
         // surfaces the panel.
         .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
             eprintln!("raff: relaunch forwarded, argv: {argv:?}");
+            startup_trace::mark(&format!("SINGLE_INSTANCE_FORWARD argv={argv:?}"));
             if argv.iter().any(|a| a == "--settings") {
                 commands::open_settings_window(app);
             } else {
@@ -94,8 +97,11 @@ fn main() {
             _ => {}
         })
         .setup(|app| {
+            startup_trace::mark("setup_enter");
             let data_dir = app.path().app_data_dir()?;
+            startup_trace::mark("app_data_dir_resolved");
             let store = storage::Store::load(data_dir);
+            startup_trace::mark("storage_loaded");
             let hotkey = store.settings.hotkey.clone();
             let first_run_pending = !store.settings.first_run_shown;
             // Applied directly on `App` (not a cloned AppHandle): at this point
@@ -105,33 +111,43 @@ fn main() {
             // change onto the event loop, racing the panel/first-run windows'
             // creation and risking a system-appearance flash on cold launch.
             app.set_theme(commands::theme_for(&store.settings));
+            startup_trace::mark("theme_applied");
             app.manage(AppState {
                 store: Mutex::new(store),
                 skip_change_count: AtomicI64::new(-1),
                 previous_app: Mutex::new(None),
             });
             app.manage(updater::UpdaterState::new());
+            startup_trace::mark("state_managed");
 
             let handle = app.handle().clone();
             panel::init(&handle)?;
+            startup_trace::mark("panel_init_done");
             tray::create(&handle)?;
+            startup_trace::mark("tray_created_ICON_NOW_VISIBLE");
             if let Err(err) = commands::register_hotkey(&handle, &hotkey) {
                 eprintln!("raff: hotkey registration failed: {err}");
             }
+            startup_trace::mark("hotkey_registered");
             monitor::start(handle.clone());
+            startup_trace::mark("monitor_started");
 
             if first_run_pending && !macos::ax_trusted() {
                 commands::open_firstrun_window(&handle);
             }
+            startup_trace::mark("firstrun_checked");
             // A relaunch carrying --settings (for example after an update)
             // returns the user to the window they were in.
             if std::env::args().any(|a| a == "--settings") {
                 commands::open_settings_window(&handle);
             }
+            startup_trace::start_stall_detector();
+            startup_trace::mark("setup_exit");
             Ok(())
         })
         .build(tauri::generate_context!())
         .expect("error while building Raff");
+    startup_trace::mark("build_returned");
 
     // Set the Accessory (menu-bar) activation policy on the *built* App, before
     // the run loop starts. At this point `App::set_activation_policy` writes
@@ -143,6 +159,11 @@ fn main() {
     // applied Regular and activated the app, so the launch is logged in the Dock
     // before the app flips to Accessory. Reinforces the bundle's LSUIElement.
     app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+    startup_trace::mark("activation_policy_set__entering_run_loop");
 
-    app.run(|_app_handle, _event| {});
+    app.run(|_app_handle, event| {
+        if let tauri::RunEvent::Ready = event {
+            startup_trace::mark("run_loop_READY__events_now_processed");
+        }
+    });
 }

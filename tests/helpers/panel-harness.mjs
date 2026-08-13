@@ -100,6 +100,12 @@ export function createFakeTauri(initialState, { failTimes = 0, sourceAppIcons = 
           return Promise.resolve(null);
         }
         if (cmd === 'paste_item') return Promise.resolve(Boolean(state.axTrusted));
+        // The panel's own fallback toast asks separately why a paste didn't
+        // happen, so this must mirror `axTrusted` independently of paste_item.
+        if (cmd === 'ax_status') return Promise.resolve(Boolean(state.axTrusted));
+        if (cmd === 'request_accessibility' || cmd === 'open_accessibility_settings') {
+          return Promise.resolve(cmd === 'request_accessibility' ? Boolean(state.axTrusted) : null);
+        }
         if (cmd === 'toggle_pin') {
           const id = args?.id;
           const desired = args?.isPinned;
@@ -247,8 +253,13 @@ export const FAILURE_HEADLINE = /تعذّر عرض محتوى رفّ/u;
 
 /** A real, bubbling click — the filter row listens on its container, so a
  *  non-bubbling Event would never reach the delegated handler. */
-export function click(dom, el) {
-  el.dispatchEvent(new dom.window.Event('click', { bubbles: true, cancelable: true }));
+export function click(dom, el, init = {}) {
+  // A MouseEvent (not a bare Event) so modifier-carrying clicks are
+  // expressible — ⌥click is a real product gesture: it chooses an item as
+  // plain text, exactly like ⌥⏎.
+  el.dispatchEvent(
+    new dom.window.MouseEvent('click', { bubbles: true, cancelable: true, ...init })
+  );
 }
 
 /**
@@ -257,6 +268,36 @@ export function click(dom, el) {
  * is no refresh button to click any more. The recovery semantics behind it —
  * soft re-init first, a full reload only if that fails — are unchanged.
  */
+/**
+ * Moves the selection onto `id` WITHOUT choosing it.
+ *
+ * Clicking a row is the product's primary action — copy, paste into the
+ * previously-active app, keep on the clipboard — so a suite that only needs
+ * "this row is the selected one" must not click. It drives the arrow keys the
+ * way a user browsing the list does. Selection clamps at both ends rather
+ * than wrapping, so walking to the top first makes the position absolute.
+ */
+export function selectRowByKeyboard(dom, id) {
+  const doc = dom.window.document;
+  doc.getElementById('search').blur();
+  const ids = () => [...doc.querySelectorAll('.row')].map((row) => row.dataset.id);
+  const target = ids().indexOf(id);
+  if (target < 0) throw new Error(`selectRowByKeyboard: no row "${id}" in [${ids()}]`);
+
+  const press = (key) =>
+    dom.window.dispatchEvent(
+      new dom.window.KeyboardEvent('keydown', { key, bubbles: true, cancelable: true })
+    );
+
+  for (let i = 0; i <= ids().length; i += 1) press('ArrowUp');
+  for (let i = 0; i < target; i += 1) press('ArrowDown');
+
+  const selected = doc.querySelector('.row.selected')?.dataset.id;
+  if (selected !== id) {
+    throw new Error(`selectRowByKeyboard: wanted "${id}", selection landed on "${selected}"`);
+  }
+}
+
 export function pressCmdR(dom) {
   dom.window.dispatchEvent(
     new dom.window.KeyboardEvent('keydown', {
@@ -305,6 +346,40 @@ export async function mountPanel(initialState, options = {}) {
   const fake = createFakeTauri(initialState, options);
   dom.window.__TAURI__ = fake.tauri;
 
+  // jsdom ships no IntersectionObserver, and `panel.js` deliberately falls
+  // back to eager loading when it is absent. Tests that need to prove the
+  // deferral itself install this controllable stand-in, which records what was
+  // observed and lets the test decide when something scrolls into view.
+  const observers = [];
+  if (options.withIntersectionObserver) {
+    class TestIntersectionObserver {
+      constructor(callback, init) {
+        this.callback = callback;
+        this.init = init;
+        this.targets = new Set();
+        observers.push(this);
+      }
+      observe(target) {
+        this.targets.add(target);
+      }
+      unobserve(target) {
+        this.targets.delete(target);
+      }
+      disconnect() {
+        this.targets.clear();
+      }
+      /** Reports every currently-observed target as scrolled into view. */
+      revealAll() {
+        const entries = [...this.targets].map((target) => ({ target, isIntersecting: true }));
+        this.callback(entries, this);
+      }
+    }
+    dom.window.IntersectionObserver = TestIntersectionObserver;
+    globalThis.IntersectionObserver = TestIntersectionObserver;
+  } else {
+    delete globalThis.IntersectionObserver;
+  }
+
   const uncaught = [];
   dom.window.addEventListener('error', (e) => uncaught.push(String(e.error ?? e.message)));
   dom.window.addEventListener('unhandledrejection', (e) => uncaught.push(String(e.reason)));
@@ -338,5 +413,5 @@ export async function mountPanel(initialState, options = {}) {
   };
   await import('../../src/js/panel.js');
   await flush();
-  return { dom, fake, reloads, uncaught, timers };
+  return { dom, fake, reloads, uncaught, timers, observers };
 }

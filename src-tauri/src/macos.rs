@@ -10,7 +10,35 @@ use objc2_app_kit::{
     NSApplicationActivationOptions, NSBitmapImageFileType, NSBitmapImageRep,
     NSBitmapImageRepPropertyKey, NSPasteboard, NSRunningApplication, NSWorkspace,
 };
-use objc2_foundation::{NSData, NSDictionary, NSString};
+use objc2_foundation::{MainThreadMarker, NSData, NSDictionary, NSString};
+
+/// True when the caller is already on the AppKit main thread.
+///
+/// `MainThreadMarker::new()` is `Some` only on the main thread, which is
+/// exactly the question, and it costs one `NSThread.isMainThread` check.
+pub fn is_main_thread() -> bool {
+    MainThreadMarker::new().is_some()
+}
+
+/// Queues `work` onto the main thread via libdispatch, without blocking.
+///
+/// This deliberately does NOT go through `AppHandle::run_on_main_thread`.
+/// That posts to tao's event-loop proxy, and tao only drains that queue while
+/// it is processing events — but Raff is an accessory (`LSUIElement`) app that
+/// sits with no visible window most of the time, so its loop is parked and
+/// nothing drains. Measured on a cold launch, a panel-show posted that way
+/// took 2.5 SECONDS to run, and sometimes did not run at all until an
+/// unrelated event happened along. Waking CFRunLoop first does not help: the
+/// loop wakes, but tao still is not iterating, so its queue stays untouched.
+///
+/// libdispatch's main queue is drained by AppKit's own run-loop integration,
+/// which is always installed, so work lands on the next turn regardless of
+/// what tao is doing. `exec_async` (not `exec_sync`/`run_on_main`, which
+/// block and could deadlock against a caller already holding a lock the main
+/// thread wants) keeps the calling thread free.
+pub fn dispatch_to_main<F: FnOnce() + Send + 'static>(work: F) {
+    dispatch2::DispatchQueue::main().exec_async(work);
+}
 
 /// Pasteboard flags set by password managers and other sensitive sources.
 /// Content carrying these must never be stored (see plan §5).

@@ -32,8 +32,11 @@ permissions:
 
 jobs:
   release:
-    # Apple Silicon runner — رفّ يُبنى لـ aarch64 فقط.
-    runs-on: macos-14
+    # macos-26: يوفّر Xcode 26.6 افتراضيًا، وهو مطلوب لتصدير أيقونة التطبيق
+    # عبر Icon Composer (انظر خطوة «تصحيح أيقونة الإصدار» أدناه) — macos-14 لا
+    # يملك Xcode 26 أصلًا، وهو أيضًا قيد الإيقاف من GitHub (غير مدعوم بعد
+    # 2026-11-02). Apple Silicon فقط — رفّ يُبنى لـ aarch64.
+    runs-on: macos-26
 
     steps:
       - uses: actions/checkout@v4
@@ -73,3 +76,17 @@ jobs:
           prerelease: false
           includeUpdaterJson: true
           args: --target aarch64-apple-darwin
+
+      # tauri-action (والبناء الخام الذي يديره) لا يعرف Icon Composer، فيُصدَّر
+      # icon.icns وحده — نفس الأيقونة التي أثبتنا محليًا أن macOS 26 يعيد رسمها
+      # سوداء في الوضع الداكن. هذه الخطوة تصحّح ذلك بعد البناء مباشرة: تُلحق
+      # كتالوج الأيقونة المعتمد (Assets.car)، ثم تعيد توليد الـ DMG وأرشيف
+      # التحديث من التطبيق المصحَّح نفسه — لا يُعاد استخدام مُخرجات tauri-action
+      # القديمة أبدًا — وتوقّع الأرشيف الجديد وتُحدّث latest.json بتوقيعه، ثم
+      # تستبدل الأصول الأربعة على المسودّة نفسها. راجع scripts/ci-fix-release-icon.mjs.
+      - name: تصحيح أيقونة الإصدار (Icon Composer)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: node scripts/ci-fix-release-icon.mjs

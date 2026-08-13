@@ -5,6 +5,64 @@ between the canonical Light and Dark Figma masters, and the primary evidence
 behind every claim — so the mechanism can be verified or revisited without
 repeating the investigation from scratch.
 
+## UPDATE (v4.2.0) — the §6 conclusion below was wrong; here is what actually ships
+
+§6's conclusion — "the Light canonical icon ships correctly, unchanged in
+every other respect" — was based on inspecting bundle *files* (`icon.icns`,
+byte-identical, correct artwork) and did not account for how macOS 26
+*resolves* a legacy `.icns` at display time. It does not simply show it: it
+decomposes the icon into a background "plate" and a foreground glyph and
+re-renders the plate with system material — in Dark Mode that plate becomes
+near-black. Raff's terracotta *is* the plate, so the Light-only `icon.icns`
+that §6 verified as correct on disk **rendered black in Dock/Finder/Spotlight
+whenever the system was in Dark Mode**, discovered only by asking macOS
+directly (`NSWorkspace.icon(forFile:)`, rendered to a PNG and inspected) —
+never by reading the bundle. Proven with controls: the same `icon.icns` under
+a different bundle identifier still rendered black (not a cache); another
+app's legacy `.icns` in an identical throwaway bundle kept its true colour
+(not systemic darkening — that app ships a modern icon asset, Raff didn't).
+
+**What ships now:** the `.icon` document this file investigates below is
+compiled and shipped after all — but through a different path than §3–§6
+tried, specifically to dodge the `ibtoold` crash: `scripts/apply-app-icon.mjs`
+invokes `actool` **standalone**, outside `tauri build`/`tauri-bundler`
+entirely, as a step run *after* the app is already built. `tauri build`'s own
+`create_assets_car_file` (and its `ibtoold` fragility) is never exercised.
+Locally this runs via `scripts/build-candidate.mjs`; in CI, since
+`tauri-action` has no post-build hook, `.github/workflows/release.yml` runs
+`scripts/ci-fix-release-icon.mjs` immediately after the build-and-publish
+step, which also regenerates the DMG and the updater archive **from the
+icon-patched app** (never re-uses tauri-action's pre-patch DMG/archive) and
+re-signs the regenerated archive with the same secret key.
+
+Two more real bugs in the `.icon` document itself, found rendering the actual
+resolved icon (not just reading its JSON): its `mark.png` carried an opaque
+`#F5F5F5` background from a Figma in-context export (the same failure mode
+§5/`gen-icons.mjs` already document for the raster masters), so the "mark"
+layer covered the whole icon once filled — fixed by deriving a true
+transparent-alpha glyph from the canonical light master. And
+`"glass": true` + translucency rendered the white mark nearly invisible
+against a light plate — fixed by making the mark solid.
+
+**This is deliberately not "Dark Mode App Icon support."** Per product
+policy, the `.icon` document's `dark` appearance fill was set **identical**
+to its default (light) fill — verified: resolved plate RGB is
+`(194,111,73)` under both forced-light and forced-dark drawing appearance.
+One canonical Light icon, in both system appearances; only Raff's *interior*
+UI (Automatic/Light/Dark) still varies. `icon-dark.icns` (§1) remains
+unreferenced by any active bundle path.
+
+**Runner requirement, confirmed:** Icon Composer's `.icon` format needs
+`actool` from Xcode ≥ 26. `macos-14` (this repo's release runner at the time
+§6 was written) has no Xcode 26 at all — the release workflow now runs on
+`macos-26` (Xcode 26.6 default as of 2026-07-21), matching what was verified
+working on this machine. `macos-14` is also being sunset by GitHub
+independent of this (unsupported after 2026-11-02).
+
+The investigation below (§1–§6) is left as-written: the `ibtoold` crash
+inside `tauri-bundler`'s own integration is still real and still reproduces
+if that path is ever used directly — it just isn't the path in use anymore.
+
 ## 1. What was already true before this work
 
 - Figma has one canonical app-icon system: `COMPONENT_SET` "Brand / App Icon"

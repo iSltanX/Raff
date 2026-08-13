@@ -18,6 +18,7 @@ import {
   rowIds,
   listText,
   click,
+  selectRowByKeyboard,
 } from './helpers/panel-harness.mjs';
 
 function pressCmdBackspace(dom, modifiers = {}) {
@@ -50,8 +51,7 @@ function pressEnter(dom) {
  * simulate that particular default action, so it is reproduced explicitly to
  * keep the test faithful to the shipped WebView instead of to a jsdom gap. */
 function selectRow(dom, id) {
-  dom.window.document.getElementById('search').blur();
-  click(dom, dom.window.document.querySelector(`.row[data-id="${id}"]`));
+  selectRowByKeyboard(dom, id);
 }
 
 test('delete shortcut: ⌘⌫ removes the selected item', async (t) => {

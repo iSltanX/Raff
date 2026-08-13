@@ -1,6 +1,6 @@
 [package]
 name = "raff"
-version = "4.1.1"
+version = "4.2.0"
 description = "رفّ — personal, local-only, keyboard-first clipboard manager for macOS"
 authors = ["Raff"]
 edition = "2021"
@@ -22,6 +22,7 @@ base64 = "0.22"
 image = { version = "0.25", default-features = false, features = ["png", "tiff"] }
 core-graphics = "0.25"
 core-foundation = "0.10"
+dispatch2 = "0.3"
 objc2 = "0.6"
 objc2-foundation = "0.3"
 objc2-app-kit = { version = "0.3", features = [

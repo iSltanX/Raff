@@ -64,6 +64,7 @@ pub struct StatePayload {
 
 #[tauri::command]
 pub fn get_state(app: AppHandle, state: State<AppState>) -> StatePayload {
+    crate::startup_trace::mark("FRONTEND_CALLED_get_state");
     let store = state.store.lock().unwrap();
     let mut pinned: Vec<&crate::storage::ClipItem> = store.pinned.iter().collect();
     pinned.sort_by_key(|i| i.pinned_order.unwrap_or(u32::MAX));
@@ -322,7 +323,7 @@ static APP_ICON_CACHE: std::sync::OnceLock<
 /// `None` when the app is unknown or its icon cannot be rendered — the panel
 /// then uses the design system's generic-app fallback, so this is decorative.
 #[tauri::command]
-pub async fn source_app_icon(app: AppHandle, bundle_id: String) -> Option<String> {
+pub async fn source_app_icon(bundle_id: String) -> Option<String> {
     let cache = APP_ICON_CACHE.get_or_init(Default::default);
     if let Ok(map) = cache.lock() {
         if let Some(hit) = map.get(&bundle_id) {
@@ -330,25 +331,29 @@ pub async fn source_app_icon(app: AppHandle, bundle_id: String) -> Option<String
         }
     }
 
-    // NSWorkspace icon lookup is AppKit work. An async Tauri command returns
-    // control to WKWebView immediately; its blocking waiter lives on a worker,
-    // so the closure dispatched to the macOS main thread can actually run.
-    // Waiting inline in a synchronous IPC handler deadlocks the event loop and
-    // stalls the panel for the full timeout on every uncached bundle id.
+    // Resolved on a blocking worker, NOT the macOS main thread.
+    //
+    // This used to hop to the main thread on the theory that an NSWorkspace
+    // icon lookup is AppKit work. Sampling a cold launch showed what it
+    // actually costs: `-[NSImage TIFFRepresentation]` on a workspace icon
+    // drops into IconServices, which does a SYNCHRONOUS XPC round trip
+    // (`__NSXPCCONNECTION_IS_WAITING_FOR_A_SYNCHRONOUS_REPLY__` → `mach_msg`)
+    // and parks the calling thread until the icon daemon answers. A history
+    // spanning ~17 distinct apps therefore queued 17 of those onto the main
+    // thread the moment the panel hydrated, and they ran back to back — a
+    // measured 5.7 SECOND main-thread stall on this machine, longer on a
+    // colder icon cache. Nothing could be serviced meanwhile, so the menu-bar
+    // icon was up but the first clicks went nowhere.
+    //
+    // It is XPC-bound work, not UI work: `NSWorkspace` is documented
+    // thread-safe, each call builds its own `NSImage` and shares nothing, and
+    // the result is bytes rather than anything AppKit keeps. Doing it here
+    // keeps the wait entirely on a worker.
     let wanted = bundle_id.clone();
-    let png = tauri::async_runtime::spawn_blocking(move || {
-        let (tx, rx) = std::sync::mpsc::channel();
-        app.run_on_main_thread(move || {
-            let _ = tx.send(macos::app_icon_png(&wanted));
-        })
-        .ok()?;
-        rx.recv_timeout(std::time::Duration::from_millis(1500))
-            .ok()
-            .flatten()
-    })
-    .await
-    .ok()
-    .flatten();
+    let png = tauri::async_runtime::spawn_blocking(move || macos::app_icon_png(&wanted))
+        .await
+        .ok()
+        .flatten();
 
     let data_url = png.and_then(|bytes| {
         let decoded = image::load_from_memory_with_format(&bytes, image::ImageFormat::Png).ok()?;

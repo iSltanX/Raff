@@ -63,6 +63,33 @@ struct Rect {
     height: f64,
 }
 
+/// Runs `work` on the AppKit main thread, as promptly as possible.
+///
+/// Every NSPanel call below has to happen on the main thread, and the callers
+/// are split: the tray click handler and the NSPanel delegate are ALREADY on
+/// it, while the clipboard monitor, the global-shortcut handler and the IPC
+/// commands are not.
+///
+/// Handing the on-main callers to `run_on_main_thread` anyway is what made the
+/// first tray click after a cold launch do nothing. That call always defers
+/// through tao's event-loop proxy, which tao drains only while it is
+/// processing events — and an accessory app showing no window is not. The
+/// posted closure sat there until some unrelated event woke tao, at which
+/// point everything that had piled up ran at once: the queued show, then the
+/// next click's toggle, which promptly hid it again. Net effect on screen:
+/// nothing, no matter how many times the icon was clicked.
+///
+/// So when we are already on the main thread, just do the work — correct and
+/// immediate, with no queue in the path at all. Off-main callers go through
+/// libdispatch, whose main queue AppKit always drains.
+fn on_main<F: FnOnce() + Send + 'static>(work: F) {
+    if macos::is_main_thread() {
+        work();
+    } else {
+        macos::dispatch_to_main(work);
+    }
+}
+
 fn clamp_origin(origin: (f64, f64), window: (f64, f64), area: Rect, margin: f64) -> (f64, f64) {
     let min_x = area.x + margin;
     let min_y = area.y + margin;
@@ -125,8 +152,10 @@ pub fn init(app: &AppHandle) -> tauri::Result<()> {
 /// remembering the frontmost app so paste can restore focus to it.
 /// Callable from any thread — NSPanel work runs on the main thread.
 pub fn show(app: &AppHandle) {
+    crate::startup_trace::mark("panel_show_called");
     let handle = app.clone();
-    let _ = app.run_on_main_thread(move || {
+    on_main(move || {
+        crate::startup_trace::mark("panel_show_ON_MAIN_THREAD");
         let front = macos::frontmost_app();
         {
             let state = handle.state::<AppState>();
@@ -139,6 +168,7 @@ pub fn show(app: &AppHandle) {
         }
         if let Ok(panel) = handle.get_webview_panel(PANEL_LABEL) {
             panel.show();
+            crate::startup_trace::mark("PANEL_VISIBLE");
         }
         let _ = handle.emit_to(PANEL_LABEL, "panel://shown", ());
     });
@@ -162,7 +192,7 @@ pub fn remember_position(app: &AppHandle) {
                 Ok(()) => continue,
                 Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
                     let main_handle = handle.clone();
-                    let _ = handle.run_on_main_thread(move || constrain_and_save(&main_handle));
+                    on_main(move || constrain_and_save(&main_handle));
                 }
                 Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => return,
             }
@@ -175,7 +205,7 @@ pub fn remember_position(app: &AppHandle) {
 
 pub fn hide(app: &AppHandle) {
     let handle = app.clone();
-    let _ = app.run_on_main_thread(move || {
+    on_main(move || {
         if let Ok(panel) = handle.get_webview_panel(PANEL_LABEL) {
             if panel.is_visible() {
                 panel.order_out(None);
@@ -186,7 +216,7 @@ pub fn hide(app: &AppHandle) {
 
 pub fn toggle(app: &AppHandle) {
     let handle = app.clone();
-    let _ = app.run_on_main_thread(move || {
+    on_main(move || {
         let panel = match handle.get_webview_panel(PANEL_LABEL) {
             Ok(panel) => panel,
             Err(_) => return show(&handle),

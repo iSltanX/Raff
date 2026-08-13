@@ -38,6 +38,7 @@ const toastEl = document.getElementById('toast');
 const toastIconEl = document.getElementById('toast-icon');
 const toastMessageEl = document.getElementById('toast-message');
 const toastUndoEl = document.getElementById('toast-undo');
+const toastActionEl = document.getElementById('toast-action');
 const footerHintEl = document.getElementById('footer-hint');
 const filtersEl = document.getElementById('filters');
 const settingsBtn = document.getElementById('settings-btn');
@@ -74,6 +75,9 @@ const SOURCE_GLYPH_PX = 24;
 
 const PIN_TOAST_MS = 3000;
 const DELETE_TOAST_MS = 5000;
+/** Longer than PIN_TOAST_MS: this toast carries a button the user needs time
+ * to read and act on, not just a status line to glance at. */
+const ACCESS_TOAST_MS = 6000;
 const TOAST_EXIT_MS = 120;
 
 // The list area has three distinct states and they must never be confused:
@@ -308,7 +312,7 @@ function buildRow(item, index) {
       thumb.dataset.state = 'unavailable';
     });
     if (thumbs.has(item.id)) img.src = thumbs.get(item.id);
-    else loadThumb(item.id, img, thumb);
+    else requestThumb(item.id, img, thumb);
     thumb.append(placeholder, img);
     preview.append(thumb);
   } else {
@@ -371,11 +375,24 @@ function buildRow(item, index) {
   });
   actions.append(pinBtn, deleteBtn);
 
-  row.addEventListener('click', () => {
+  /* Choosing a row IS the product's primary action, and it is one action:
+     the item goes to the clipboard, gets pasted into whatever app was in
+     front before رفّ opened, and STAYS on the clipboard so ⌘V repeats it.
+     `paste()` in Rust does all three; the clipboard is deliberately never
+     rolled back afterwards.
+
+     Mouse and keyboard must mean the same thing, so this is exactly what
+     Enter does — with ⌥ carrying the same "paste as plain text" modifier.
+     Selection is still updated first so the row a toast or an error refers
+     to is the row that was clicked.
+
+     There is deliberately NO dblclick handler: a double click fires `click`
+     twice, which would paste twice. Copy-without-pasting stays available as
+     the secondary action on ⌘C. */
+  row.addEventListener('click', (e) => {
     selectedId = item.id;
-    render();
+    paste(item.id, e.altKey);
   });
-  row.addEventListener('dblclick', () => paste(item.id, false));
 
   // Physical order is [ content | source ]; the action cluster is an overlay
   // (see .row-actions) so a resting row reserves no empty block for it.
@@ -408,6 +425,7 @@ function matchesFilter(item) {
 }
 
 function renderList() {
+  resetThumbRequests();
   if (phase === 'loading') {
     listEl.setAttribute('aria-busy', 'true');
     setListStructure(false);
@@ -558,6 +576,58 @@ function render() {
   }
 }
 
+/* Thumbnails are fetched over IPC as base64 data URLs, and Tauri hands every
+   IPC reply back by evaluating script ON THE MAIN THREAD. Asking for one per
+   image row the moment the row is built therefore queues a large main-thread
+   injection per image — with a few hundred saved images that measured as
+   SECONDS of frozen main thread immediately after launch, during which the
+   menu-bar icon could not be serviced at all: the icon was up, but the first
+   clicks went nowhere until the backlog drained.
+
+   The panel is hidden at launch and shows about eight rows at a time, so
+   nearly all of that work was for pixels nobody could see. Rows now ask for
+   their thumbnail only once they are actually near the viewport. */
+let thumbObserver = null;
+const pendingThumbs = new Map();
+
+function requestThumb(id, img, thumb) {
+  // jsdom and any other environment without the observer keeps the original
+  // eager behaviour, which is also the correct fallback: better a slow list
+  // than a list with no images.
+  if (typeof IntersectionObserver !== 'function') {
+    loadThumb(id, img, thumb);
+    return;
+  }
+  if (!thumbObserver) {
+    thumbObserver = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting) continue;
+          const target = entry.target;
+          thumbObserver.unobserve(target);
+          const pending = pendingThumbs.get(target);
+          if (!pending) continue;
+          pendingThumbs.delete(target);
+          loadThumb(pending.id, pending.img, target);
+        }
+      },
+      // A screen of lead time, so a thumbnail is already resolving by the
+      // time a scrolling user reaches it.
+      { root: listEl, rootMargin: '300px 0px' }
+    );
+  }
+  pendingThumbs.set(thumb, { id, img });
+  thumbObserver.observe(thumb);
+}
+
+/* `renderList` rebuilds every row, orphaning whatever the observer was still
+   watching. Dropping those registrations keeps it from pinning detached nodes
+   and from firing for rows that no longer exist. */
+function resetThumbRequests() {
+  if (thumbObserver) thumbObserver.disconnect();
+  pendingThumbs.clear();
+}
+
 async function loadThumb(id, img, thumb) {
   try {
     const url = await api.getImage(id);
@@ -614,6 +684,8 @@ function dismissFeedback({ animate = false } = {}) {
     toastMessageEl.textContent = '';
     toastUndoEl.hidden = true;
     toastUndoEl.disabled = false;
+    toastActionEl.hidden = true;
+    toastActionEl.onclick = null;
   };
 
   if (animate && !panelFeedbackEl.hidden && !reducedMotion()) {
@@ -626,7 +698,7 @@ function dismissFeedback({ animate = false } = {}) {
 
 function presentToast(
   message,
-  { duration = PIN_TOAST_MS, undo = false, kind = 'success' } = {}
+  { duration = PIN_TOAST_MS, undo = false, kind = 'success', action = null } = {}
 ) {
   clearTimeout(toastTimer);
   clearTimeout(toastExitTimer);
@@ -647,6 +719,22 @@ function presentToast(
   toastMessageEl.textContent = message;
   toastUndoEl.hidden = !undo;
   toastUndoEl.disabled = false;
+  // Independent of `undo`: a toast may offer neither, either, or (rare, but
+  // not disallowed) both — Delete's five-second Undo and "grant Accessibility"
+  // never occur on the same toast today, but nothing here assumes that.
+  if (action) {
+    toastActionEl.textContent = action.label;
+    toastActionEl.setAttribute('aria-label', action.label);
+    toastActionEl.onclick = () => {
+      action.onClick();
+      // The offer was acted on; let the toast finish on its own timer rather
+      // than yanking it away mid-click.
+    };
+    toastActionEl.hidden = false;
+  } else {
+    toastActionEl.hidden = true;
+    toastActionEl.onclick = null;
+  }
   toastEl.hidden = false;
   panelFeedbackEl.hidden = false;
   // Clear then insert in a microtask so even identical consecutive feedback
@@ -710,9 +798,9 @@ async function finalizeActiveDelete() {
 /** General feedback waits behind an active five-second delete receipt. All
  * callers share the serialized lane, so one toast is visible at a time without
  * shortening the user's Undo protection. */
-function showToast(message, duration = PIN_TOAST_MS, kind = 'success') {
+function showToast(message, duration = PIN_TOAST_MS, kind = 'success', action = null) {
   enqueueMutation(async () => {
-    deliverFeedback(message, { duration, kind });
+    deliverFeedback(message, { duration, kind, action });
   });
 }
 
@@ -894,8 +982,37 @@ function paste(id, plain) {
   if (!id) return;
   api
     .pasteItem(id, plain)
-    .then((pasted) => {
-      if (!pasted) showToast('نُسخ إلى الحافظة — الصقه بـ ⌘V');
+    .then(async (pasted) => {
+      if (pasted) return;
+      // `pasted: false` always means the item is safely on the clipboard —
+      // Rust writes it before attempting anything else — but tells us
+      // nothing about WHY the automatic paste half didn't happen. Missing
+      // Accessibility is by far the common case (and the only one with a
+      // concrete fix the user can act on), so ask which one this is instead
+      // of leaving every fallback looking identical and unexplained.
+      let trusted = true;
+      try {
+        trusted = await api.axStatus();
+      } catch {
+        // Treat an unknown status as "assume trusted" — the plain fallback
+        // below still lands the item on the clipboard either way.
+      }
+      if (!trusted) {
+        showToast(
+          'نُسخ إلى الحافظة — الصقه بـ ⌘V. للصق التلقائي مستقبلًا، امنح رفّ إذن تسهيل الوصول.',
+          ACCESS_TOAST_MS,
+          'success',
+          {
+            label: 'منح الإذن',
+            onClick: () => {
+              api.requestAccessibility().catch(() => {});
+              api.openAccessibilitySettings().catch(() => {});
+            },
+          }
+        );
+      } else {
+        showToast('نُسخ إلى الحافظة — الصقه بـ ⌘V');
+      }
     })
     .catch((err) => showToast(String(err), PIN_TOAST_MS, 'error'));
 }
