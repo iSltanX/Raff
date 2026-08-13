@@ -26,8 +26,29 @@ import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const project = path.join(here, '..');
-const bundleMacos = path.join(project, 'src-tauri/target/release/bundle/macos');
-const bundleDmg = path.join(project, 'src-tauri/target/release/bundle/dmg');
+
+// tauri-action is invoked with `args: --target aarch64-apple-darwin` (see
+// release.yml), and `cargo`/`tauri build` nest EVERY target-qualified build
+// under `target/<triple>/release/...` — even when the triple matches the
+// host natively — instead of the unqualified `target/release/...` a plain
+// `tauri build` (no --target, what build-candidate.mjs runs locally) uses.
+// Checking both, preferring the target-qualified one, keeps this script
+// correct for however it's invoked rather than hardcoding one path and
+// failing silently-until-it-doesn't when that assumption breaks.
+const candidates = [
+  path.join(project, 'src-tauri/target/aarch64-apple-darwin/release/bundle'),
+  path.join(project, 'src-tauri/target/release/bundle'),
+];
+const bundleRoot = candidates.find((p) => existsSync(path.join(p, 'macos/Raff.app')));
+if (!bundleRoot) {
+  console.error(
+    `ci-fix-release-icon: no Raff.app found in any of:\n${candidates.map((p) => `  ${path.join(p, 'macos/Raff.app')}`).join('\n')}\ntauri-action must run first.`
+  );
+  process.exit(1);
+}
+console.log(`ci-fix-release-icon: using bundle root ${bundleRoot}`);
+const bundleMacos = path.join(bundleRoot, 'macos');
+const bundleDmg = path.join(bundleRoot, 'dmg');
 const appPath = path.join(bundleMacos, 'Raff.app');
 
 function run(cmd, args, opts = {}) {
@@ -43,11 +64,6 @@ if (!tag) {
   console.error('ci-fix-release-icon: GITHUB_REF_NAME is not set (expected a tag push)');
   process.exit(1);
 }
-if (!existsSync(appPath)) {
-  console.error(`ci-fix-release-icon: ${appPath} does not exist — tauri-action must run first`);
-  process.exit(1);
-}
-
 const conf = JSON.parse(readFileSync(path.join(project, 'src-tauri/tauri.conf.json'), 'utf8'));
 const version = conf.version;
 

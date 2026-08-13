@@ -10,7 +10,7 @@
 
 كل ما نسخته يبقى قريبًا، مرتبًا، وخاصًا.
 
-[![الإصدار](https://img.shields.io/badge/%D8%A7%D9%84%D8%A5%D8%B5%D8%AF%D8%A7%D8%B1-v4.2.0-C4704B?style=flat-square)](https://github.com/iSltanX/Raff/releases/latest)
+[![الإصدار](https://img.shields.io/badge/%D8%A7%D9%84%D8%A5%D8%B5%D8%AF%D8%A7%D8%B1-v4.2.1-C4704B?style=flat-square)](https://github.com/iSltanX/Raff/releases/latest)
 [![macOS](https://img.shields.io/badge/macOS-12%2B%20·%20Apple%20Silicon-1E1A17?style=flat-square)](https://github.com/iSltanX/Raff/releases/latest)
 [![محلي بالكامل](https://img.shields.io/badge/%D9%85%D8%AD%D9%84%D9%8A%20%D8%A8%D8%A7%D9%84%D9%83%D8%A7%D9%85%D9%84-%D8%A8%D9%84%D8%A7%20%D8%B4%D8%A8%D9%83%D8%A9-16643F?style=flat-square)](#الخصوصية--local-first)
 
@@ -250,7 +250,7 @@
 <img src="docs/assets/raff-install.png" alt="التثبيت" width="100%">
 </div>
 
-1. نزّل `Raff_4.2.0_aarch64.dmg` من
+1. نزّل `Raff_4.2.1_aarch64.dmg` من
    [صفحة الإصدارات](https://github.com/iSltanX/Raff/releases/latest).
 2. افتح الملف واسحب **Raff** إلى مجلد التطبيقات.
 3. شغّل رفّ. ستجده في **شريط القائمة** — لا تبحث عنه في Dock، فهو تطبيق
@@ -289,13 +289,13 @@
 
 | | |
 | --- | --- |
-| الإصدار الحالي | **v4.2.0** |
+| الإصدار الحالي | **v4.2.1** |
 | المعمارية | macOS arm64 (Apple Silicon) |
 | التوقيع | ad-hoc — غير موثَّق من Apple |
 | قناة التحديث | Tauri Updater عبر إصدارات هذا المستودع |
 | سجل التغييرات | [CHANGELOG.md](CHANGELOG.md) |
 
-v4.2.0 يغيّر طريقة استخدام رفّ اليومية: اختيار عنصر أصبح إجراءً واحدًا
+v4.2.1 يغيّر طريقة استخدام رفّ اليومية: اختيار عنصر أصبح إجراءً واحدًا
 (نسخ ← إغلاق رفّ ← إعادة تفعيل التطبيق السابق ← لصق تلقائي — والعنصر يبقى في
 الحافظة بعدها)، مع رجوع آمن للنسخ فقط حين لا يتوفر إذن تسهيل الوصول. اللوحة
 تفتح فورًا من أول استخدام بعد تشغيل رفّ — أُصلح خلل كان يجعل النقرات الأولى
