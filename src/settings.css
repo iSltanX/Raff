@@ -83,7 +83,12 @@ body {
 }
 
 /* macOS-style preferences toolbar. It is intentionally flat: the active page
-   is expressed by text weight, a quiet tint and the Raff accent hairline. */
+   is expressed by text weight, a quiet tint and the Raff accent hairline.
+
+   The title bar and this toolbar are the SAME surface, so the hairline that
+   used to run between them split one block of chrome for no reason. The only
+   stroke here is the one that actually separates chrome from canvas, and it
+   matches the footer's top edge exactly. */
 .settings-tabs {
   direction: rtl;
   display: flex;
@@ -94,7 +99,6 @@ body {
   padding: var(--space-md) var(--space-xl);
   flex: none;
   background: var(--color-bg-primary);
-  border-top: 1px solid var(--color-border-divider);
   border-bottom: 1px solid var(--color-border-default);
 }
 
@@ -140,13 +144,14 @@ body {
   background: var(--color-interactive-primary);
 }
 
-.settings-tab:focus-visible {
-  outline-color: var(--color-focus-ring);
-}
-
 .settings-window :focus-visible {
   outline-color: var(--color-focus-ring);
 }
+
+/* NOTE: controls deliberately declare no `:focus-visible` border-radius here.
+   The shared rule in tokens.css used to force `--radius-sm` on focus, which
+   changed each control's SHAPE mid-interaction; that was fixed at the root, so
+   every control now simply keeps its own geometry and focus adds only a ring. */
 
 /* One fixed-height page. Expanded managers scroll internally, never the shell. */
 .settings-body {
@@ -172,35 +177,86 @@ body {
   display: none;
 }
 
+/* ─── The five reading ranks ───────────────────────────────────────────────
+   page → section → setting → explanation → control. Each rank is separated
+   from the next by SIZE and WEIGHT and INK LEVEL together, never by colour
+   alone, and the groups are separated from the canvas by the same tone +
+   hairline + micro-lift the clipboard rows use, so both windows read as one
+   product.                                                                  */
+
 .page-heading {
   flex: none;
 }
 
-.page-heading h2,
-.about-summary h2 {
+/* Rank 1 — the page. It used to be brand terracotta, which made colour the
+   hierarchy device and spent brand paint on a title that is merely present.
+   Brand is now reserved for the active tab and other live moments. */
+.page-heading h2 {
   margin: 0;
   font-family: var(--font-ar);
-  font-size: 15px;
-  font-weight: 800;
-  line-height: 22px;
-  color: var(--color-text-brand);
+  font-size: var(--text-subhead);
+  font-weight: 700;
+  line-height: var(--leading-subhead);
+  color: var(--color-text-primary);
 }
 
-.page-heading p,
-.about-summary p {
+/* Rank 4 — pure explanation, tertiary ink, under everything it explains. */
+.page-heading p {
   margin: var(--space-2xs) 0 0;
   font-family: var(--font-ar);
   font-size: var(--text-caption);
   font-weight: 400;
   line-height: var(--leading-caption);
+  color: var(--color-text-tertiary);
+}
+
+/* The group stack is the only part of a page allowed to scroll, so an expanded
+   manager grows the page instead of being silently clipped by the fixed
+   window. The 2px inline padding — cancelled by the matching negative margin —
+   keeps the cards on the page gutter while giving their hairline and
+   micro-lift room inside the scroll container's clip. */
+.settings-groups {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+  gap: var(--space-lg);
+  padding-inline: var(--space-2xs);
+  margin-inline: calc(var(--space-2xs) * -1);
+  overflow-y: auto;
+}
+
+.settings-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  flex: none;
+}
+
+/* Rank 2 — the section. Only a page with more than one genuine group carries
+   one; a lone group is already named by the page heading above it. The indent
+   lands the label on the same optical line as the setting titles below it. */
+.group-title {
+  margin: 0;
+  padding-inline-start: var(--space-lg);
+  font-family: var(--font-ar);
+  font-size: var(--text-caption);
+  font-weight: 700;
+  line-height: var(--leading-caption);
   color: var(--color-text-secondary);
 }
 
+/* Rank 3 — the settings themselves, on one raised card. */
 .settings-rows {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  border-top: 1px solid var(--color-border-divider);
+  flex: none;
+  padding-inline: var(--space-lg);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-row);
+  box-shadow: var(--elev-row);
 }
 
 .row {
@@ -212,7 +268,14 @@ body {
   min-height: 54px;
   padding: var(--space-md) 0;
   flex: none;
-  border-bottom: 1px solid var(--color-border-divider);
+}
+
+/* One hairline BETWEEN settings, inset by the card's own padding, so no
+   divider ever runs into the card's border or its rounded corners. Anchoring
+   it to the row's top rather than the previous row's bottom keeps it correct
+   when a collapsed disclosure region sits between two rows. */
+.settings-rows > .row:not(:first-child) {
+  border-top: 1px solid var(--color-border-divider);
 }
 
 .row-label {
@@ -234,14 +297,24 @@ body {
   text-wrap: pretty;
 }
 
+/* Rank 4 again — where the sub-line is pure explanation it drops to tertiary,
+   which is what makes the 13/500 title above it read as the setting. */
 .label-sub {
   font-family: var(--font-ar);
   font-size: var(--text-caption);
   font-weight: 400;
   line-height: var(--leading-caption);
-  color: var(--color-text-secondary);
+  color: var(--color-text-tertiary);
   text-align: right;
   text-wrap: pretty;
+}
+
+/* Live state and identifying data are not explanation — they carry real
+   information, so they hold the secondary rank and are read first. Both are
+   class-based, never id-based, so the error state below can still win. */
+.label-sub.is-status,
+.label-sub.latin {
+  color: var(--color-text-secondary);
 }
 
 .label-sub.error {
@@ -349,9 +422,13 @@ body {
   color: var(--color-text-primary);
 }
 
+/* Selection is a genuinely active moment, so it may spend brand paint — but it
+   also gains weight, because no state in this system is expressed by colour
+   alone. */
 .seg-tab.is-active {
   background: var(--color-bg-selected);
   color: var(--color-text-brand);
+  font-weight: 500;
 }
 
 .hotkey-badge,
@@ -405,9 +482,16 @@ body {
   font-weight: 500;
 }
 
+/* A destructive action must READ as destructive without SHOUTING at rest. The
+   red outline used to make «مسح سجل الحافظة» the loudest object in the footer,
+   outweighing «تم» — the action you actually came to take. At rest the button
+   now carries the neutral chrome of every other button and states its danger in
+   ink alone; the red edge and wash arrive on hover and focus, at the moment the
+   pointer is actually on it. The transparent fill also keeps the red legible on
+   whichever surface the button happens to sit on. */
 .push-btn.is-destructive {
   overflow: hidden;
-  border-color: var(--color-status-error);
+  border-color: var(--color-border-default);
   background: transparent;
   color: var(--color-status-error);
 }
@@ -422,14 +506,23 @@ body {
   transition: opacity var(--t-fast) var(--ease-standard);
 }
 
-.push-btn.is-destructive:hover {
+.push-btn.is-destructive:hover,
+.push-btn.is-destructive:focus-visible {
   border-color: var(--color-status-error);
   background: transparent;
   color: var(--color-status-error);
 }
 
-.push-btn.is-destructive:hover::before {
+.push-btn.is-destructive:hover::before,
+.push-btn.is-destructive:focus-visible::before {
   opacity: 0.1;
+}
+
+/* In the confirmation sheet the destructive button IS the committed action, so
+   there it keeps its full red edge at rest. Prominence is contextual, not a
+   property of the class. */
+.confirm-actions .push-btn.is-destructive {
+  border-color: var(--color-status-error);
 }
 
 .push-btn.is-preferred {
@@ -497,32 +590,42 @@ body {
   left: auto;
 }
 
+/* The note is not a setting, so it sits beside the card rather than inside it —
+   that is what used to put a bordered box inside a bordered container. It is
+   recessed instead of raised and carries no lift, so its rank is unmistakable
+   next to the card it follows. */
 .privacy-note {
   display: flex;
   align-items: center;
   gap: var(--space-md);
-  margin-top: var(--space-lg);
-  padding: var(--space-lg);
-  border: 1px solid var(--color-border-divider);
-  border-radius: var(--radius-md);
-  background: var(--color-bg-elevated);
+  padding: var(--space-md) var(--space-lg);
+  flex: none;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-tertiary);
   font-family: var(--font-ar);
   font-size: var(--text-caption);
   line-height: var(--leading-caption);
   color: var(--color-text-secondary);
 }
 
+/* Reassurance, not a brand moment: it earns its emphasis from weight and ink
+   level, exactly like every other lead line in the window. */
 .privacy-note strong {
-  color: var(--color-text-brand);
+  color: var(--color-text-primary);
+  font-weight: 700;
 }
 
+/* A disclosure region lives INSIDE the settings card, so it must not be a
+   second bordered box: it is a well cut back down to the canvas tone, which is
+   the same 1.15:1 step the card itself is lifted by. Its radius stays one step
+   under the card's so the nested corners stay concentric. */
 .expandable-region {
-  margin-top: var(--space-md);
+  margin-block: var(--space-md);
   padding: var(--space-md);
   min-height: 0;
-  border: 1px solid var(--color-border-default);
   border-radius: var(--radius-md);
-  background: var(--color-bg-elevated);
+  background: var(--color-bg-secondary);
 }
 
 .expandable-region[hidden] {
@@ -548,14 +651,21 @@ body {
   list-style: none;
 }
 
+/* The list scrolls, so a focus ring drawn outside a control would be clipped by
+   the well's edge. Inside this region the ring draws inward instead. */
+.excluded-list :focus-visible {
+  outline-offset: -2px;
+}
+
 .excluded-list:empty::after {
   content: 'لا تطبيقات مستبعَدة بعد';
   font-family: var(--font-ar);
   font-size: var(--text-caption);
   line-height: var(--leading-caption);
-  color: var(--color-text-secondary);
+  color: var(--color-text-tertiary);
 }
 
+/* Hairlines between items only — never a trailing stroke against the well. */
 .excluded-item {
   direction: ltr;
   display: flex;
@@ -565,7 +675,10 @@ body {
   min-height: 28px;
   padding: var(--space-xs) var(--space-md);
   flex: none;
-  border-bottom: 1px solid var(--color-border-divider);
+}
+
+.excluded-item + .excluded-item {
+  border-top: 1px solid var(--color-border-divider);
 }
 
 .excluded-item .bundle {
@@ -665,11 +778,10 @@ body {
   gap: var(--space-lg);
   padding: var(--space-xs) 0;
   flex: none;
-  border-bottom: 1px solid var(--color-border-divider);
 }
 
-.learn-row:last-child {
-  border-bottom: 0;
+.learn-row + .learn-row {
+  border-top: 1px solid var(--color-border-divider);
 }
 
 .learn-text {
@@ -687,16 +799,16 @@ body {
 
 .learn-counts {
   flex: none;
-  color: var(--color-text-secondary);
+  color: var(--color-text-tertiary);
   font-family: var(--font-ar);
-  font-size: 10px;
-  line-height: 15px;
+  font-size: var(--text-micro);
+  line-height: var(--leading-micro);
   white-space: nowrap;
 }
 
 .learning-empty {
   padding: var(--space-md) 0;
-  color: var(--color-text-secondary);
+  color: var(--color-text-tertiary);
   font-family: var(--font-ar);
   font-size: var(--text-caption);
   line-height: var(--leading-caption);
@@ -707,6 +819,27 @@ body {
   align-items: center;
   gap: var(--space-lg);
   flex: none;
+}
+
+/* The About page's identity header stands in for the page heading, so it holds
+   rank 1 with the same neutral ink. The icon is the brand moment here; the
+   wordmark does not need to repeat it in paint. */
+.about-summary h2 {
+  margin: 0;
+  font-family: var(--font-ar);
+  font-size: var(--text-subhead);
+  font-weight: 700;
+  line-height: var(--leading-subhead);
+  color: var(--color-text-primary);
+}
+
+.about-summary p {
+  margin: var(--space-2xs) 0 0;
+  font-family: var(--font-ar);
+  font-size: var(--text-caption);
+  font-weight: 400;
+  line-height: var(--leading-caption);
+  color: var(--color-text-tertiary);
 }
 
 .about-mark {
@@ -721,15 +854,14 @@ body {
   font-size: 14px;
 }
 
-.about-version {
+/* The version is identifying data, not explanation, so it outranks the line
+   beneath it by one ink level. */
+.about-summary .about-version {
   min-height: var(--leading-caption);
   font-family: var(--font-mixed);
   direction: rtl;
   unicode-bidi: plaintext;
-}
-
-.about-actions {
-  margin-top: var(--space-xs);
+  color: var(--color-text-secondary);
 }
 
 .bottom-row {
@@ -825,10 +957,12 @@ body {
   display: none;
 }
 
+/* A sheet, and --radius-2xl is the system's sheet radius — it was the one
+   surface in the window drawing a card's corner instead of its own. */
 .confirm-dialog {
   position: relative;
   border: 1px solid var(--color-border-default);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-2xl);
   background: var(--color-bg-elevated);
   box-shadow: var(--elev-3);
   color: var(--color-text-primary);
@@ -843,9 +977,9 @@ body {
 .confirm-title {
   color: var(--color-text-primary);
   font-family: var(--font-ar);
-  font-size: 14px;
+  font-size: var(--text-subhead);
   font-weight: 700;
-  line-height: 20px;
+  line-height: var(--leading-subhead);
 }
 
 .confirm-text {

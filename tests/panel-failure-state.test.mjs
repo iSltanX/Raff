@@ -1,9 +1,11 @@
 // A load that fails permanently must land on the Arabic failure state — never
-// a silent blank panel and never the «الرفّ فارغ» empty shelf, which would
+// a silent blank panel and never the «لا يوجد شيء هنا بعد» empty shelf, which would
 // falsely tell the user their saved clips are gone.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  EMPTY_SHELF_HEADLINE,
+  FAILURE_HEADLINE,
   mountPanel,
   sampleItem,
   minutesAgo,
@@ -31,8 +33,8 @@ test('panel failure state: a permanently failing load shows a recoverable Arabic
   // the panel is 'loading': not an error yet, and emphatically not an empty
   // shelf that would claim the user's clips are gone.
   await t.test('while the first fetch is still in flight the panel reads as loading', async () => {
-    assert.doesNotMatch(listText(dom), /الرفّ فارغ/, 'loading must never read as an empty shelf');
-    assert.doesNotMatch(listText(dom), /تعذّر عرض محتوى رفّ/, 'and not as a failure either');
+    assert.doesNotMatch(listText(dom), EMPTY_SHELF_HEADLINE, 'loading must never read as an empty shelf');
+    assert.doesNotMatch(listText(dom), FAILURE_HEADLINE, 'and not as a failure either');
     assert.equal(
       dom.window.document.querySelector('.state-view.is-failure'),
       null,
@@ -56,8 +58,8 @@ test('panel failure state: a permanently failing load shows a recoverable Arabic
       null,
       'loading never borrows the empty-shelf illustration'
     );
-    assert.doesNotMatch(listText(dom), /الرفّ فارغ/);
-    assert.doesNotMatch(listText(dom), /تعذّر عرض محتوى رفّ/);
+    assert.doesNotMatch(listText(dom), EMPTY_SHELF_HEADLINE);
+    assert.doesNotMatch(listText(dom), FAILURE_HEADLINE);
   });
 
   await t.test('retries are attempted, then bounded — not an infinite loop', async () => {
@@ -69,7 +71,7 @@ test('panel failure state: a permanently failing load shows a recoverable Arabic
   });
 
   await t.test('the failure state is shown instead of a blank list', () => {
-    assert.match(listText(dom), /تعذّر عرض محتوى رفّ/);
+    assert.match(listText(dom), FAILURE_HEADLINE);
     assert.equal(dom.window.document.getElementById('list').getAttribute('aria-busy'), 'false');
     assert.equal(
       dom.window.document.querySelector('.state-view.is-failure .state-title').textContent,
@@ -92,7 +94,7 @@ test('panel failure state: a permanently failing load shows a recoverable Arabic
   });
 
   await t.test('it is not confused with a genuinely empty shelf', () => {
-    assert.doesNotMatch(listText(dom), /الرفّ فارغ/);
+    assert.doesNotMatch(listText(dom), EMPTY_SHELF_HEADLINE);
     // The empty shelf is a plain .state-view; only the failure carries
     // .is-failure. Confusing the two would tell the user their clips are gone.
     const views = [...dom.window.document.querySelectorAll('.state-view')];
@@ -131,7 +133,7 @@ test('panel failure state: a permanently failing load shows a recoverable Arabic
     fake.emit('panel://shown', null);
     await flush(6);
     assert.deepEqual(rowIds(dom), ['r1'], 'the list comes back on the next show');
-    assert.doesNotMatch(listText(dom), /تعذّر عرض محتوى رفّ/, 'failure state cleared');
+    assert.doesNotMatch(listText(dom), FAILURE_HEADLINE, 'failure state cleared');
     assert.equal(
       dom.window.document.querySelector('.state-view.is-failure'),
       null,

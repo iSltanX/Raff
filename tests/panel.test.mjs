@@ -12,6 +12,11 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { JSDOM } from 'jsdom';
+// This suite keeps its own inline harness (see the shared one's header note),
+// but it borrows the one empty-shelf headline constant: a `doesNotMatch` on a
+// string the product no longer says passes for the wrong reason, and that is
+// exactly the trap a second private copy of the copy would set.
+import { EMPTY_SHELF_HEADLINE } from './helpers/panel-harness.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const indexHtml = readFileSync(path.join(here, '../src/index.html'), 'utf8');
@@ -197,7 +202,7 @@ test('panel lifecycle: copy/paste an old item, hide, reopen — the list must su
     fake.emit('panel://shown', null);
     await flush();
     assert.deepEqual(rowIds(dom), ['newest', 'pin1', 'old-text'], 'list must repopulate, not go blank');
-    assert.doesNotMatch(listText(dom), /الرفّ فارغ/, 'must not fall back to the empty state');
+    assert.doesNotMatch(listText(dom), EMPTY_SHELF_HEADLINE, 'must not fall back to the empty state');
   });
 
   await t.test('reopening after copying an OLD IMAGE item still shows the full list', async () => {

@@ -235,6 +235,16 @@ export function listText(dom) {
   return dom.window.document.getElementById('list').textContent;
 }
 
+/** The natural empty-shelf headline. Several suites assert that loading, a
+ *  narrowed search and a failed fetch are NEVER confused with it — a claim
+ *  that silently becomes vacuous the moment the copy changes and only some of
+ *  the call sites are updated. It lives here so a copy change is one edit and
+ *  cannot leave a `doesNotMatch` guarding a string the product no longer says.
+ *  v4.1 repointed it from «الرفّ فارغ» to «08» COMPONENT 69:397's own wording. */
+export const EMPTY_SHELF_HEADLINE = /لا يوجد شيء هنا بعد/u;
+/** The failure state, which the empty shelf must never be mistaken for. */
+export const FAILURE_HEADLINE = /تعذّر عرض محتوى رفّ/u;
+
 /** A real, bubbling click — the filter row listens on its container, so a
  *  non-bubbling Event would never reach the delegated handler. */
 export function click(dom, el) {

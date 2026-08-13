@@ -99,44 +99,56 @@
           <p>بدء التشغيل، سعة السجل، ومظهر رفّ.</p>
         </div>
 
-        <div class="settings-rows">
-          <div class="row">
-            <button
-              type="button"
-              class="switch"
-              id="launch-toggle"
-              role="switch"
-              aria-checked="false"
-              aria-labelledby="launch-label"
-            ><span class="switch-knob"></span></button>
-            <div class="row-label">
-              <span class="label-title" id="launch-label" dir="auto">تشغيل تلقائي عند بدء النظام</span>
+        <!-- Two genuine groups: what happens when the Mac starts and how much
+             Raff keeps, then how Raff looks. -->
+        <div class="settings-groups">
+          <div class="settings-group">
+            <h3 class="group-title">بدء التشغيل والسجل</h3>
+            <div class="settings-rows">
+              <div class="row">
+                <button
+                  type="button"
+                  class="switch"
+                  id="launch-toggle"
+                  role="switch"
+                  aria-checked="false"
+                  aria-labelledby="launch-label"
+                ><span class="switch-knob"></span></button>
+                <div class="row-label">
+                  <span class="label-title" id="launch-label" dir="auto">تشغيل تلقائي عند بدء النظام</span>
+                </div>
+              </div>
+
+              <div class="row">
+                <div class="select-wrap">
+                  <select class="select" id="history-limit" aria-labelledby="history-limit-label">
+                    <option value="200">٢٠٠ عنصر</option>
+                    <option value="500">٥٠٠ عنصر</option>
+                    <option value="1000">١٠٠٠ عنصر</option>
+                  </select>
+                </div>
+                <div class="row-label">
+                  <span class="label-title" id="history-limit-label" dir="auto">الحد الأقصى لحفظ الحافظة</span>
+                  <span class="label-sub" dir="auto">تُحذف الأقدم تلقائيًا، وتبقى العناصر المثبّتة.</span>
+                </div>
+              </div>
             </div>
           </div>
 
-          <div class="row">
-            <div class="select-wrap">
-              <select class="select" id="history-limit" aria-labelledby="history-limit-label">
-                <option value="200">٢٠٠ عنصر</option>
-                <option value="500">٥٠٠ عنصر</option>
-                <option value="1000">١٠٠٠ عنصر</option>
-              </select>
-            </div>
-            <div class="row-label">
-              <span class="label-title" id="history-limit-label" dir="auto">الحد الأقصى لحفظ الحافظة</span>
-              <span class="label-sub" dir="auto">تُحذف الأقدم تلقائيًا، وتبقى العناصر المثبّتة.</span>
-            </div>
-          </div>
-
-          <div class="row">
-            <div class="segments" id="appearance-segments" role="radiogroup" aria-labelledby="appearance-label">
-              <button type="button" class="seg-tab" data-appearance="auto" role="radio" aria-checked="true" tabindex="0">تلقائي</button>
-              <button type="button" class="seg-tab" data-appearance="dark" role="radio" aria-checked="false" tabindex="-1">داكن</button>
-              <button type="button" class="seg-tab" data-appearance="light" role="radio" aria-checked="false" tabindex="-1">فاتح</button>
-            </div>
-            <div class="row-label">
-              <span class="label-title" id="appearance-label" dir="auto">مظهر التطبيق</span>
-              <span class="label-sub" dir="auto">يتبع «تلقائي» مظهر macOS لحظة بلحظة.</span>
+          <div class="settings-group">
+            <h3 class="group-title">المظهر</h3>
+            <div class="settings-rows">
+              <div class="row">
+                <div class="segments" id="appearance-segments" role="radiogroup" aria-labelledby="appearance-label">
+                  <button type="button" class="seg-tab" data-appearance="auto" role="radio" aria-checked="true" tabindex="0">تلقائي</button>
+                  <button type="button" class="seg-tab" data-appearance="dark" role="radio" aria-checked="false" tabindex="-1">داكن</button>
+                  <button type="button" class="seg-tab" data-appearance="light" role="radio" aria-checked="false" tabindex="-1">فاتح</button>
+                </div>
+                <div class="row-label">
+                  <span class="label-title" id="appearance-label" dir="auto">مظهر التطبيق</span>
+                  <span class="label-sub" dir="auto">يتبع «تلقائي» مظهر macOS لحظة بلحظة.</span>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -155,19 +167,25 @@
           <p>تحكّم فيما إذا كان رفّ يحفظ النسخ الجديدة.</p>
         </div>
 
-        <div class="settings-rows">
-          <div class="row">
-            <button
-              type="button"
-              class="switch"
-              id="capture-toggle"
-              role="switch"
-              aria-checked="true"
-              aria-labelledby="capture-label"
-            ><span class="switch-knob"></span></button>
-            <div class="row-label">
-              <span class="label-title" id="capture-label" dir="auto">التقاط ما أنسخه</span>
-              <span class="label-sub" dir="auto">عند الإيقاف، يتوقف رفّ عن حفظ أي نسخة جديدة.</span>
+        <!-- One group, so the page heading already names it. The note is not a
+             setting and therefore never sits inside the settings card. -->
+        <div class="settings-groups">
+          <div class="settings-group">
+            <div class="settings-rows">
+              <div class="row">
+                <button
+                  type="button"
+                  class="switch"
+                  id="capture-toggle"
+                  role="switch"
+                  aria-checked="true"
+                  aria-labelledby="capture-label"
+                ><span class="switch-knob"></span></button>
+                <div class="row-label">
+                  <span class="label-title" id="capture-label" dir="auto">التقاط ما أنسخه</span>
+                  <span class="label-sub" dir="auto">عند الإيقاف، يتوقف رفّ عن حفظ أي نسخة جديدة.</span>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -191,62 +209,74 @@
           <p>الاختصار والتطبيقات التي لا ينبغي لرفّ التقاط محتواها.</p>
         </div>
 
-        <div class="settings-rows">
-          <div class="row">
-            <button type="button" class="hotkey-badge" id="hotkey-chip" aria-labelledby="hotkey-label"></button>
-            <div class="row-label">
-              <span class="label-title" id="hotkey-label" dir="auto">اختصار لوحة المفاتيح لفتح رفّ</span>
-              <span class="label-sub" id="hotkey-sub" dir="auto"></span>
-            </div>
-          </div>
-
-          <div class="row">
-            <button
-              type="button"
-              class="checkbox"
-              id="concealed-toggle"
-              role="checkbox"
-              aria-checked="true"
-              aria-labelledby="concealed-label"
-            ></button>
-            <div class="row-label">
-              <span class="label-title" id="concealed-label" dir="auto">تجاهل تطبيقات كلمات المرور الحساسة</span>
-            </div>
-          </div>
-
-          <div class="row">
-            <button
-              type="button"
-              class="push-btn"
-              id="manage-excluded"
-              aria-label="إدارة التطبيقات المستبعَدة"
-              aria-describedby="excluded-label"
-              aria-expanded="false"
-            >إدارة…</button>
-            <div class="row-label">
-              <span class="label-title" id="excluded-label" dir="auto">التطبيقات المستبعَدة</span>
-              <span class="label-sub" dir="auto">لا تُحفظ أي نسخة واردة منها.</span>
-            </div>
-          </div>
-
-          <div class="expandable-region excluded-manager" id="excluded-manager" hidden>
-            <ul class="excluded-list" id="excluded-list" aria-label="التطبيقات المستبعَدة"></ul>
-            <div
-              class="inline-error"
-              id="running-apps-error"
-              role="alert"
-              aria-live="assertive"
-              aria-atomic="true"
-              hidden
-            >
-              <span>تعذّر تحميل التطبيقات العاملة.</span>
-              <button type="button" class="inline-retry" id="retry-running-apps">إعادة المحاولة</button>
-            </div>
-            <div class="excluded-add" id="excluded-add">
-              <div class="select-wrap is-latin">
-                <select class="select is-latin" id="running-apps" aria-label="التطبيقات العاملة الآن"></select>
+        <!-- Two genuine groups: how Raff is summoned, and what it must never
+             see. The exclusion manager belongs to the group it expands from. -->
+        <div class="settings-groups">
+          <div class="settings-group">
+            <h3 class="group-title">الاختصار</h3>
+            <div class="settings-rows">
+              <div class="row">
+                <button type="button" class="hotkey-badge" id="hotkey-chip" aria-labelledby="hotkey-label"></button>
+                <div class="row-label">
+                  <span class="label-title" id="hotkey-label" dir="auto">اختصار لوحة المفاتيح لفتح رفّ</span>
+                  <span class="label-sub is-status" id="hotkey-sub" dir="auto"></span>
+                </div>
               </div>
-              <button type="button" class="push-btn" id="add-excluded">إضافة</button>
+            </div>
+          </div>
+
+          <div class="settings-group">
+            <h3 class="group-title">الاستثناءات</h3>
+            <div class="settings-rows">
+              <div class="row">
+                <button
+                  type="button"
+                  class="checkbox"
+                  id="concealed-toggle"
+                  role="checkbox"
+                  aria-checked="true"
+                  aria-labelledby="concealed-label"
+                ></button>
+                <div class="row-label">
+                  <span class="label-title" id="concealed-label" dir="auto">تجاهل تطبيقات كلمات المرور الحساسة</span>
+                </div>
+              </div>
+
+              <div class="row">
+                <button
+                  type="button"
+                  class="push-btn"
+                  id="manage-excluded"
+                  aria-label="إدارة التطبيقات المستبعَدة"
+                  aria-describedby="excluded-label"
+                  aria-expanded="false"
+                >إدارة…</button>
+                <div class="row-label">
+                  <span class="label-title" id="excluded-label" dir="auto">التطبيقات المستبعَدة</span>
+                  <span class="label-sub" dir="auto">لا تُحفظ أي نسخة واردة منها.</span>
+                </div>
+              </div>
+
+              <div class="expandable-region excluded-manager" id="excluded-manager" hidden>
+                <ul class="excluded-list" id="excluded-list" aria-label="التطبيقات المستبعَدة"></ul>
+                <div
+                  class="inline-error"
+                  id="running-apps-error"
+                  role="alert"
+                  aria-live="assertive"
+                  aria-atomic="true"
+                  hidden
+                >
+                  <span>تعذّر تحميل التطبيقات العاملة.</span>
+                  <button type="button" class="inline-retry" id="retry-running-apps">إعادة المحاولة</button>
+                </div>
+                <div class="excluded-add" id="excluded-add">
+                  <div class="select-wrap is-latin">
+                    <select class="select is-latin" id="running-apps" aria-label="التطبيقات العاملة الآن"></select>
+                  </div>
+                  <button type="button" class="push-btn" id="add-excluded">إضافة</button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -265,51 +295,56 @@
           <p>ترتيب محلي يساعد رفّ على إبراز ما تستخدمه أكثر.</p>
         </div>
 
-        <div class="settings-rows">
-          <div class="row">
-            <button
-              type="button"
-              class="switch"
-              id="learning-toggle"
-              role="switch"
-              aria-checked="true"
-              aria-labelledby="learning-label"
-            ><span class="switch-knob"></span></button>
-            <div class="row-label">
-              <span class="label-title" id="learning-label" dir="auto">تفعيل التعلّم</span>
-              <span class="label-sub" dir="auto">يحلّل رفّ نمط نسخك على هذا الجهاز فقط.</span>
-            </div>
-          </div>
+        <!-- One group: everything here is the same local ranking feature. -->
+        <div class="settings-groups">
+          <div class="settings-group">
+            <div class="settings-rows">
+              <div class="row">
+                <button
+                  type="button"
+                  class="switch"
+                  id="learning-toggle"
+                  role="switch"
+                  aria-checked="true"
+                  aria-labelledby="learning-label"
+                ><span class="switch-knob"></span></button>
+                <div class="row-label">
+                  <span class="label-title" id="learning-label" dir="auto">تفعيل التعلّم</span>
+                  <span class="label-sub" dir="auto">يحلّل رفّ نمط نسخك على هذا الجهاز فقط.</span>
+                </div>
+              </div>
 
-          <div class="row">
-            <button
-              type="button"
-              class="push-btn"
-              id="show-learning"
-              aria-label="عرض ما تعلّمه رفّ"
-              aria-describedby="learning-view-label"
-              aria-expanded="false"
-            >عرض</button>
-            <div class="row-label">
-              <span class="label-title" id="learning-view-label" dir="auto">ما تعلّمه رفّ حتى الآن</span>
-            </div>
-          </div>
+              <div class="row">
+                <button
+                  type="button"
+                  class="push-btn"
+                  id="show-learning"
+                  aria-label="عرض ما تعلّمه رفّ"
+                  aria-describedby="learning-view-label"
+                  aria-expanded="false"
+                >عرض</button>
+                <div class="row-label">
+                  <span class="label-title" id="learning-view-label" dir="auto">ما تعلّمه رفّ حتى الآن</span>
+                </div>
+              </div>
 
-          <div class="expandable-region learning-view" id="learning-view" hidden></div>
+              <div class="expandable-region learning-view" id="learning-view" hidden></div>
 
-          <div class="row">
-            <button
-              type="button"
-              class="push-btn is-destructive"
-              id="clear-learning"
-              data-label="مسح بيانات التعلّم"
-              data-confirm="متأكد؟ اضغط للتأكيد"
-              aria-label="مسح بيانات التعلّم"
-              aria-describedby="clear-learning-label"
-            >مسح بيانات التعلّم</button>
-            <div class="row-label">
-              <span class="label-title" id="clear-learning-label" dir="auto">حذف ما تعلّمه رفّ عن عادات نسخك</span>
-              <span class="label-sub" dir="auto">لا يُحذف أي عنصر من الحافظة.</span>
+              <div class="row">
+                <button
+                  type="button"
+                  class="push-btn is-destructive"
+                  id="clear-learning"
+                  data-label="مسح بيانات التعلّم"
+                  data-confirm="متأكد؟ اضغط للتأكيد"
+                  aria-label="مسح بيانات التعلّم"
+                  aria-describedby="clear-learning-label"
+                >مسح بيانات التعلّم</button>
+                <div class="row-label">
+                  <span class="label-title" id="clear-learning-label" dir="auto">حذف ما تعلّمه رفّ عن عادات نسخك</span>
+                  <span class="label-sub" dir="auto">لا يُحذف أي عنصر من الحافظة.</span>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -332,28 +367,32 @@
           </div>
         </div>
 
-        <div class="settings-rows about-actions">
-          <div class="row">
-            <button type="button" class="push-btn" id="settings-repo">فتح المستودع</button>
-            <div class="row-label">
-              <span class="label-title" dir="auto">المشروع والمصدر</span>
-              <span class="label-sub latin" dir="ltr">github.com/iSltanX/Raff</span>
-            </div>
-          </div>
+        <div class="settings-groups">
+          <div class="settings-group">
+            <div class="settings-rows about-actions">
+              <div class="row">
+                <button type="button" class="push-btn" id="settings-repo">فتح المستودع</button>
+                <div class="row-label">
+                  <span class="label-title" dir="auto">المشروع والمصدر</span>
+                  <span class="label-sub latin" dir="ltr">github.com/iSltanX/Raff</span>
+                </div>
+              </div>
 
-          <div class="row">
-            <button type="button" class="push-btn" id="settings-update">التحقق الآن</button>
-            <div class="row-label">
-              <span class="label-title" dir="auto">تحديثات رفّ</span>
-              <span class="label-sub" id="settings-update-status" role="status" aria-live="polite" aria-atomic="true" dir="auto">تحقق يدويًا من وجود إصدار أحدث.</span>
-            </div>
-          </div>
+              <div class="row">
+                <button type="button" class="push-btn" id="settings-update">التحقق الآن</button>
+                <div class="row-label">
+                  <span class="label-title" dir="auto">تحديثات رفّ</span>
+                  <span class="label-sub is-status" id="settings-update-status" role="status" aria-live="polite" aria-atomic="true" dir="auto">تحقق يدويًا من وجود إصدار أحدث.</span>
+                </div>
+              </div>
 
-          <div class="row">
-            <button type="button" class="push-btn" id="open-about" aria-label="فتح نافذة عن رفّ" aria-describedby="about-label">فتح النافذة</button>
-            <div class="row-label">
-              <span class="label-title" id="about-label" dir="auto">نافذة «عن رفّ» الكاملة</span>
-              <span class="label-sub" dir="auto">معلومات الإصدار والمطوّر وحقوق النشر.</span>
+              <div class="row">
+                <button type="button" class="push-btn" id="open-about" aria-label="فتح نافذة عن رفّ" aria-describedby="about-label">فتح النافذة</button>
+                <div class="row-label">
+                  <span class="label-title" id="about-label" dir="auto">نافذة «عن رفّ» الكاملة</span>
+                  <span class="label-sub" dir="auto">معلومات الإصدار والمطوّر وحقوق النشر.</span>
+                </div>
+              </div>
             </div>
           </div>
         </div>

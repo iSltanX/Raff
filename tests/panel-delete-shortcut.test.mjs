@@ -9,6 +9,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  EMPTY_SHELF_HEADLINE,
+  FAILURE_HEADLINE,
   mountPanel,
   sampleItem,
   minutesAgo,
@@ -218,7 +220,7 @@ test('delete shortcut: ⌘⌫ removes the selected item', async (t) => {
     pressCmdBackspace(dom);
     await flush(6);
     assert.deepEqual(rowIds(dom), []);
-    assert.match(listText(dom), /الرفّ فارغ/, 'reads as the natural empty state, not an error');
+    assert.match(listText(dom), EMPTY_SHELF_HEADLINE, 'reads as the natural empty state, not an error');
     assert.equal(
       dom.window.document.querySelector('.state-view.is-failure'),
       null,

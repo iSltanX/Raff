@@ -62,6 +62,9 @@ function contrastRatio(foreground, background) {
 const primitives = {
   '--terracotta-50': '#fdf5f0',
   '--terracotta-75': '#fbede5',
+  /* v4.1 — the selection tint had to deepen with the canvas: --terracotta-75
+     on the new #f0ece6 canvas was a 1.00:1 non-event. */
+  '--terracotta-80': '#fbe7da',
   '--terracotta-100': '#f9e6da',
   '--terracotta-200': '#f0c9b0',
   '--terracotta-300': '#e4a882',
@@ -77,42 +80,71 @@ const primitives = {
   '--terracotta-app-icon-dark-bg-end': '#1b140f',
   '--terracotta-app-icon-mark-dark': '#f5ede5',
   '--stone-0': '#ffffff',
+  /* v4.1 surface-ladder additions. The canvas dropped to --stone-120 and the
+     row rose to --stone-15 so a row reads as a card ON the window; the old
+     pairing sat at ~1.06:1 and read as one flat plane. */
+  '--stone-15': '#fdfcfa',
   '--stone-25': '#fcfbf9',
   '--stone-40': '#fbfaf7',
+  '--stone-45': '#f7f4ef',
   '--stone-50': '#faf8f6',
   '--stone-60': '#f7f5f1',
   '--stone-70': '#f6f5f2',
   '--stone-80': '#f5f0ea',
+  '--stone-85': '#f6f1e9',
   '--stone-90': '#f1ede7',
   '--stone-100': '#f2efeb',
+  '--stone-120': '#f0ece6',
+  '--stone-140': '#e9e3d9',
   '--stone-150': '#eae5df',
+  '--stone-160': '#e7e0d5',
   '--stone-175': '#ebe6df',
   '--stone-200': '#e0dad2',
   '--stone-225': '#ded8d0',
+  '--stone-240': '#ddd5c9',
   '--stone-300': '#cec5ba',
   '--stone-400': '#b0a596',
   '--stone-500': '#8f8275',
   '--stone-550': '#766d65',
+  /* v4.1 ink levels. Secondary/tertiary moved down so the four levels keep
+     visible rank against the deeper canvas without losing AA. */
+  '--stone-575': '#6f665b',
   '--stone-600': '#6b6054',
+  '--stone-650': '#5c5349',
   '--stone-700': '#4d443a',
   '--stone-725': '#4a382b',
   '--stone-800': '#342d26',
   '--stone-850': '#2a2420',
   '--stone-900': '#1e1a17',
   '--stone-950': '#110f0d',
+  /* v4.1 — Dark gets the SAME ladder under different lighting, so it needed
+     its own row/canvas/hover/well steps rather than reusing Light's spacing. */
+  '--graphite-40': '#f6f4f1',
   '--graphite-50': '#f4f2ef',
   '--graphite-300': '#b9b4ae',
+  '--graphite-320': '#b6b1aa',
   '--graphite-400': '#98928b',
+  '--graphite-420': '#9a948c',
   '--graphite-600': '#3a3b3f',
+  '--graphite-620': '#3d3f45',
   '--graphite-650': '#303136',
+  '--graphite-660': '#303237',
   '--graphite-700': '#292a2e',
   '--graphite-750': '#27282c',
+  '--graphite-780': '#2e3035',
   '--graphite-800': '#222326',
+  '--graphite-810': '#2a2c31',
+  '--graphite-820': '#282a2e',
   '--graphite-825': '#202125',
+  '--graphite-840': '#212327',
   '--graphite-850': '#202124',
+  '--graphite-860': '#1e1f22',
   '--graphite-875': '#1d1e21',
+  '--graphite-880': '#1a1b1e',
+  '--graphite-890': '#1a1c1e',
   '--graphite-900': '#17181a',
-  '--warm-dark-selected': '#30251f',
+  '--graphite-925': '#141517',
+  '--warm-dark-selected': '#3a2a20',
   '--indigo-50': '#f0f1f8',
   '--indigo-100': '#dddff0',
   '--indigo-200': '#b8bce1',
@@ -126,7 +158,8 @@ const primitives = {
   '--indigo-950': '#0d0f1c',
   '--green-400': '#5cb37a',
   '--green-500': '#3d9960',
-  '--green-600': '#2e7a4b',
+  /* v4.1 — darkened one step to regain AA on the deeper #f0ece6 canvas. */
+  '--green-600': '#2b7045',
   '--red-400': '#d46b6b',
   '--red-500': '#c04e4e',
   '--red-600': '#a33c3c',
@@ -176,23 +209,30 @@ const primitives = {
 };
 
 const semanticAliases = {
-  '--color-bg-primary': ['--stone-0', '--graphite-850'],
-  '--color-bg-secondary': ['--stone-60', '--graphite-900'],
-  '--color-bg-tertiary': ['--stone-40', '--graphite-875'],
-  '--color-bg-elevated': ['--stone-25', '--graphite-800'],
-  '--color-bg-hover': ['--stone-80', '--graphite-750'],
-  '--color-bg-selected': ['--terracotta-75', '--warm-dark-selected'],
+  /* ── The v4.1 surface ladder. Every one of these pairs moved: depth is now
+     carried by tone + a hairline + a micro-lift, and the canvas→row step is
+     the same perceived distance in both appearances. `bg-field` is the one
+     deliberate inversion — an input is a well, so it recesses in Dark. ── */
+  '--color-bg-primary': ['--stone-0', '--graphite-860'],
+  '--color-bg-secondary': ['--stone-120', '--graphite-925'],
+  '--color-bg-tertiary': ['--stone-45', '--graphite-890'],
+  '--color-bg-elevated': ['--stone-0', '--graphite-820'],
+  '--color-bg-hover': ['--stone-85', '--graphite-810'],
+  '--color-bg-selected': ['--terracotta-80', '--warm-dark-selected'],
   '--color-bg-brand': ['--terracotta-500', '--terracotta-400'],
   '--color-bg-accent': ['--indigo-500', '--indigo-200'],
-  '--color-text-primary': ['--stone-900', '--graphite-50'],
-  '--color-text-secondary': ['--stone-600', '--graphite-300'],
-  '--color-text-tertiary': ['--stone-550', '--graphite-400'],
+  /* Four ink levels, rank-matched across appearances. */
+  '--color-text-primary': ['--stone-900', '--graphite-40'],
+  '--color-text-secondary': ['--stone-650', '--graphite-320'],
+  '--color-text-tertiary': ['--stone-575', '--graphite-420'],
   '--color-text-inverse': ['--stone-0', '--stone-900'],
   '--color-text-brand': ['--terracotta-700', '--terracotta-300'],
   '--color-text-accent': ['--indigo-600', '--indigo-200'],
   '--color-text-link': ['--indigo-600', '--indigo-200'],
-  '--color-border-default': ['--stone-225', '--graphite-600'],
-  '--color-border-subtle': ['--stone-175', '--graphite-650'],
+  /* The resting hairline that gives a row its edge, and the quieter one it
+     shares with dividers. */
+  '--color-border-default': ['--stone-240', '--graphite-620'],
+  '--color-border-subtle': ['--stone-160', '--graphite-660'],
   '--color-border-strong': ['--stone-500', '--stone-600'],
   '--color-border-brand': ['--terracotta-500', '--terracotta-400'],
   '--color-border-focus': ['--indigo-500', '--indigo-200'],
@@ -206,18 +246,21 @@ const semanticAliases = {
   '--color-interactive-primary-hover': ['--terracotta-600', '--terracotta-500'],
   '--color-interactive-secondary': ['--stone-90', '--graphite-700'],
   '--color-interactive-secondary-hover': ['--stone-175', '--graphite-600'],
-  '--color-bg-row': ['--stone-40', '--graphite-875'],
-  '--color-bg-field': ['--stone-0', '--graphite-825'],
-  '--color-bg-control': ['--stone-90', '--graphite-700'],
+  '--color-bg-row': ['--stone-15', '--graphite-840'],
+  '--color-bg-field': ['--stone-0', '--graphite-880'],
+  '--color-bg-control': ['--stone-140', '--graphite-780'],
   '--color-text-on-accent': ['--stone-900', '--stone-900'],
   '--color-text-on-system-tint': ['--stone-0', '--stone-0'],
   '--color-text-credit': ['--stone-725', '--graphite-300'],
-  '--color-border-divider': ['--stone-175', '--graphite-650'],
+  '--color-border-divider': ['--stone-160', '--graphite-660'],
   '--color-border-selected': ['--terracotta-500', '--terracotta-400'],
   '--color-border-selected-soft': ['--overlay-selected-light', '--overlay-selected-dark'],
   '--color-fill-subtle': ['--overlay-ink-subtle', '--overlay-white-subtle'],
-  '--color-source-icon-well': ['--stone-70', '--graphite-700'],
-  '--color-pinned': ['--terracotta-500', '--terracotta-500'],
+  '--color-source-icon-well': ['--stone-70', '--graphite-780'],
+  /* v4.1 — `pinned` finally joins the dark ramp. Every sibling brand role
+     (bg/border/icon/interactive) steps to terracotta-400 in Dark; leaving this
+     at 500 made a pinned marker read dimmer than the selection beside it. */
+  '--color-pinned': ['--terracotta-500', '--terracotta-400'],
   '--color-app-icon-start': ['--terracotta-500', '--terracotta-app-icon-dark-bg-start'],
   '--color-app-icon-end': ['--terracotta-app-icon-end', '--terracotta-app-icon-dark-bg-end'],
   '--color-app-icon-mark': ['--stone-0', '--terracotta-app-icon-mark-dark'],
@@ -236,8 +279,14 @@ const semanticAliases = {
   '--metric-row-action': ['--size-32', '--size-32'],
   '--metric-row-actions-gap': ['--space-xs', '--space-xs'],
   '--metric-row-actions-inline': ['--size-68', '--size-68'],
-  '--metric-source-slot-inline': ['--size-30', '--size-30'],
-  '--metric-source-glyph': ['--size-20', '--size-20'],
+  /* v4.1 — the fade in front of the revealed action cluster, so long content
+     slides under it instead of colliding with it. */
+  '--metric-row-actions-scrim': ['--space-2xl', '--space-2xl'],
+  /* v4.1 — the slot carries REAL macOS app artwork, not Figma's placeholder
+     outline square, so it went 30→32 with a 20→24 glyph. It stays subordinate
+     to the content because it never gains weight, only legibility. */
+  '--metric-source-slot-inline': ['--size-32', '--size-32'],
+  '--metric-source-glyph': ['--metric-icon-chip', '--metric-icon-chip'],
 };
 
 /* Optical macOS geometry with no Figma variable counterpart, documented as such
@@ -258,11 +307,16 @@ const mirroredFamily =
   /^--(color|space|radius|text|size|metric|terracotta|stone|graphite|indigo|green|red|amber|overlay|system|warm)-/u;
 
 test('CSS mirrors every approved Figma primitive and semantic alias', () => {
-  assert.equal(Object.keys(primitives).length, 113, 'fixture must cover all Figma primitives');
+  /* Counts are a second guard beside the reverse-coverage sweep below: they
+     stop someone quietly DELETING a fixture row (which the sweep cannot see,
+     since it only looks for tokens the fixture forgot). v4.1 added 23
+     primitives — the surface ladder, the two new ink levels, the hairlines —
+     and one semantic role, --metric-row-actions-scrim. */
+  assert.equal(Object.keys(primitives).length, 136, 'fixture must cover every primitive');
   assert.equal(
     Object.keys(semanticAliases).length,
-    59,
-    'fixture must cover every Figma Semantic variable'
+    60,
+    'fixture must cover every semantic role'
   );
 
   const css = read('src/tokens.css');

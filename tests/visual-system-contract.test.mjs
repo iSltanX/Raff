@@ -227,14 +227,41 @@ test('small semantic text retains AA contrast in both appearances', () => {
   ];
 
   for (const [appearance, scope] of scopes) {
-    const canvas = resolveCustomProperty('--color-bg-secondary', scope);
-    for (const role of textRoles) {
-      const text = resolveCustomProperty(role, scope);
-      assert.ok(
-        contrastRatio(text, canvas) >= 4.5,
-        `${appearance} ${role} must remain legible at the 11–14px production sizes`
-      );
+    /* v4.1 deepened the canvas and raised the row, so both grounds have to be
+       checked: clearing AA on one no longer implies clearing it on the other,
+       and clipboard text is actually read on the ROW. */
+    const grounds = [
+      ['canvas', resolveCustomProperty('--color-bg-secondary', scope)],
+      ['row', resolveCustomProperty('--color-bg-row', scope)],
+    ];
+    for (const [groundName, ground] of grounds) {
+      for (const role of textRoles) {
+        const text = resolveCustomProperty(role, scope);
+        assert.ok(
+          contrastRatio(text, ground) >= 4.5,
+          `${appearance} ${role} on the ${groundName} must remain legible at the 11–14px production sizes`
+        );
+      }
     }
+
+    /* Hierarchy is expressed through size + weight + ink level together, so
+       the ink levels themselves must keep strict rank — and the SAME rank in
+       both appearances. Two levels that converge silently collapse a
+       three-level hierarchy into two without any single value looking wrong. */
+    const canvas = resolveCustomProperty('--color-bg-secondary', scope);
+    const [primary, secondary, tertiary] = [
+      '--color-text-primary',
+      '--color-text-secondary',
+      '--color-text-tertiary',
+    ].map((role) => contrastRatio(resolveCustomProperty(role, scope), canvas));
+    assert.ok(
+      primary > secondary && secondary > tertiary,
+      `${appearance} ink levels must stay ordered — got ${primary.toFixed(2)} / ${secondary.toFixed(2)} / ${tertiary.toFixed(2)}`
+    );
+    assert.ok(
+      secondary - tertiary >= 0.75,
+      `${appearance} secondary and tertiary ink have converged (${secondary.toFixed(2)} vs ${tertiary.toFixed(2)}) and no longer read as two levels`
+    );
   }
 });
 
@@ -263,22 +290,177 @@ test('design-review mock exercises realistic multilingual clipboard geometry', a
   assert.ok(items.some((item) => item.isPinned === true), 'pinned case');
 });
 
-test('source app icons use the compact single-identifier well', () => {
+test('source app icons use the compact single-identifier slot', () => {
   const panelCss = read('src/panel.css');
   const tokens = read('src/tokens.css');
   const light = cssCustomProperties(cssRuleBody(tokens, /:root\s*\{/, 'light'));
 
   assert.match(panelCss, /\.source-icon\s*\{[\s\S]*border-radius:\s*var\(--radius-control\)/u);
-  assert.match(panelCss, /background:\s*var\(--color-source-icon-well\)/u);
   assert.match(panelCss, /color:\s*var\(--color-interactive-primary\)/u);
   assert.match(tokens, /--metric-icon-chip:\s*24px/u);
-  assert.match(tokens, /--size-30:\s*30px/u);
+  assert.match(tokens, /--size-32:\s*32px/u);
   assert.match(tokens, /--size-20:\s*20px/u);
-  assert.match(tokens, /--metric-source-slot-inline:\s*var\(--size-30\)/u);
-  assert.match(tokens, /--metric-source-glyph:\s*var\(--size-20\)/u);
+  /* v4.1 — the slot shows REAL macOS app artwork, which needs presence to be
+     recognisable at a glance: 30→32 slot, 20→24 glyph. */
+  assert.match(tokens, /--metric-source-slot-inline:\s*var\(--size-32\)/u);
+  assert.match(tokens, /--metric-source-glyph:\s*var\(--metric-icon-chip\)/u);
+
+  /* The well is now scoped to the FALLBACK only. Real app artwork is already
+     full-colour and self-contained; boxing it in a chip added a second
+     competing shape to every row. A flat monochrome glyph still needs a
+     ground, so `.is-fallback` — and only `.is-fallback` — keeps one. */
+  assert.match(
+    panelCss,
+    /\.source-icon\.is-fallback\s*\{[^}]*background:\s*var\(--color-source-icon-well\);/u
+  );
+  const restingSlot = /\.source-icon\s*\{([^}]*)\}/u.exec(panelCss);
+  assert.ok(restingSlot, '.source-icon must have a rule');
+  assert.doesNotMatch(
+    restingSlot[1],
+    /background:/u,
+    'the resting slot must paint no chip behind native artwork'
+  );
   assert.equal(
     resolveCustomProperty('--color-source-icon-well', light),
     '#f6f5f2',
     'the semantic role resolves through the approved Figma primitive alias'
+  );
+});
+
+/* THE v4.1 FIX, locked. The retired ladder put the canvas at #f7f5f1 and the
+   row at #fbfaf7 — a 1.06:1 step that vanished on a real display and made the
+   panel read as a blank web page. Depth here is tone + hairline + micro-lift,
+   never saturation, so if the tone step is flattened again there is nothing
+   left holding the rows apart. Both appearances are checked because the whole
+   point is that a role keeps its rank under either lighting. */
+test('the surface ladder keeps rows visibly lifted off the canvas in both appearances', () => {
+  const tokens = read('src/tokens.css');
+  const light = cssCustomProperties(cssRuleBody(tokens, /:root\s*\{/, 'light'));
+  const dark = cssCustomProperties(
+    cssRuleBody(tokens, /:root\s*\[\s*data-appearance\s*=\s*(['"])dark\1\s*\]\s*\{/, 'dark')
+  );
+  const scopes = [
+    ['Light', light],
+    ['Dark', new Map([...light, ...dark])],
+  ];
+
+  for (const [appearance, scope] of scopes) {
+    const canvas = resolveCustomProperty('--color-bg-secondary', scope);
+    const row = resolveCustomProperty('--color-bg-row', scope);
+    const hover = resolveCustomProperty('--color-bg-hover', scope);
+    const separation = contrastRatio(row, canvas);
+
+    assert.ok(
+      separation >= 1.12,
+      `${appearance} canvas→row separation is ${separation.toFixed(3)}:1 — a row must read as a card sitting ON the window, not dissolve into it`
+    );
+    /* Hover has to be a perceptible move off the resting row as well, or the
+       row's one affordance disappears into the surface it sits on. */
+    assert.ok(
+      contrastRatio(hover, row) >= 1.05,
+      `${appearance} row→hover is ${contrastRatio(hover, row).toFixed(3)}:1 and would not register as a state change`
+    );
+    /* The hairline is the second depth cue and must stay distinguishable from
+       the row it edges — a border that matches its own surface is not one. */
+    assert.ok(
+      contrastRatio(resolveCustomProperty('--color-border-subtle', scope), row) >= 1.1,
+      `${appearance} resting hairline is invisible against the row`
+    );
+  }
+
+  /* "Raised" must mean the same thing in both appearances, so the mental model
+     does not invert when a user switches theme. */
+  const relativeLift = ([, scope]) => {
+    const toLuminance = (hex) =>
+      hex
+        .slice(1)
+        .match(/.{2}/gu)
+        .map((value) => Number.parseInt(value, 16) / 255)
+        .map((value) => (value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4))
+        .reduce((sum, channel, index) => sum + [0.2126, 0.7152, 0.0722][index] * channel, 0);
+    return (
+      toLuminance(resolveCustomProperty('--color-bg-row', scope)) >
+      toLuminance(resolveCustomProperty('--color-bg-secondary', scope))
+    );
+  };
+  for (const scope of scopes) {
+    assert.ok(relativeLift(scope), `${scope[0]}: a raised plane must be the lighter one`);
+  }
+});
+
+/* Composites a paint over an opaque background at the given element opacity
+ * — the same maths the browser performs for `opacity` on a solid fill, used
+ * here to verify a DECORATIVE motif's real, rendered rank rather than just
+ * comparing raw opacity numbers (which are not comparable across two
+ * canvases of very different luminance — see the test below). */
+function compositeOver(foreground, background, opacity) {
+  const channels = (hex) => hex.slice(1).match(/.{2}/gu).map((value) => Number.parseInt(value, 16));
+  const [fr, fg, fb] = channels(foreground);
+  const [br, bg, bb] = channels(background);
+  const mix = (f, b) => Math.round(f * opacity + b * (1 - opacity));
+  return `#${[mix(fr, br), mix(fg, bg), mix(fb, bb)]
+    .map((value) => value.toString(16).padStart(2, '0'))
+    .join('')}`;
+}
+
+test('the empty-state motif ranks below secondary text in both appearances, at equal perceived weight', () => {
+  const tokens = read('src/tokens.css');
+  const css = read('src/panel.css');
+  const light = cssCustomProperties(cssRuleBody(tokens, /:root\s*\{/, 'light'));
+  const dark = cssCustomProperties(
+    cssRuleBody(tokens, /:root\s*\[\s*data-appearance\s*=\s*(['"])dark\1\s*\]\s*\{/, 'dark')
+  );
+  const scopes = [
+    ['Light', light, 1],
+    ['Dark', new Map([...light, ...dark]), 0.6],
+  ];
+
+  const barContrasts = [];
+  for (const [appearance, scope, expectedOpacity] of scopes) {
+    const canvas = resolveCustomProperty('--color-bg-secondary', scope);
+    const bar = resolveCustomProperty('--color-icon-brand', scope);
+    const secondary = resolveCustomProperty('--color-text-secondary', scope);
+    const opacity = Number(resolveCustomProperty('--opacity-motif', scope));
+
+    assert.equal(
+      opacity,
+      expectedOpacity,
+      `${appearance} --opacity-motif must be the solved value, not a rounder-looking guess`
+    );
+
+    const barContrast = contrastRatio(compositeOver(bar, canvas, opacity), canvas);
+    const secondaryContrast = contrastRatio(secondary, canvas);
+    barContrasts.push(barContrast);
+
+    assert.ok(
+      barContrast < secondaryContrast,
+      `${appearance} decorative bar contrast (${barContrast.toFixed(2)}:1) must stay below secondary text (${secondaryContrast.toFixed(2)}:1) — a decorative motif must never outrank body copy`
+    );
+  }
+
+  /* The actual regression: Light and Dark used the identical token and
+     opacity (1, 0.75) yet produced a 15× gap in rendered contrast, because a
+     saturated warm colour gains contrast against a near-black canvas far
+     faster than against a pale one. Equal RANK, not equal opacity, is the
+     invariant — this is what keeps that gap from reopening. */
+  const [lightBar, darkBar] = barContrasts;
+  assert.ok(
+    Math.abs(lightBar - darkBar) < 0.6,
+    `Light (${lightBar.toFixed(2)}:1) and Dark (${darkBar.toFixed(2)}:1) decorative-bar contrast must land within the same perceptual neighbourhood`
+  );
+
+  /* v4.1 added a radial "watermark" wash behind the bars; Figma's own
+     canonical Empty-state master (COMPONENT 69:397) has never had one, in
+     Light or Dark, and it was the actual source of the glow — removed
+     rather than re-tuned. Locked out so it cannot quietly return. */
+  assert.doesNotMatch(
+    css,
+    /\.state-art\.shelf-illustration::before/u,
+    'the empty-state motif must not reintroduce a background wash — Figma\'s canonical treatment has none'
+  );
+  assert.doesNotMatch(
+    css.match(/\.state-art\.shelf-illustration\s*\{[^}]*\}/su)?.[0] ?? '',
+    /--color-bg-selected/u,
+    'a selection-state token must never be reused for decorative atmosphere'
   );
 });

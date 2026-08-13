@@ -96,7 +96,7 @@ export function mockInvoke(cmd, args = {}) {
         history: RECENT,
         settings: SETTINGS,
         axTrusted: true,
-        version: '4.0.0',
+        version: '4.1.0',
       }));
     case 'paste_item':
       return Promise.resolve(true);
@@ -171,8 +171,8 @@ export function mockInvoke(cmd, args = {}) {
     case 'check_for_update':
       return Promise.resolve({
         status: 'available',
-        currentVersion: '4.0.0',
-        version: '4.1.0',
+        currentVersion: '4.1.0',
+        version: '4.2.0',
         date: '2026-08-12',
         notes: 'تحسينات في الأداء وإصلاحات متفرّقة.\nدعم إعادة التشغيل بعد التحديث.',
       });

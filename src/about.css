@@ -81,6 +81,9 @@ body {
   filter: drop-shadow(var(--elev-appicon));
 }
 
+/* The version is the quietest thing in the window: metadata under the mark,
+   one ink level below the credit it sits above. Ranking it there is what lets
+   «تطوير وتصميم سلطان» read as the line that matters in this stack. */
 .app-version {
   min-height: var(--leading-caption);
   margin: 0;
@@ -88,7 +91,7 @@ body {
   font-weight: 400;
   font-size: var(--text-caption);
   line-height: var(--leading-caption);
-  color: var(--color-text-secondary);
+  color: var(--color-text-tertiary);
   direction: ltr;
   unicode-bidi: isolate;
   white-space: nowrap;
@@ -134,7 +137,7 @@ body {
 }
 
 .repo-link:hover {
-  background: var(--color-bg-selected);
+  background: var(--color-bg-hover);
 }
 
 /* ─── Update action ─────────────────────────────────────────────────────── */
@@ -178,14 +181,19 @@ body {
     color var(--t-fast) var(--ease-standard);
 }
 
+/* The same hover and press this button has in Settings, so one control does not
+   behave like two. Hover lifts on the neutral hover tone; the press is the
+   genuinely active moment, and that is where the brand tint is spent. */
 .push-btn:hover:not(:disabled) {
-  background: var(--color-bg-selected);
+  background: var(--color-bg-hover);
   border-color: var(--color-interactive-primary);
   color: var(--color-text-brand);
 }
 
 .push-btn:active:not(:disabled) {
-  background: var(--color-bg-field);
+  background: var(--color-bg-selected);
+  border-color: var(--color-interactive-primary);
+  color: var(--color-text-brand);
 }
 
 .push-btn:disabled {

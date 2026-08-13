@@ -1,5 +1,5 @@
 /* ===========================================================================
-   رفّ — Raff v4.0.0 design tokens
+   رفّ — Raff v4.1.0 design tokens
    ---------------------------------------------------------------------------
    Single source of truth for every visual value in the app. Generated from the
    approved Figma system:
@@ -157,6 +157,7 @@
   /* Terracotta (brand) */
   --terracotta-50: #fdf5f0;
   --terracotta-75: #fbede5;
+  --terracotta-80: #fbe7da; /* v4.1 — selection tint that survives the deeper canvas */
   --terracotta-100: #f9e6da;
   --terracotta-200: #f0c9b0;
   --terracotta-300: #e4a882;
@@ -178,23 +179,32 @@
 
   /* Warm neutral (stone) */
   --stone-0: #ffffff;
+  --stone-15: #fdfcfa; /* v4.1 — the raised row/card plane */
   --stone-25: #fcfbf9;
   --stone-40: #fbfaf7;
+  --stone-45: #f7f4ef; /* v4.1 — recessed tertiary plane */
   --stone-50: #faf8f6;
   --stone-60: #f7f5f1;
   --stone-70: #f6f5f2;
   --stone-80: #f5f0ea;
+  --stone-85: #f6f1e9; /* v4.1 — row hover, one warm step above the row */
   --stone-90: #f1ede7;
   --stone-100: #f2efeb;
+  --stone-120: #f0ece6; /* v4.1 — the window canvas rows sit on */
+  --stone-140: #e9e3d9; /* v4.1 — inert control wells */
   --stone-150: #eae5df;
+  --stone-160: #e7e0d5; /* v4.1 — dividers and subtle edges */
   --stone-175: #ebe6df;
   --stone-200: #e0dad2;
   --stone-225: #ded8d0;
+  --stone-240: #ddd5c9; /* v4.1 — the hairline that gives a row its edge */
   --stone-300: #cec5ba;
   --stone-400: #b0a596;
   --stone-500: #8f8275;
   --stone-550: #766d65;
+  --stone-575: #6f665b; /* v4.1 — tertiary ink, AA on the deeper canvas */
   --stone-600: #6b6054;
+  --stone-650: #5c5349; /* v4.1 — secondary ink, one clear step under primary */
   --stone-700: #4d443a;
   --stone-725: #4a382b;
   --stone-800: #342d26;
@@ -204,19 +214,32 @@
 
   /* Neutral Dark surfaces — intentionally graphite, not the retired brown
      large-surface palette. */
+  --graphite-40: #f6f4f1; /* v4.1 — primary ink, step-matched to Light */
   --graphite-50: #f4f2ef;
   --graphite-300: #b9b4ae;
+  --graphite-320: #b6b1aa; /* v4.1 — secondary ink */
   --graphite-400: #98928b;
+  --graphite-420: #9a948c; /* v4.1 — tertiary ink */
   --graphite-600: #3a3b3f;
+  --graphite-620: #3d3f45; /* v4.1 — the hairline that gives a row its edge */
   --graphite-650: #303136;
+  --graphite-660: #303237; /* v4.1 — dividers and subtle edges */
   --graphite-700: #292a2e;
   --graphite-750: #27282c;
+  --graphite-780: #2e3035; /* v4.1 — inert control wells */
   --graphite-800: #222326;
+  --graphite-810: #2a2c31; /* v4.1 — row hover, one step above the row */
+  --graphite-820: #282a2e; /* v4.1 — elevated plane */
   --graphite-825: #202125;
+  --graphite-840: #212327; /* v4.1 — the raised row/card plane */
   --graphite-850: #202124;
+  --graphite-860: #1e1f22; /* v4.1 — opaque base plane */
   --graphite-875: #1d1e21;
+  --graphite-880: #1a1b1e; /* v4.1 — recessed input well */
+  --graphite-890: #1a1c1e; /* v4.1 — recessed tertiary plane */
   --graphite-900: #17181a;
-  --warm-dark-selected: #30251f;
+  --graphite-925: #141517; /* v4.1 — the window canvas rows sit on */
+  --warm-dark-selected: #3a2a20;
 
   /* Status */
   --indigo-50: #f0f1f8;
@@ -232,7 +255,7 @@
   --indigo-950: #0d0f1c;
   --green-400: #5cb37a;
   --green-500: #3d9960;
-  --green-600: #2e7a4b;
+  --green-600: #2b7045; /* v4.1 — regains AA against the deeper Light canvas */
   --red-400: #d46b6b;
   --red-500: #c04e4e;
   --red-600: #a33c3c;
@@ -255,21 +278,27 @@
      «04 — Foundations & Variables» semantic token table, confirmed value for
      value by the «09 — Light & Dark» comparison table.                      */
 
+  /* The surface ladder. v4.1 deepened the canvas and lifted the row plane so a
+     row reads as a card sitting ON the window instead of dissolving into it:
+     canvas → row is now 1.15:1 in Light and 1.16:1 in Dark — the SAME
+     perceived step in both appearances, where it used to be ~1.06:1. */
   --color-bg-primary: var(--stone-0);
-  --color-bg-secondary: var(--stone-60);
-  --color-bg-tertiary: var(--stone-40);
-  --color-bg-elevated: var(--stone-25);
-  --color-bg-hover: var(--stone-80);
-  --color-bg-selected: var(--terracotta-75);
+  --color-bg-secondary: var(--stone-120);
+  --color-bg-tertiary: var(--stone-45);
+  --color-bg-elevated: var(--stone-0);
+  --color-bg-hover: var(--stone-85);
+  --color-bg-selected: var(--terracotta-80);
   --color-bg-brand: var(--terracotta-500);
   --color-bg-accent: var(--indigo-500);
-  --color-bg-row: var(--stone-40);
+  --color-bg-row: var(--stone-15);
   --color-bg-field: var(--stone-0);
-  --color-bg-control: var(--stone-90);
+  --color-bg-control: var(--stone-140);
 
+  /* Four ink levels. The RATIO between levels — not the absolute value — is
+     what both appearances hold constant. */
   --color-text-primary: var(--stone-900);
-  --color-text-secondary: var(--stone-600);
-  --color-text-tertiary: var(--stone-550);
+  --color-text-secondary: var(--stone-650);
+  --color-text-tertiary: var(--stone-575);
   --color-text-inverse: var(--stone-0);
   --color-text-brand: var(--terracotta-700);
   --color-text-accent: var(--indigo-600);
@@ -278,12 +307,12 @@
   --color-text-on-system-tint: var(--stone-0);
   --color-text-credit: var(--stone-725);
 
-  --color-border-default: var(--stone-225);
-  --color-border-subtle: var(--stone-175);
+  --color-border-default: var(--stone-240);
+  --color-border-subtle: var(--stone-160);
   --color-border-strong: var(--stone-500);
   --color-border-brand: var(--terracotta-500);
   --color-border-focus: var(--indigo-500);
-  --color-border-divider: var(--stone-175);
+  --color-border-divider: var(--stone-160);
   --color-border-selected: var(--terracotta-500);
   --color-border-selected-soft: var(--overlay-selected-light);
 
@@ -351,12 +380,23 @@
   --metric-row-min-height: var(--size-56);
   --metric-row-action: var(--size-32);
   --metric-row-actions-gap: var(--space-xs);
+  /* v4.1 — the action cluster's own width. It is NO LONGER a reserved grid
+     column: the cluster is an overlay on the row's inline-end, so this width
+     costs the content nothing at rest. See `.row-actions` in panel.css. */
   --metric-row-actions-inline: var(--size-68);
+  /* How far the fade in front of the revealed cluster runs, so content slides
+     under it instead of colliding with it. */
+  --metric-row-actions-scrim: var(--space-2xl);
   --metric-control-height: 30px;
   --metric-control-height-sm: 28px;
   --metric-icon-chip: 24px;
-  --metric-source-slot-inline: var(--size-30);
-  --metric-source-glyph: var(--size-20);
+  /* v4.1 — the source slot carries a real macOS app icon, not the outlined
+     placeholder square the Figma master draws. Real artwork needs presence to
+     be recognisable at a glance, so the slot went 30→32 and the glyph 20→24;
+     it stays subordinate to the content because it never gains weight, only
+     legibility. */
+  --metric-source-slot-inline: var(--size-32);
+  --metric-source-glyph: var(--metric-icon-chip);
 
   /* ─── Radius — «04» ───────────────────────────────────────────────────── */
   --radius-none: 0px;
@@ -369,6 +409,9 @@
   --radius-control: 6px; /* macOS kit Button/Radius */
 
   /* ─── Elevation — «04» ────────────────────────────────────────────────── */
+  /* v4.1 — the row's own micro-lift. Depth in Light comes from tone + hairline
+     + this, never from saturation. Dark overrides it below. */
+  --elev-row: 0 1px 1px rgba(30, 26, 23, 0.045);
   --elev-1: 0 1px 1.5px rgba(0, 0, 0, 0.04); /* raised — default cards */
   --elev-2: 0 6px 6px rgba(0, 0, 0, 0.08); /* floating — clipboard & tools */
   --elev-3: 0 12px 12px rgba(0, 0, 0, 0.11); /* overlay — panels & menus */
@@ -408,6 +451,17 @@
   --tracking-display-1: -0.01em;
   --tracking-display-2: -0.005em;
 
+  /* ─── Decorative weight ──────────────────────────────────────────────────
+     Visual weight is a semantic property, not a per-appearance accident. A
+     decorative brand motif (currently: the empty-shelf bars) must rank BELOW
+     primary/secondary text in both appearances — but an identical opacity on
+     an identical warm hue does not produce an identical rank, because a
+     saturated colour gains contrast against a near-black Dark canvas far
+     faster than the same colour does against a pale Light one. v4.1 — added
+     2026-08-13 for exactly one consumer so far; a future decorative-only
+     motif should reuse this rather than inventing a sibling token. */
+  --opacity-motif: 1;
+
   /* ─── Motion ──────────────────────────────────────────────────────────────
      «04» defines no motion tokens. These are the minimum needed for the
      interaction states «07 — Patterns & States» documents, kept deliberately
@@ -423,21 +477,26 @@
   /* Dark mode deliberately neutralises large surfaces. Raff's warm identity
      now lives in selection, focus and brand details instead of coating the
      whole window in brown. */
-  --color-bg-primary: var(--graphite-850);
-  --color-bg-secondary: var(--graphite-900);
-  --color-bg-tertiary: var(--graphite-875);
-  --color-bg-elevated: var(--graphite-800);
-  --color-bg-hover: var(--graphite-750);
+  /* Same ladder, same steps — only the lighting changes. "Raised" still means
+     "lighter" here, so the mental model does not invert between appearances.
+     Inputs are the one deliberate exception: a field is a well you type into,
+     so it recesses BELOW the canvas in Dark exactly as it rises above it in
+     Light — the role (a distinct, non-card surface) is preserved either way. */
+  --color-bg-primary: var(--graphite-860);
+  --color-bg-secondary: var(--graphite-925);
+  --color-bg-tertiary: var(--graphite-890);
+  --color-bg-elevated: var(--graphite-820);
+  --color-bg-hover: var(--graphite-810);
   --color-bg-selected: var(--warm-dark-selected);
   --color-bg-brand: var(--terracotta-400);
   --color-bg-accent: var(--indigo-200);
-  --color-bg-row: var(--graphite-875);
-  --color-bg-field: var(--graphite-825);
-  --color-bg-control: var(--graphite-700);
+  --color-bg-row: var(--graphite-840);
+  --color-bg-field: var(--graphite-880);
+  --color-bg-control: var(--graphite-780);
 
-  --color-text-primary: var(--graphite-50);
-  --color-text-secondary: var(--graphite-300);
-  --color-text-tertiary: var(--graphite-400);
+  --color-text-primary: var(--graphite-40);
+  --color-text-secondary: var(--graphite-320);
+  --color-text-tertiary: var(--graphite-420);
   --color-text-inverse: var(--stone-900);
   --color-text-brand: var(--terracotta-300);
   --color-text-accent: var(--indigo-200);
@@ -446,12 +505,12 @@
   --color-text-on-system-tint: var(--stone-0);
   --color-text-credit: var(--graphite-300);
 
-  --color-border-default: var(--graphite-600);
-  --color-border-subtle: var(--graphite-650);
+  --color-border-default: var(--graphite-620);
+  --color-border-subtle: var(--graphite-660);
   --color-border-strong: var(--stone-600);
   --color-border-brand: var(--terracotta-400);
   --color-border-focus: var(--indigo-200);
-  --color-border-divider: var(--graphite-650);
+  --color-border-divider: var(--graphite-660);
   --color-border-selected: var(--terracotta-400);
   --color-border-selected-soft: var(--overlay-selected-dark);
 
@@ -468,8 +527,12 @@
   --color-interactive-secondary-hover: var(--graphite-600);
 
   --color-fill-subtle: var(--overlay-white-subtle);
-  --color-source-icon-well: var(--graphite-700);
-  --color-pinned: var(--terracotta-500);
+  --color-source-icon-well: var(--graphite-780);
+  /* v4.1: `pinned` was the one brand-carrying role that never joined the dark
+     ramp — every sibling (bg/border/icon/interactive) steps to terracotta-400
+     in Dark while this stayed at 500, so a pinned marker read dimmer in Dark
+     than the selection it sits beside. */
+  --color-pinned: var(--terracotta-400);
   /* Dark app-icon construction is a genuine, different treatment — a deep
      neutral brown, not a darker terracotta — matching the real approved
      Figma master (COMPONENT_SET 157:102, Mode=Dark) promoted 2026-08-12. Was
@@ -486,9 +549,18 @@
   --color-system-destructive: var(--system-destructive);
 
   /* Elevation shadows need more weight on a dark surface to read at all. */
+  --elev-row: 0 1px 2px rgba(0, 0, 0, 0.32);
   --elev-1: 0 1px 1.5px rgba(0, 0, 0, 0.3);
   --elev-2: 0 6px 6px rgba(0, 0, 0, 0.38);
   --elev-3: 0 12px 12px rgba(0, 0, 0, 0.45);
+
+  /* Solved, not guessed: at 1 the empty-shelf bars (--terracotta-400 on the
+     Dark canvas) contrast 6.35:1 — LOUDER than --text-secondary's own
+     8.58:1, reversing the intended rank. 0.6 brings the composited bar to
+     ~3.1:1, the same rank the Light bars hold against --text-secondary's
+     6.4:1 (3.09:1). See the full derivation in panel.css beside
+     `.state-art.shelf-illustration`. */
+  --opacity-motif: 0.6;
 }
 
 /* ─── Reset & shared base ─────────────────────────────────────────────────── */
@@ -574,10 +646,16 @@ button.dot-close::before {
   background: var(--color-system-stoplight-close);
 }
 
+/* v4.1 root-cause fix: this rule used to also set `border-radius: --radius-sm`,
+   which MUTATED THE GEOMETRY of every focusable control the moment it received
+   keyboard focus — the pill switch squared off, tabs and buttons shrank their
+   corners, and rounded surfaces visibly changed shape mid-interaction. A focus
+   style must describe the ring, never the element. WebKit already draws the
+   outline along each element's own border-radius, so nothing is lost by
+   removing it and every control now keeps its shape while focused. */
 :focus-visible {
   outline: 2px solid var(--color-focus-ring);
   outline-offset: 2px;
-  border-radius: var(--radius-sm);
 }
 
 /* Latin runs, numerals and macOS modifier glyphs are Almarai and must never be

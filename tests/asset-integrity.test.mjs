@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import { inflateSync } from 'node:zlib';
 import { Resvg } from '@resvg/resvg-js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -18,6 +19,75 @@ function filesUnder(directory, relative = '') {
     return entry.isDirectory() ? filesUnder(directory, child) : [child];
   });
 }
+
+/**
+ * Reads a PNG's dimensions, colour type and top-left pixel.
+ *
+ * Only the first pixel of the first scanline is needed, and that one is
+ * filter-independent: every PNG filter resolves to the raw byte when there is
+ * no left neighbour and no prior row, so no full unfilter pass is required.
+ */
+function pngProbe(relativePath) {
+  const bytes = readFileSync(path.join(project, relativePath));
+  let offset = 8;
+  let header = null;
+  const idat = [];
+  while (offset < bytes.length) {
+    const length = bytes.readUInt32BE(offset);
+    const type = bytes.toString('ascii', offset + 4, offset + 8);
+    if (type === 'IHDR') {
+      header = {
+        width: bytes.readUInt32BE(offset + 8),
+        height: bytes.readUInt32BE(offset + 12),
+        bitDepth: bytes[offset + 16],
+        colorType: bytes[offset + 17],
+      };
+    } else if (type === 'IDAT') {
+      idat.push(bytes.subarray(offset + 8, offset + 8 + length));
+    } else if (type === 'IEND') break;
+    offset += 12 + length;
+  }
+  assert.ok(header, `${relativePath} must have a PNG header`);
+  const channels = { 0: 1, 2: 3, 4: 2, 6: 4 }[header.colorType];
+  const raw = inflateSync(Buffer.concat(idat));
+  return { ...header, channels, topLeft: [...raw.subarray(1, 1 + channels)] };
+}
+
+/**
+ * The bug this locks out: Figma's SVG/PNG export renders a node IN CONTEXT,
+ * so exporting the app-icon component silently prepended the section's opaque
+ * #F5F5F5 background. Those exports were committed as the icon masters, and
+ * because macOS does not mask app icons, every derived size shipped as a grey
+ * square — visible as a border around the mark in About/Settings and as the
+ * Finder, Dock and DMG icon. `gen-icons.mjs` documents this exact failure mode
+ * and asserts the masters "preserve that alpha"; nothing enforced it, because
+ * the existing presentation-frame guard only ever inspected SVGs.
+ */
+test('every app-icon raster keeps its corners transparent, master through derived', () => {
+  const rasters = [
+    'src/assets/app-icon/raff-app-icon-light-1024.png',
+    'src/assets/app-icon/raff-app-icon-dark-1024.png',
+    'src/assets/app-icon.png',
+    'src-tauri/icons/32x32.png',
+    'src-tauri/icons/128x128.png',
+    'src-tauri/icons/128x128@2x.png',
+  ];
+
+  for (const relativePath of rasters) {
+    assert.ok(existsSync(path.join(project, relativePath)), `${relativePath} must exist`);
+    const png = pngProbe(relativePath);
+    assert.equal(
+      png.colorType,
+      6,
+      `${relativePath} must carry a real alpha channel (RGBA), not a flattened raster`
+    );
+    assert.equal(
+      png.topLeft[3],
+      0,
+      `${relativePath} corner alpha is ${png.topLeft[3]} (rgba ${png.topLeft.join(',')}) — the tile is a rounded square, so its corners must be fully transparent. An opaque corner means a Figma presentation background was exported with the node.`
+    );
+  }
+});
 
 test('every SVG wired through the production icon module exists and excludes Figma page backgrounds', () => {
   const iconModule = read('src/js/icons.js');
@@ -43,11 +113,38 @@ test('the Product Screens empty shelf is composed from its three original line e
   assert.match(iconModule, /empty-shelf-line-1\.svg/u);
   assert.match(iconModule, /empty-shelf-line-2\.svg/u);
   assert.match(iconModule, /empty-shelf-line-3\.svg/u);
-  for (const [index, width] of [160, 120, 80].entries()) {
+  /* v4.1 — the three lines are the descending-bar Raff motif at identity
+     scale (92/72/50 × 6, r3), not the 2px grey hairlines v4.0 had degraded
+     them to, which read as an incidental divider rather than the product's
+     own mark. The widths must stay in step with the `.state-art` rule that
+     draws them, so the composition cannot silently stretch. */
+  const panelCss = read('src/panel.css');
+  for (const [index, width] of [92, 72, 50].entries()) {
     const svg = read(`src/assets/v4/empty-shelf-line-${index + 1}.svg`);
     assert.match(svg, new RegExp(`width="${width}"`));
+    assert.match(svg, new RegExp(`viewBox="0 0 ${width} 6"`), 'a 6pt bar, not a hairline');
+    assert.match(svg, /rx="3"/u, 'the mark’s bars are pill-capped');
+    assert.match(
+      panelCss,
+      new RegExp(
+        `\\.state-art\\.shelf-illustration \\.figma-icon:nth-child\\(${index + 1}\\)\\s*\\{[^}]*width:\\s*${width}px;`,
+        'u'
+      ),
+      `the shelf illustration must draw line ${index + 1} at its exported width`
+    );
     assert.doesNotMatch(svg, /#F5F5F5|Raff-macOS-Clipboard-History-Showcase/iu);
   }
+  assert.match(
+    panelCss,
+    /\.state-art\.shelf-illustration \.figma-icon\s*\{[^}]*height:\s*6px;/u,
+    'a stretched bar height would distort the mark'
+  );
+  /* Consumed as CSS masks, so the exported fill is shape-only and the live
+     semantic colour comes from the component. */
+  assert.match(
+    panelCss,
+    /\.state-art\.shelf-illustration\s*\{[\s\S]*?color:\s*var\(--color-icon-brand\);/u
+  );
 });
 
 test('About and Settings use the one canonical bundled app icon', () => {
@@ -269,8 +366,8 @@ const ICON_FAMILIES = [
 test('every stroked production icon carries its family’s approved optical ratio', () => {
   const iconRoot = path.join(project, 'src/assets/v4');
   /* Filled artwork rather than stroked icons: the macOS-tinted menu-bar
-     template, the brand mark, and the decorative shelf rules whose stroke is
-     itself the shape. */
+     template, the brand mark, and the empty-shelf bars — which are filled
+     rounded rects (the shape IS the mark), not stroked glyphs. */
   const filledArtwork = /^(menu-bar-raff-|raff-logo-mark\.svg$|empty-shelf-line-)/;
 
   const classified = new Set(ICON_FAMILIES.flatMap((f) => f.files));
@@ -331,7 +428,18 @@ test('icon families keep their intended weight hierarchy at production size', ()
   const tokens = read('src/tokens.css');
   const panel = read('src/panel.css');
 
-  assert.match(tokens, /--metric-source-glyph:\s*var\(--size-20\)/u);
+  /* v4.1 split the source slot in two. --metric-source-glyph (now 24) governs
+     REAL macOS app artwork, which is raster and carries no stroke ratio at
+     all; the stroked Figma fallback — the only member of the source-app
+     family — still draws in its calibrated 20px box. The hierarchy below is
+     about stroked glyphs, so it is that box, not the raster one, that has to
+     hold still. */
+  assert.match(tokens, /--size-20:\s*20px/u);
+  assert.match(
+    panel,
+    /\.source-icon\.is-fallback \.figma-icon\s*\{[^}]*width:\s*var\(--size-20\);[^}]*height:\s*var\(--size-20\);/u,
+    'the stroked fallback glyph keeps the box its ratio was calibrated against'
+  );
   assert.match(panel, /\.row-action\s+\.figma-icon[\s\S]*?width:\s*16px/u);
 
   const rendered = (ratio, box) => Number((ratio * box).toFixed(3));

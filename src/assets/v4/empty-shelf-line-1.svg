@@ -1,3 +1,11 @@
-<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="160" height="2" viewBox="0 0 160 2" fill="none" xmlns="http://www.w3.org/2000/svg">
-<line id="Line" y1="1" x2="160" y2="1" stroke="#E1DDD9" stroke-width="2"/>
+<svg width="92" height="6" viewBox="0 0 92 6" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!--
+    «08 — Product Screens» → COMPONENT_SET 69:424 "Feedback / State",
+    variant 69:397 "State=Empty" → "Empty Shelf Illustration" → "Shelf / 1".
+    Approved geometry: 92x6, cornerRadius 3, fill bound to color/icon/brand.
+    Consumed as a CSS mask, so the fill below is shape-only; the live semantic
+    colour is supplied by the component. Re-exported 2026-08-13: the previous
+    file was a stale 2px hairline from a superseded composition.
+  -->
+  <rect width="92" height="6" rx="3" fill="#C4704B"/>
 </svg>

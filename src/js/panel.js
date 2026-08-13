@@ -67,6 +67,11 @@ let activeDelete = null; // { token, snapshot }
 const feedbackQueue = [];
 let mutationQueue = Promise.resolve();
 
+/* Mirrors --metric-source-glyph. Real macOS app artwork is the row's identity
+   cue, so it is drawn at 24 rather than the 20 the Figma placeholder square
+   used; the intrinsic <img> size must match or WebKit resamples it soft. */
+const SOURCE_GLYPH_PX = 24;
+
 const PIN_TOAST_MS = 3000;
 const DELETE_TOAST_MS = 5000;
 const TOAST_EXIT_MS = 120;
@@ -176,9 +181,9 @@ function loadingView() {
     sourceIcon.className = 'skeleton-block skeleton-source-icon';
     source.append(sourceIcon);
 
-    const action = document.createElement('span');
-    action.className = 'skeleton-block skeleton-action';
-    row.append(preview, source, action);
+    // No action placeholder: the live row reserves no space for its actions,
+    // so a skeleton that drew one would promise a column that never arrives.
+    row.append(preview, source);
     view.append(row);
   }
 
@@ -237,6 +242,9 @@ function revealAppIcon(host) {
 }
 
 function paintFigmaAppIcon(host, source) {
+  // A flat monochrome glyph needs a ground to sit on; real app artwork does
+  // not — `.is-fallback` is what carries the well and its hairline.
+  host.classList.add('is-fallback');
   host.replaceChildren(createIcon(source, 'source-app-glyph'));
   revealAppIcon(host);
 }
@@ -244,9 +252,10 @@ function paintFigmaAppIcon(host, source) {
 function paintAppIcon(host, url) {
   const img = document.createElement('img');
   img.alt = '';
-  img.width = 20;
-  img.height = 20;
+  img.width = SOURCE_GLYPH_PX;
+  img.height = SOURCE_GLYPH_PX;
   img.src = url;
+  host.classList.remove('is-fallback');
   host.replaceChildren(img);
   revealAppIcon(host);
 }
@@ -270,6 +279,9 @@ function buildRow(item, index) {
   row.setAttribute('aria-selected', String(item.id === selectedId));
   row.setAttribute('aria-rowindex', String(index + 1));
   if (item.id === selectedId) row.classList.add('selected');
+  // Pinned is a row STATE (quiet brand edge + resting flag), so the unpin
+  // control can stay contextual instead of living permanently in the row.
+  if (item.isPinned) row.classList.add('is-pinned');
 
   // ── flexible centre: the copied content is the row's primary information.
   const preview = document.createElement('div');
@@ -365,7 +377,17 @@ function buildRow(item, index) {
   });
   row.addEventListener('dblclick', () => paste(item.id, false));
 
+  // Physical order is [ content | source ]; the action cluster is an overlay
+  // (see .row-actions) so a resting row reserves no empty block for it.
   row.append(preview, source, actions);
+
+  if (item.isPinned) {
+    const flag = document.createElement('span');
+    flag.className = 'row-pin-flag';
+    flag.setAttribute('aria-hidden', 'true');
+    flag.append(createIcon(PIN));
+    row.append(flag);
+  }
   return row;
 }
 
@@ -432,8 +454,10 @@ function renderList() {
       listEl.append(stateView(null, 'لا نتائج', 'جرّب كلمة أخرى أو صنفًا مختلفًا', 'is-no-results'));
     } else {
       // Genuinely nothing saved yet — never shown for a failed fetch.
+      // Copy is «08» COMPONENT 69:397 "State=Empty" verbatim; v4.0 had drifted
+      // to its own wording, which the approved composition never carried.
       listEl.append(
-        stateView(SHELF, 'الرفّ فارغ', 'انسخ أي شيء وسيظهر بشكل آمن وجميل على رفّك القريب')
+        stateView(SHELF, 'لا يوجد شيء هنا بعد', 'سيظهر سجل الحافظة هنا فور نسخ أول عنصر')
       );
     }
     return;

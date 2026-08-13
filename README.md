@@ -1,12 +1,16 @@
 <div align="center">
 
-<img src="docs/assets/raff-app-icon.png" alt="رفّ — Raff" width="128" height="128" />
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/raff-hero-dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="docs/assets/raff-hero-light.png">
+  <img alt="رفّ — Raff" src="docs/assets/raff-hero-light.png" width="100%">
+</picture>
 
 **مدير الحافظة الشخصي والخاص لنظام macOS**
 
 كل ما نسخته يبقى قريبًا، مرتبًا، وخاصًا.
 
-[![الإصدار](https://img.shields.io/badge/%D8%A7%D9%84%D8%A5%D8%B5%D8%AF%D8%A7%D8%B1-v4.0.0-C4704B?style=flat-square)](https://github.com/iSltanX/Raff/releases/latest)
+[![الإصدار](https://img.shields.io/badge/%D8%A7%D9%84%D8%A5%D8%B5%D8%AF%D8%A7%D8%B1-v4.1.0-C4704B?style=flat-square)](https://github.com/iSltanX/Raff/releases/latest)
 [![macOS](https://img.shields.io/badge/macOS-12%2B%20·%20Apple%20Silicon-1E1A17?style=flat-square)](https://github.com/iSltanX/Raff/releases/latest)
 [![محلي بالكامل](https://img.shields.io/badge/%D9%85%D8%AD%D9%84%D9%8A%20%D8%A8%D8%A7%D9%84%D9%83%D8%A7%D9%85%D9%84-%D8%A8%D9%84%D8%A7%20%D8%B4%D8%A8%D9%83%D8%A9-16643F?style=flat-square)](#الخصوصية--local-first)
 
@@ -18,8 +22,9 @@
 
 ## ما هو رفّ
 
-«رفّ» تطبيق صغير يسكن شريط القائمة في macOS، يحفظ ما تنسخه ويعيده إليك بضغطة
-واحدة. يعمل على طبقتين:
+«رفّ» — الكلمة العربية للرفّ الذي تضع عليه أغراضك لتبقى قريبة ومرتّبة — تطبيق
+صغير يسكن شريط القائمة في macOS، يحفظ ما تنسخه ويعيده إليك بضغطة واحدة. يعمل
+على طبقتين:
 
 - **الأخير** — سجل تلقائي لكل ما نسخته.
 - **المثبّت** — ما تثبّته يبقى على الرفّ ولا يُحذف تلقائيًا، ويظهر معلّمًا بين
@@ -27,9 +32,17 @@
 
 بلا حساب، بلا سحابة، وبلا أي اتصال بالشبكة. كل بايت يبقى على جهازك.
 
+<div align="center">
+<img src="docs/assets/raff-overview.png" alt="رفّك القريب لكل ما نسخت وحفظت" width="100%">
+</div>
+
 ---
 
 ## أهم المميزات
+
+<div align="center">
+<img src="docs/assets/raff-features.png" alt="الإمكانيات الأساسية" width="100%">
+</div>
 
 - **لوحة عائمة فورية** تُفتح بنقرة على أيقونة شريط القائمة أو باختصار عام،
   فوق أي تطبيق، وتُغلق فور اللصق.
@@ -46,6 +59,87 @@
 
 ---
 
+## الواجهة
+
+اللوحة تتبع مظهر macOS تلقائيًا حين يكون إعداد المظهر على **تلقائي** — فاتحة
+حين يكون نظامك فاتحًا، داكنة حين يكون داكنًا — أو يمكن تثبيتها على أحد
+الوضعين من الإعدادات بصرف النظر عن مظهر النظام.
+
+<div align="center">
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/raff-dark-mode.png">
+  <source media="(prefers-color-scheme: light)" srcset="docs/assets/raff-light-mode.png">
+  <img alt="رفّ في الوضعين الفاتح والداكن" src="docs/assets/raff-light-mode.png" width="100%">
+</picture>
+
+<br /><br />
+
+<img src="docs/assets/raff-comparison.png" alt="الوضعان الفاتح والداكن جنبًا إلى جنب" width="100%">
+
+</div>
+
+---
+
+## بحث فوري
+
+<div align="center">
+<img src="docs/assets/raff-search.png" alt="بحث فوري في كل المنسوخات" width="100%">
+</div>
+
+ابدأ بالكتابة وستظهر النتائج فورًا — عبر النصوص والروابط والصور معًا. البحث
+العربي يتجاهل التشكيل والتطويل، فلا يفوتك عنصر بسبب حركة أو حرف ممدود.
+
+---
+
+## العناصر المثبّتة
+
+<div align="center">
+<img src="docs/assets/raff-pinned.png" alt="ثبّت المهم دائمًا في المقدمة" width="100%">
+</div>
+
+ثبّت العناصر الأكثر استخدامًا لتبقى في متناولك — معلّمة داخل القائمة الزمنية
+نفسها، أو مصفّاة وحدها عبر «مثبّت»، دون أن تُحذف تلقائيًا مهما طال الوقت.
+
+---
+
+## دعم الصور
+
+<div align="center">
+<img src="docs/assets/raff-image-content.png" alt="صور ومحتوى مرئي" width="100%">
+</div>
+
+رفّ لا يقتصر على النصوص. الصور المنسوخة تُحفظ بمعاينة مصغّرة داخل السجل، وتُخزَّن
+كملفات PNG محلية بجوار بقية بياناتك — لا رفع، ولا سحابة.
+
+---
+
+## شريط القائمة
+
+<div align="center">
+<img src="docs/assets/raff-menubar.png" alt="دائمًا في شريط القوائم" width="100%">
+</div>
+
+أيقونة رفّ تعيش في شريط القوائم — نقرة واحدة أو اختصار لوحة المفاتيح يفتح
+اللوحة فوق أي تطبيق أنت فيه. رفّ تطبيق خلفية بلا أيقونة Dock.
+
+---
+
+## أيقونة التطبيق
+
+<div align="center">
+<img src="docs/assets/raff-icon-showcase.png" alt="أيقونة رفّ — فاتح وداكن" width="100%">
+</div>
+
+أيقونة رفّ التي تراها في Finder وDock وDMG هي **النسخة الفاتحة دائمًا**، بصرف
+النظر عن مظهر macOS الحالي — لا تبديل، لا إعادة تشغيل، ولا أيقونة داكنة نشطة.
+هذا اختيار مقصود لهوية بصرية واحدة ثابتة. المعالجة الداكنة المعروضة أعلاه جزء
+من نظام الهوية البصرية المعتمد في Figma، محفوظة كأصل تصميم جاهز، دون أن تكون
+مفعّلة كأيقونة تطبيق متغيّرة. مظهر **واجهة** رفّ نفسها — اللوحة والإعدادات —
+منفصل تمامًا ويتبع إعداد المظهر أو نظامك كما هو موضّح أعلاه.
+
+---
+
 ## الهوية البصرية
 
 هوية رفّ البصرية — الألوان، الخطوط، الأيقونات، ومكوّنات الواجهة وشاشات
@@ -56,11 +150,16 @@
 المفاتيح. Design tokens الكاملة (ألوان الوضعين الفاتح والداكن، تباعد،
 انحناءات، ارتفاعات، سلّم الطباعة) في
 [src/tokens.css](src/tokens.css)، والمكوّنات المشتركة في
-[src/controls.css](src/controls.css).
+[src/controls.css](src/controls.css). لقطات هذا الملف مصدَّرة مباشرة من
+صفحة «GitHub & README» المعتمدة في الملف نفسه.
 
 ---
 
 ## الخصوصية — Local First
+
+<div align="center">
+<img src="docs/assets/raff-privacy.png" alt="بياناتك لا تغادر جهازك" width="100%">
+</div>
 
 رفّ مصمَّم بحيث يستحيل عليه تسريب ما تنسخه، لا لأننا نَعِد بذلك، بل لأنه لا
 يملك القدرة أصلًا:
@@ -95,6 +194,10 @@
 
 ## الاستخدام بالكيبورد
 
+<div align="center">
+<img src="docs/assets/raff-keyboard.png" alt="مصمّم للوحة المفاتيح" width="100%">
+</div>
+
 | الإجراء | المفتاح |
 | --- | --- |
 | فتح/إغلاق اللوحة | **⇧⌘V** (قابل للتغيير من الإعدادات) |
@@ -114,6 +217,19 @@
 
 ---
 
+## الإعدادات والتحكم
+
+<div align="center">
+<img src="docs/assets/raff-settings.png" alt="الإعدادات والتحكم" width="100%">
+</div>
+
+نافذة إعدادات مستقلة تجمع كل ضبط في مكان واحد: حجم السجل المحفوظ، اختصار فتح
+اللوحة، التشغيل التلقائي عند الدخول، مظهر الواجهة (تلقائي / فاتح / داكن)،
+وضوابط الخصوصية — استبعاد التطبيقات، احترام المحتوى المخفي، وتفعيل التعلّم
+الاختياري أو تعطيله.
+
+---
+
 ## متطلبات النظام
 
 - macOS 12 (Monterey) أو أحدث.
@@ -123,7 +239,11 @@
 
 ## التثبيت
 
-1. نزّل `Raff_4.0.0_aarch64.dmg` من
+<div align="center">
+<img src="docs/assets/raff-install.png" alt="التثبيت" width="100%">
+</div>
+
+1. نزّل `Raff_4.1.0_aarch64.dmg` من
    [صفحة الإصدارات](https://github.com/iSltanX/Raff/releases/latest).
 2. افتح الملف واسحب **Raff** إلى مجلد التطبيقات.
 3. شغّل رفّ. ستجده في **شريط القائمة** — لا تبحث عنه في Dock، فهو تطبيق
@@ -156,20 +276,23 @@
 
 ## معلومات الإصدار
 
+<div align="center">
+<img src="docs/assets/raff-release.png" alt="الإصدار الحالي" width="100%">
+</div>
+
 | | |
 | --- | --- |
-| الإصدار الحالي | **v4.0.0** |
+| الإصدار الحالي | **v4.1.0** |
 | المعمارية | macOS arm64 (Apple Silicon) |
 | التوقيع | ad-hoc — غير موثَّق من Apple |
 | قناة التحديث | Tauri Updater عبر إصدارات هذا المستودع |
 | سجل التغييرات | [CHANGELOG.md](CHANGELOG.md) |
 
-v4.0.0 إعادة بناء كاملة لواجهة رفّ من نظام تصميم Figma معتمد (انظر
-[الهوية البصرية](#الهوية-البصرية)): لوحة جديدة بالكامل، تصفية فورية حسب
-النوع، نافذة إعدادات منظمة في خمس صفحات، نافذة «عن رفّ» مستقلة، ونقرة واحدة على
-أيقونة شريط القائمة تفتح رفّ مباشرة. لا تغيير في البيانات المحفوظة ولا في
-آلية الالتقاط ولا في الاختصارات؛ راجع [CHANGELOG.md](CHANGELOG.md)
-للتفاصيل الكاملة.
+v4.1.0 صقل بصري على واجهة v4.0.0: تسلسل هرمي أوضح للألوان في الوضعين الفاتح
+والداكن، تفاعلات إجراءات الصف (تثبيت/حذف) مُعاد بناؤها كطبقة عائمة واحدة بدل
+عناصر منفصلة، تصحيح تصدير أيقونة التطبيق لتبقى شفافة الزوايا في كل حجم مُصدَّر،
+وتزامن كامل مع نظام Figma المعتمد. لا تغيير في البيانات المحفوظة ولا في آلية
+الالتقاط ولا في الاختصارات؛ راجع [CHANGELOG.md](CHANGELOG.md) للتفاصيل الكاملة.
 
 ---
 
@@ -202,10 +325,12 @@ src/                 مصدر الواجهة (HTML/CSS/JS خام، RTL، فات�
   about.html         نافذة «عن رفّ»          js/about.js
   update.html        نافذة التحديث           js/update.js
   firstrun.html      شاشة الأذونات           js/firstrun.js
+  theme.js           مزامنة مظهر الواجهة مع النظام عند «تلقائي»
   tokens.css         Design Tokens (هوية رفّ v4 — فاتح + داكن)
   controls.css       المكوّنات المشتركة (أزرار، لوحات تمرير، مفاتيح)
   js/icons.js        أيقونات المنتج المصدّرة من Figma
   assets/            أصول الهوية الرسمية (أيقونة التطبيق، شريط القائمة)
+docs/assets/          لقطات ورسوم README مصدَّرة من صفحة Figma «GitHub & README»
 dist/                حمولة إنتاجية مولّدة من قائمة ملفات مسموحة صريحة
 scripts/
   build-frontend.mjs يبني dist/ ويمنع شحن mocks وصادرات العرض من Figma
@@ -239,8 +364,13 @@ src-tauri/           خلفية Rust
 إعادة التوزيع دون إذن.
 
 <div align="center">
+
+<img src="docs/assets/raff-about.png" alt="رفّ — Raff" width="100%">
+
 <br />
 
 **تطوير وتصميم : سلطان**
+
+Developed & Designed by Sultan
 
 </div>

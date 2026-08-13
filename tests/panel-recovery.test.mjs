@@ -8,6 +8,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  EMPTY_SHELF_HEADLINE,
+  FAILURE_HEADLINE,
   mountPanel,
   sampleItem,
   minutesAgo,
@@ -49,7 +51,7 @@ test('panel recovery: first load retries, then ⌘R re-initialises in place', as
   });
 
   await t.test('the transient failure never showed the error state to the user', () => {
-    assert.doesNotMatch(listText(dom), /تعذّر عرض محتوى رفّ/);
+    assert.doesNotMatch(listText(dom), FAILURE_HEADLINE);
   });
 
   await t.test('one chronological list — pinned items stay in place with one clear action', () => {
@@ -151,8 +153,8 @@ test('panel recovery: first load retries, then ⌘R re-initialises in place', as
     fake.setState({ pinned: [], history: [], settings: null, axTrusted: true });
     fake.emit('panel://shown', null);
     await flush(6);
-    assert.match(listText(dom), /الرفّ فارغ/, 'the natural empty state is shown');
-    assert.doesNotMatch(listText(dom), /تعذّر عرض محتوى رفّ/, 'and never the failure state');
+    assert.match(listText(dom), EMPTY_SHELF_HEADLINE, 'the natural empty state is shown');
+    assert.doesNotMatch(listText(dom), FAILURE_HEADLINE, 'and never the failure state');
     assert.equal(
       dom.window.document.querySelector('.state-view.is-failure'),
       null,
@@ -325,8 +327,8 @@ test('panel recovery: first load retries, then ⌘R re-initialises in place', as
       null,
       'search-empty is textual and never borrows the shelf illustration'
     );
-    assert.doesNotMatch(listText(dom), /الرفّ فارغ/, 'a narrowed list is not an empty shelf');
-    assert.doesNotMatch(listText(dom), /تعذّر عرض محتوى رفّ/, 'and never the failure state');
+    assert.doesNotMatch(listText(dom), EMPTY_SHELF_HEADLINE, 'a narrowed list is not an empty shelf');
+    assert.doesNotMatch(listText(dom), FAILURE_HEADLINE, 'and never the failure state');
     const noResults = dom.window.document.querySelector('.state-view.is-no-results');
     assert.equal(noResults.getAttribute('role'), 'status');
     assert.equal(noResults.getAttribute('aria-live'), 'polite');

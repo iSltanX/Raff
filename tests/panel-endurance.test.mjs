@@ -5,6 +5,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  EMPTY_SHELF_HEADLINE,
+  FAILURE_HEADLINE,
   mountPanel,
   sampleItem,
   minutesAgo,
@@ -119,8 +121,8 @@ test('panel endurance: 30 show/hide cycles leak nothing and lose nothing', async
   });
 
   await t.test('the empty state never appeared while items existed', () => {
-    assert.doesNotMatch(listText(dom), /الرفّ فارغ/);
-    assert.doesNotMatch(listText(dom), /تعذّر عرض محتوى رفّ/);
+    assert.doesNotMatch(listText(dom), EMPTY_SHELF_HEADLINE);
+    assert.doesNotMatch(listText(dom), FAILURE_HEADLINE);
   });
 
   await t.test('no uncaught errors over the whole endurance run', () => {

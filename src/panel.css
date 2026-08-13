@@ -73,12 +73,16 @@ body {
   direction: rtl;
 }
 
+/* Colour rides the MARK, not the word. v4.0 set the wordmark ExtraBold 17 in
+   terracotta, which made the app's own name the highest-contrast object on a
+   screen whose subject is the user's content. «08» renders it at body size in
+   neutral ink beside a brand-coloured mark — identity without competition. */
 .brand-name {
   font-family: var(--font-ar);
-  font-weight: 800;
-  font-size: var(--text-title-3);
-  line-height: var(--leading-title-3);
-  color: var(--color-interactive-primary);
+  font-weight: 700;
+  font-size: var(--text-subhead);
+  line-height: var(--leading-subhead);
+  color: var(--color-text-primary);
 }
 
 .brand-mark {
@@ -147,25 +151,35 @@ body {
     background var(--t-fast) var(--ease-standard);
 }
 
+/* The panel focuses this field on EVERY open, so `:focus-within` here is the
+   resting state of the whole product, not a focus event. v4.0 painted the full
+   2px indigo keyboard ring on it, which meant the single loudest colour in the
+   interface was permanently on, signalling nothing, and competing with the
+   terracotta identity for the eye's first fixation.
+   The focused field now reads "active" the macOS way — it lifts to the
+   elevated surface and firms its border. Indigo is reserved for focus the user
+   can actually MOVE (segments, buttons, row actions), where a ring carries
+   real information. Same treatment as Spotlight, which likewise ships no ring
+   on its always-focused field. */
 .search-field:focus-within {
   background: var(--color-bg-elevated);
-  border-color: var(--color-focus-ring);
-  box-shadow: 0 0 0 1px var(--color-focus-ring);
+  border-color: var(--color-border-strong);
 }
 
 .search-glyph {
   display: flex;
-  color: var(--color-text-secondary);
+  color: var(--color-text-tertiary);
   flex: none;
   order: 1; /* RTL leading edge — the magnifier sits on the right */
 }
 
 .search-field:focus-within .search-glyph {
-  color: var(--color-focus-ring);
+  color: var(--color-text-secondary);
 }
 
 /* Figma «10 — RTL & Accessibility»: Indigo communicates keyboard focus;
-   Terracotta remains the brand/selection accent. */
+   Terracotta remains the brand/selection accent. Kept for every control focus
+   can travel to — the exception above is the field it never leaves. */
 .panel :focus-visible {
   outline-color: var(--color-focus-ring);
 }
@@ -300,23 +314,41 @@ body {
   background: transparent;
 }
 
-/* Clipboard row: content owns the flexible width, followed by one source-app
-   icon and a compact paired action cluster. The row geometry is physical LTR;
-   each content string still resolves its own bidi direction. */
+/* Clipboard row — ONE coherent object, complete at rest.
+   ---------------------------------------------------------------------------
+   RTL scan path (the eye enters from the right):
+       ① source-app icon   ② copied content   ③ contextual actions
+   Physical LTR order is therefore [ content | source ], with the action
+   cluster overlaid on the inline-end (left) edge and revealed on interaction.
+
+   v4.1: the approved Figma master (60:46) reserves a FIXED 68×32 "Row Actions"
+   frame in EVERY state and only toggles the two buttons' opacity — so an idle
+   row draws a permanent 68px hole that the RTL eye hits FIRST, before it ever
+   reaches the content. That is the defect being corrected here; the reserve is
+   gone and the cluster now floats over the row, so a resting row is whole and
+   the 68px returns to copied content. Figma is being synced to match.
+
+   `--row-surface` carries the row's current background so the reveal scrim can
+   never drift out of step with the state it is fading from. */
 .row {
+  --row-surface: var(--color-bg-row);
+  position: relative;
   direction: ltr;
   display: grid;
   grid-template-columns:
     minmax(0, 1fr)
-    var(--metric-source-slot-inline)
-    var(--metric-row-actions-inline);
+    var(--metric-source-slot-inline);
   align-items: center;
   column-gap: var(--space-md);
   min-height: var(--metric-row-min-height);
   padding: var(--metric-row-block) var(--metric-row-inline);
   border-radius: var(--radius-lg);
-  border: 1px solid transparent;
-  background: var(--color-bg-row);
+  /* Depth in Light comes from tone + hairline + a micro-lift, never from
+     saturation. The resting hairline is what stops a row dissolving into the
+     canvas the way the borderless v4.0 row did. */
+  border: 1px solid var(--color-border-subtle);
+  background: var(--row-surface);
+  box-shadow: var(--elev-row);
   flex: none;
   transition:
     background var(--t-fast) var(--ease-standard),
@@ -324,14 +356,22 @@ body {
 }
 
 .row:hover:not(.selected) {
-  background: var(--color-bg-hover);
-  border-color: var(--color-border-divider);
+  --row-surface: var(--color-bg-hover);
+  border-color: var(--color-border-default);
 }
 
 .row.selected {
-  background: var(--color-bg-selected);
+  --row-surface: var(--color-bg-selected);
+  border-color: var(--color-border-selected);
+  box-shadow:
+    var(--elev-row),
+    inset -3px 0 0 var(--color-border-selected);
+}
+
+/* Pinned is a STATE, not a permanently-parked button. The row carries a quiet
+   brand edge; the unpin control stays contextual like every other action. */
+.row.is-pinned:not(.selected) {
   border-color: var(--color-border-selected-soft);
-  box-shadow: inset -3px 0 0 var(--color-border-selected);
 }
 
 .row-preview {
@@ -450,17 +490,34 @@ body {
 
 /* The installed macOS app icon is the row's only source identifier. The
    approved Figma glyph is a lookup-failure fallback; the app name remains in
-   title/aria-label instead of consuming visible text width. */
+   title/aria-label instead of consuming visible text width.
+
+   v4.1: Figma draws a placeholder outline square here, so it gave the slot a
+   filled, stroked well to sit in. Production shows REAL app artwork, which is
+   already full-colour and self-contained — boxing it in a chip added a second
+   competing shape per row. The well is now carried only by `.is-fallback`,
+   where a flat monochrome glyph genuinely needs a ground. */
 .source-icon {
   width: var(--metric-source-slot-inline);
   height: var(--metric-source-slot-inline);
   border-radius: var(--radius-control);
-  background: var(--color-source-icon-well);
   color: var(--color-interactive-primary);
   display: flex;
   align-items: center;
   justify-content: center;
   flex: none;
+}
+
+.source-icon.is-fallback {
+  background: var(--color-source-icon-well);
+  border: 1px solid var(--color-border-subtle);
+  color: var(--color-text-tertiary);
+}
+
+/* A flat fallback glyph reads at a smaller optical size than real artwork. */
+.source-icon.is-fallback .figma-icon {
+  width: var(--size-20);
+  height: var(--size-20);
 }
 
 .source-icon .figma-icon,
@@ -479,16 +536,84 @@ body {
   display: none;
 }
 
-/* Figma Row / Action Button (77:603) geometry, translated to the user's compact
-   production target: two adjacent 32px controls, 4px apart, each retaining the
-   exact 28px visual well and 16px exported glyph. */
+/* Figma Row / Action Button (77:603) geometry — two adjacent 32px controls,
+   4px apart, each retaining the exact 28px visual well and 16px exported
+   glyph — but mounted as an OVERLAY on the row's inline-end instead of a
+   reserved column, so a resting row never shows a hole where they will be.
+   Content simply slides under the fade when a row is long. */
 .row-actions {
+  position: absolute;
+  inset-inline-start: var(--metric-row-inline);
+  top: 50%;
+  transform: translateY(-50%);
   display: grid;
   grid-template-columns: repeat(2, var(--metric-row-action));
   align-items: center;
   gap: var(--metric-row-actions-gap);
   width: var(--metric-row-actions-inline);
-  flex: none;
+  z-index: 1;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--t-fast) var(--ease-standard);
+}
+
+/* The fade that integrates the cluster into the row instead of parking it on
+   an opaque block. It is painted from the row's CURRENT surface, so hover and
+   selected states can never leave a mismatched rectangle behind. */
+.row-actions::before {
+  content: '';
+  position: absolute;
+  inset-block: calc(-1 * var(--metric-row-block));
+  inset-inline-start: calc(-1 * var(--metric-row-inline));
+  inset-inline-end: calc(-1 * var(--metric-row-actions-scrim));
+  border-start-start-radius: var(--radius-lg);
+  border-end-start-radius: var(--radius-lg);
+  background: linear-gradient(
+    to right,
+    var(--row-surface) 0%,
+    var(--row-surface) 62%,
+    transparent 100%
+  );
+  z-index: -1;
+}
+
+/* Progressive disclosure: information at rest, actions on interaction.
+   The buttons stay in the tab order at rest (opacity, not visibility) so
+   keyboard users can reach them — focus-within then reveals the cluster. */
+.row:hover .row-actions,
+.row.selected .row-actions,
+.row:focus-within .row-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* A pinned row states its condition quietly at rest, in the same place the
+   controls will appear, and hands that space over the moment they do. */
+.row-pin-flag {
+  position: absolute;
+  inset-inline-start: var(--metric-row-inline);
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--metric-row-action);
+  height: var(--metric-row-action);
+  color: var(--color-pinned);
+  pointer-events: none;
+  transition: opacity var(--t-fast) var(--ease-standard);
+}
+
+.row-pin-flag .figma-icon {
+  width: 14px;
+  height: 14px;
+  display: block;
+}
+
+.row:hover .row-pin-flag,
+.row.selected .row-pin-flag,
+.row:focus-within .row-pin-flag {
+  opacity: 0;
 }
 
 .row-action {
@@ -524,42 +649,24 @@ body {
   z-index: 1;
 }
 
-/* The row's single pin affordance: unpinned rows reveal it contextually;
-   pinned rows keep the pin-off action visible so state and action cannot be
-   mistaken for duplicate status markers. */
-.pin-btn,
-.delete-btn {
-  opacity: 0;
-}
-
-.row:hover .pin-btn,
-.row.selected .pin-btn,
-.row:focus-within .pin-btn,
-.pin-btn.is-pinned,
-.pin-btn:focus-visible,
-.row:hover .delete-btn,
-.row.selected .delete-btn,
-.row:focus-within .delete-btn,
-.delete-btn:focus-visible {
-  opacity: 1;
-}
-
+/* Reveal is owned by `.row-actions` as one cluster (above), so the individual
+   buttons no longer carry their own opacity — they only carry emphasis.
+   Resting emphasis is deliberately subordinate: tertiary ink, no fill. */
 .row-action:hover {
   color: var(--color-interactive-primary);
 }
 
 .row-action:hover::before,
 .row-action:focus-visible::before {
-  background: var(--color-bg-hover);
+  background: var(--color-fill-subtle);
 }
 
+/* Destructive weight is earned on approach, not advertised at rest. */
 .delete-btn:hover,
 .delete-btn:focus-visible {
   color: var(--color-status-error);
 }
 
-/* A pinned row keeps the action visible and tinted; its pin-off geometry plus
-   tooltip/accessible label communicates that activating it will unpin. */
 .pin-btn.is-pinned {
   color: var(--color-pinned);
 }
@@ -602,17 +709,19 @@ body {
 .skeleton-row {
   direction: ltr;
   display: grid;
+  /* Mirrors the live row exactly — including the absence of a reserved action
+     column — so the list cannot jump when native data arrives. */
   grid-template-columns:
     minmax(0, 1fr)
-    var(--metric-source-slot-inline)
-    var(--metric-row-actions-inline);
+    var(--metric-source-slot-inline);
   align-items: center;
   column-gap: var(--space-md);
   min-height: var(--metric-row-min-height);
   padding: var(--metric-row-block) var(--metric-row-inline);
   border-radius: var(--radius-lg);
-  border: 1px solid var(--color-border-divider);
+  border: 1px solid var(--color-border-subtle);
   background: var(--color-bg-row);
+  box-shadow: var(--elev-row);
 }
 
 .skeleton-block {
@@ -658,13 +767,6 @@ body {
   flex: none;
 }
 
-.skeleton-action {
-  width: var(--metric-row-actions-inline);
-  height: var(--metric-row-action);
-  border-radius: var(--radius-sm);
-  flex: none;
-}
-
 @keyframes panel-skeleton-pulse {
   from {
     opacity: 0.44;
@@ -701,30 +803,60 @@ body {
   display: block;
 }
 
-/* Exact 2:7907 composition: 160/120/80px line layers on a 312×30 canvas,
-   separated by the 14px vertical rhythm drawn in Product Screens. */
+/* The empty shelf IS the Raff mark — the same descending-bar motif as the
+   logo, drawn at identity scale. Matches the approved «08» composition
+   (COMPONENT 69:397) exactly: 92/72/50 × 6 bars, r3, brand-coloured, 19px
+   apart, opacity 1 — Figma's own canonical Light treatment, unchanged.
+
+   Deliberately NOT paired with a second logo lockup: drawing the same glyph
+   twice at two weights reads as a mistake. The "airy / atmospheric" quality
+   the empty state needs comes from generous space (`.state-view`'s own
+   24px gap / 40px padding), not from a duplicate graphic.
+
+   v4.1 had ALSO added a radial wash behind the bars — Figma's canonical has
+   none, in Light or (since it defines no Dark empty-state at all) Dark. That
+   wash is what caused the actual regression this fixes: at its coded 0.75
+   opacity it measured 1.015:1 against Light's canvas (imperceptible, "fine")
+   but 1.226:1 against Dark's — 15× the excess contrast for the identical
+   token and opacity, because a saturated warm tone gains contrast against a
+   near-black canvas far faster than the same tone does against a pale one.
+   Removed rather than re-tuned: it contributed nothing visible in Light (by
+   design) and Figma's own reference treatment never had it, so the honest
+   fix is one fewer non-canonical layer, not a second opacity to keep in
+   parity forever.
+
+   --opacity-motif carries what's left to tune: the bars' own weight relative
+   to the title/message ink above them, which the same warm-on-near-black
+   effect quietly inverts if left at 1 in both appearances. Light stays 1
+   (Figma's value, already ranks below --text-secondary at 6.4:1 vs the
+   bars' 3.1:1). Dark is 0.6 — solved so the composited bar contrast lands at
+   ~3.1:1 too, the same rank relative to Dark's own --text-secondary
+   (8.6:1), not merely the same opacity. */
 .state-art.shelf-illustration {
-  width: min(312px, 100%);
-  height: 30px;
+  width: 120px;
+  height: 74px;
+  padding-block: 8px 10px;
   flex-direction: column;
   align-items: center;
   justify-content: space-between;
+  color: var(--color-icon-brand);
+  opacity: var(--opacity-motif);
 }
 
 .state-art.shelf-illustration .figma-icon {
-  height: 2px;
+  height: 6px;
 }
 
 .state-art.shelf-illustration .figma-icon:nth-child(1) {
-  width: 160px;
+  width: 92px;
 }
 
 .state-art.shelf-illustration .figma-icon:nth-child(2) {
-  width: 120px;
+  width: 72px;
 }
 
 .state-art.shelf-illustration .figma-icon:nth-child(3) {
-  width: 80px;
+  width: 50px;
 }
 
 .state-view.is-failure .state-art {
@@ -743,12 +875,16 @@ body {
   gap: 6px;
 }
 
+/* «08» COMPONENT 69:397: Cairo Bold 17/24 in NEUTRAL primary ink — not the
+   brand. v4.0 rendered it ExtraBold 21 in terracotta, which made absence the
+   loudest thing on screen and spent the brand colour where nothing was
+   happening. Brand now appears in the mark above it; the words stay calm. */
 .state-title {
   font-family: var(--font-ar);
-  font-weight: 800;
-  font-size: var(--text-title-2);
-  line-height: var(--leading-title-2);
-  color: var(--color-interactive-primary);
+  font-weight: 700;
+  font-size: var(--text-title-3);
+  line-height: var(--leading-title-3);
+  color: var(--color-text-primary);
 }
 
 .state-view.is-failure .state-title {
@@ -758,8 +894,8 @@ body {
 .state-sub {
   font-family: var(--font-ar);
   font-weight: 400;
-  font-size: 14px;
-  line-height: 24px;
+  font-size: var(--text-body);
+  line-height: var(--leading-body);
   color: var(--color-text-secondary);
   max-width: 320px;
 }
@@ -781,13 +917,20 @@ body {
   color: var(--color-text-brand);
 }
 
-/* ─── Feedback + contextual footer (2:7787 / Row Action 77:603) ─────────── */
+/* ─── Feedback (COMPONENT_SET "Feedback / Toast" 74:476, «06 — Components»)
+   ───────────────────────────────────────────────────────────────────────
+   The wrapper carries NO surface of its own — no fill, no divider — so
+   nothing changes on screen except the pill itself when a toast appears.
+   Figma agrees: its toast instances sit in a frame named literally
+   "Toast Slot / Reserved Above Toolbar", floating on the bare canvas, not on
+   a coloured band. `.panel-feedback` stays in normal flow rather than an
+   overlay (never position:fixed/absolute — see panel-feedback-contract.test)
+   so the list above it can never be covered; centring it here is the only
+   job left for the wrapper to do. */
 
 .panel-feedback {
   direction: inherit;
   padding: var(--space-md) var(--metric-panel-inline);
-  background: var(--color-bg-elevated);
-  border-top: 1px solid var(--color-border-divider);
   flex: none;
   display: flex;
   justify-content: center;
@@ -797,14 +940,23 @@ body {
   display: none;
 }
 
+/* Figma's own 5 variants (Success/Pin/Unpin/Error/Delete) all fill
+   `color/bg/elevated` and differ ONLY by a 1px stroke + icon tint — except
+   Delete, whose canonical fill is `color/text/primary` (#1e1a17 opaque):
+   a text-role token bound as a background, and exactly the "large dark
+   capsule" defect being fixed here, present in Figma before it ever reached
+   this file. Delete now matches its four siblings: one shared elevated
+   surface, kind carried by a thin stroke and the icon alone — never by
+   painting the whole container. */
 .toast {
   min-height: 42px;
   width: fit-content;
   max-width: 100%;
   padding: var(--space-xs) var(--space-lg);
-  border: 1px solid var(--color-border-default);
+  border: 1px solid var(--color-status-success); /* base = the default "success" kind */
   border-radius: var(--radius-full);
-  background: var(--color-bg-primary);
+  background: var(--color-bg-elevated);
+  box-shadow: var(--elev-2); /* matches Figma's own DROP_SHADOW: 0/6/6, 8% */
   color: var(--color-text-primary);
   display: flex;
   align-items: center;
@@ -818,6 +970,22 @@ body {
   transition:
     opacity var(--t-fast) var(--ease-standard),
     transform var(--t-fast) var(--ease-standard);
+}
+
+/* Pin/Unpin carry a neutral stroke in Figma (color/border/default) — the
+   brand accent already lives in the pin icon itself, so the edge stays
+   quiet rather than doubling the same colour. */
+.toast[data-kind='pin'],
+.toast[data-kind='unpin'] {
+  border-color: var(--color-border-default);
+}
+
+/* Delete and Error share one stroke colour: this is the toast's entire
+   destructive vocabulary — a thin red-tinted edge plus the icon — never a
+   filled surface. */
+.toast[data-kind='delete'],
+.toast[data-kind='error'] {
+  border-color: var(--color-status-error);
 }
 
 .toast-icon {
@@ -861,12 +1029,18 @@ body {
   white-space: nowrap;
 }
 
+/* A coloured, bold WORD — not a bordered button inside a bordered pill.
+   Figma's "Undo Action" is a bare TEXT layer, no fill or stroke of its own;
+   a second nested border here was v4.1's own box-within-a-box, not the
+   canonical design. Discoverability comes from weight + colour + generous
+   hit padding, the same macOS pattern as Mail's "Undo Send" — undo stays a
+   confident word, never a second capsule stacked inside the first. */
 .toast-undo {
-  min-width: 44px;
+  min-width: 40px;
   min-height: 28px;
-  padding: 0 var(--space-md);
+  padding: 0 var(--space-sm);
   border-radius: var(--radius-control);
-  border: 1px solid var(--color-border-brand);
+  border: 0;
   color: var(--color-text-brand);
   background: transparent;
   font-family: var(--font-ar);
@@ -874,10 +1048,12 @@ body {
   font-size: 12px;
   line-height: 20px;
   flex: none;
+  transition: background var(--t-fast) var(--ease-standard);
 }
 
-.toast-undo:hover {
-  background: var(--color-bg-selected);
+.toast-undo:hover,
+.toast-undo:focus-visible {
+  background: var(--color-fill-subtle);
 }
 
 .toast-undo[hidden] {
