@@ -317,8 +317,8 @@ body {
 /* Clipboard row — ONE coherent object, complete at rest.
    ---------------------------------------------------------------------------
    RTL scan path (the eye enters from the right):
-       ① source-app icon   ② copied content   ③ contextual actions
-   Physical LTR order is therefore [ content | source ], with the action
+       ① content-type icon   ② copied content   ③ contextual actions
+   Physical LTR order is therefore [ content | type ], with the action
    cluster overlaid on the inline-end (left) edge and revealed on interaction.
 
    v4.1: the approved Figma master (60:46) reserves a FIXED 68×32 "Row Actions"
@@ -337,7 +337,7 @@ body {
   display: grid;
   grid-template-columns:
     minmax(0, 1fr)
-    var(--metric-source-slot-inline);
+    var(--metric-content-type-slot-inline);
   align-items: center;
   column-gap: var(--space-md);
   min-height: var(--metric-row-min-height);
@@ -478,62 +478,33 @@ body {
   color: var(--color-text-tertiary);
 }
 
-.row-source {
+.row-kind {
   display: flex;
   align-items: center;
   justify-content: center;
   flex: none;
-  width: var(--metric-source-slot-inline);
-  height: var(--metric-source-slot-inline);
+  width: var(--metric-content-type-slot-inline);
+  height: var(--metric-content-type-slot-inline);
   direction: ltr;
 }
 
-/* The installed macOS app icon is the row's only source identifier. The
-   approved Figma glyph is a lookup-failure fallback; the app name remains in
-   title/aria-label instead of consuming visible text width.
-
-   v4.1: Figma draws a placeholder outline square here, so it gave the slot a
-   filled, stroked well to sit in. Production shows REAL app artwork, which is
-   already full-colour and self-contained — boxing it in a chip added a second
-   competing shape per row. The well is now carried only by `.is-fallback`,
-   where a flat monochrome glyph genuinely needs a ground. */
-.source-icon {
-  width: var(--metric-source-slot-inline);
-  height: var(--metric-source-slot-inline);
-  border-radius: var(--radius-control);
-  color: var(--color-interactive-primary);
+/* «14 — App & Content Icons» content-type glyph. The 32px row slot preserves
+   existing alignment; the exact 20px Figma export supplies the optical art,
+   equivalent to its 24px component canvas with 2px internal padding. */
+.content-type-icon {
+  width: var(--metric-content-type-slot-inline);
+  height: var(--metric-content-type-slot-inline);
+  color: var(--color-content-type-icon);
   display: flex;
   align-items: center;
   justify-content: center;
   flex: none;
 }
 
-.source-icon.is-fallback {
-  background: var(--color-source-icon-well);
-  border: 1px solid var(--color-border-subtle);
-  color: var(--color-text-tertiary);
-}
-
-/* A flat fallback glyph reads at a smaller optical size than real artwork. */
-.source-icon.is-fallback .figma-icon {
-  width: var(--size-20);
-  height: var(--size-20);
-}
-
-.source-icon .figma-icon,
-.source-icon img {
-  width: var(--metric-source-glyph);
-  height: var(--metric-source-glyph);
+.content-type-icon .figma-icon {
+  width: var(--metric-content-type-glyph);
+  height: var(--metric-content-type-glyph);
   display: block;
-}
-
-.source-icon img {
-  object-fit: contain;
-  border-radius: var(--radius-sm);
-}
-
-.source-icon[hidden] {
-  display: none;
 }
 
 /* Figma Row / Action Button (77:603) geometry — two adjacent 32px controls,
@@ -713,7 +684,7 @@ body {
      column — so the list cannot jump when native data arrives. */
   grid-template-columns:
     minmax(0, 1fr)
-    var(--metric-source-slot-inline);
+    var(--metric-content-type-slot-inline);
   align-items: center;
   column-gap: var(--space-md);
   min-height: var(--metric-row-min-height);
@@ -752,17 +723,17 @@ body {
   width: min(58%, 140px);
 }
 
-.skeleton-source {
+.skeleton-kind {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: var(--metric-source-slot-inline);
+  width: var(--metric-content-type-slot-inline);
   flex: none;
 }
 
-.skeleton-source-icon {
-  width: var(--metric-source-slot-inline);
-  height: var(--metric-source-slot-inline);
+.skeleton-kind-icon {
+  width: var(--metric-content-type-slot-inline);
+  height: var(--metric-content-type-slot-inline);
   border-radius: var(--radius-control);
   flex: none;
 }

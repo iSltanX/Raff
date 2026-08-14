@@ -4,6 +4,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { inflateSync } from 'node:zlib';
+import { createHash } from 'node:crypto';
 import { Resvg } from '@resvg/resvg-js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -106,6 +107,35 @@ test('every SVG wired through the production icon module exists and excludes Fig
       `${absolutePath} must not include an opaque Figma presentation frame`
     );
   }
+});
+
+test('history content-type icons are byte-exact exports from Figma node 12:28', () => {
+  const expected = new Map([
+    ['content-types/text.svg', '7055677eaed42e016c56e63e693c2630224fd47e00a32603c3f786602a1419a4'],
+    ['content-types/link.svg', '82016c8a51594ffd2d048218ff61e461d3b0b8a14f60cd4e918226932d0ff0cb'],
+    ['content-types/code.svg', 'ba2c4f6fc414d767f772106e7d97bf34a36d8cca9db11583dd21ac2fcf926726'],
+    ['content-types/image.svg', '3256e2b8215f75edd7bd4c02e54399b7087e2eac10f8ecc7374d6397a5508cf6'],
+    ['content-types/unknown.svg', '3f16551fa7a94833b3892caa59770c3367af92b5a9d0a1a76be5b213c177fc17'],
+  ]);
+
+  for (const [relative, sha256] of expected) {
+    const absolute = path.join(project, 'src/assets/v4', relative);
+    assert.ok(existsSync(absolute), `${relative} must exist`);
+    assert.equal(
+      createHash('sha256').update(readFileSync(absolute)).digest('hex'),
+      sha256,
+      `${relative} must remain the exact isolated Figma export`
+    );
+  }
+
+  const iconModule = read('src/js/icons.js');
+  const sourceAppDirectory = path.join(project, 'src/assets/v4/source-app');
+  assert.deepEqual(
+    existsSync(sourceAppDirectory) ? filesUnder(sourceAppDirectory) : [],
+    [],
+    'source-application icon assets must not ship'
+  );
+  assert.doesNotMatch(iconModule, /source-app\/|SOURCE_APP_ICONS|sourceAppAsset/u);
 });
 
 test('the Product Screens empty shelf is composed from its three original line exports', () => {
@@ -351,14 +381,15 @@ const ICON_FAMILIES = [
     ],
   },
   {
-    name: 'source app — «14 — App & Content Icons»',
-    ratio: 2 / 32,
+    name: 'content type — «14 — App & Content Icons» Content Icons (12:28)',
+    ratio: 1.5 / 20,
+    exactFigmaExport: true,
     files: [
-      'source-app/app-window.svg',
-      'source-app/chrome.svg',
-      'source-app/figma.svg',
-      'source-app/notes.svg',
-      'source-app/safari.svg',
+      'content-types/code.svg',
+      'content-types/image.svg',
+      'content-types/link.svg',
+      'content-types/text.svg',
+      'content-types/unknown.svg',
     ],
   },
 ];
@@ -410,13 +441,17 @@ test('every stroked production icon carries its family’s approved optical rati
       }
 
       assert.match(svg, /stroke-linecap="round"/u, `${relative} must use a round cap`);
-      assert.match(svg, /stroke-linejoin="round"/u, `${relative} must use a round join`);
-      assert.doesNotMatch(svg, /stroke="#/u, `${relative} must inherit colour, not bake a hex`);
-      assert.doesNotMatch(
-        svg,
-        /preserveAspectRatio="none"/u,
-        `${relative} must not distort inside a non-square control`
-      );
+      if (family.exactFigmaExport) {
+        assert.match(svg, /stroke="#4D443A"/u, `${relative} keeps Figma's exact Light master stroke`);
+      } else {
+        assert.match(svg, /stroke-linejoin="round"/u, `${relative} must use a round join`);
+        assert.doesNotMatch(svg, /stroke="#/u, `${relative} must inherit colour, not bake a hex`);
+        assert.doesNotMatch(
+          svg,
+          /preserveAspectRatio="none"/u,
+          `${relative} must not distort inside a non-square control`
+        );
+      }
     }
   }
 });
@@ -424,51 +459,39 @@ test('every stroked production icon carries its family’s approved optical rati
 /* The families above only hold together if their production boxes stay put: a
    ratio is weight per unit of box, so a box change silently re-weights a whole
    family. These three are the boxes the hierarchy is calibrated against. */
-test('icon families keep their intended weight hierarchy at production size', () => {
+test('icon families keep their approved production boxes and weights', () => {
   const tokens = read('src/tokens.css');
   const panel = read('src/panel.css');
 
-  /* v4.1 split the source slot in two. --metric-source-glyph (now 24) governs
-     REAL macOS app artwork, which is raster and carries no stroke ratio at
-     all; the stroked Figma fallback — the only member of the source-app
-     family — still draws in its calibrated 20px box. The hierarchy below is
-     about stroked glyphs, so it is that box, not the raster one, that has to
-     hold still. */
+  /* «14» specifies a 24px component canvas around 20px optical artwork. The
+     row retains its existing 32px alignment slot while the exported glyph is
+     never enlarged beyond that sanctioned 20px box. */
   assert.match(tokens, /--size-20:\s*20px/u);
+  assert.match(tokens, /--metric-content-type-slot-inline:\s*var\(--size-32\)/u);
+  assert.match(tokens, /--metric-content-type-glyph:\s*var\(--size-20\)/u);
   assert.match(
     panel,
-    /\.source-icon\.is-fallback \.figma-icon\s*\{[^}]*width:\s*var\(--size-20\);[^}]*height:\s*var\(--size-20\);/u,
-    'the stroked fallback glyph keeps the box its ratio was calibrated against'
+    /\.content-type-icon \.figma-icon\s*\{[^}]*width:\s*var\(--metric-content-type-glyph\);[^}]*height:\s*var\(--metric-content-type-glyph\);/u,
+    'the semantic glyph keeps the exact 20px optical box from Figma'
   );
   assert.match(panel, /\.row-action\s+\.figma-icon[\s\S]*?width:\s*16px/u);
 
   const rendered = (ratio, box) => Number((ratio * box).toFixed(3));
   const rowAction = rendered(1.5 / 16, 16);
   const utility = rendered(2 / 24, 16);
-  const sourceApp = rendered(2 / 32, 20);
+  const contentType = rendered(1.5 / 20, 20);
 
-  assert.ok(
-    rowAction > utility && utility > sourceApp,
-    `interactive controls must outweigh utility marks, which must outweigh the subordinate source glyph — got ${rowAction} / ${utility} / ${sourceApp}`
-  );
+  assert.equal(contentType, 1.5, 'the semantic icon must render at Figma\'s exact 1.5px stroke');
+  assert.ok(rowAction > utility, `row action ${rowAction} must outweigh utility ${utility}`);
   assert.ok(rowAction <= 1.5, `row actions must not exceed 1.5px rendered, got ${rowAction}`);
 });
 
-test('ChatGPT and Claude are not collapsed into the repeated CPU fallback', () => {
+test('history icon assets carry content semantics only, never application identity', () => {
   const iconModule = read('src/js/icons.js');
-  const retiredCpuAsset = path.join(project, 'src/assets/v4/source-app/ai.svg');
-
-  assert.equal(existsSync(retiredCpuAsset), false, 'the repeated CPU fallback must not ship');
-  assert.doesNotMatch(iconModule, /source-app\/ai\.svg|SOURCE_APP_ICONS\.ai|\bai:\s*asset\(/u);
-  assert.doesNotMatch(
-    iconModule,
-    /(?:chatgpt|openai|claude|anthropic)[\s\S]{0,240}SOURCE_APP_ICONS\.ai/u,
-    'AI applications must keep their distinct native macOS icons when available'
-  );
-  assert.doesNotMatch(
-    iconModule,
-    /if\s*\([^)]*(?:chatgpt|openai|claude|anthropic)[^)]*\)\s*\{?\s*return\s+SOURCE_APP_ICONS\.ai/u
-  );
+  assert.match(iconModule, /export const CONTENT_TYPE_ICONS/u);
+  assert.match(iconModule, /export function contentTypeIcon/u);
+  assert.doesNotMatch(iconModule, /source-app\/|SOURCE_APP_ICONS|sourceAppAsset/u);
+  assert.doesNotMatch(iconModule, /\b(?:safari|chrome|notes|vscode|chatgpt|claude)\s*:/iu);
 });
 
 test('asset consumers do not inject SVG or URL markup through innerHTML', () => {

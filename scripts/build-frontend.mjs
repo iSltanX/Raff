@@ -56,11 +56,11 @@ const productionFiles = Object.freeze([
   'assets/v4/icons/search.svg',
   'assets/v4/icons/trash.svg',
   'assets/v4/icons/x-circle.svg',
-  'assets/v4/source-app/app-window.svg',
-  'assets/v4/source-app/chrome.svg',
-  'assets/v4/source-app/figma.svg',
-  'assets/v4/source-app/notes.svg',
-  'assets/v4/source-app/safari.svg',
+  'assets/v4/content-types/code.svg',
+  'assets/v4/content-types/image.svg',
+  'assets/v4/content-types/link.svg',
+  'assets/v4/content-types/text.svg',
+  'assets/v4/content-types/unknown.svg',
 ]);
 
 await rm(distRoot, { recursive: true, force: true });

@@ -206,8 +206,16 @@ test('panel recovery: first load retries, then ⌘R re-initialises in place', as
     fake.setState({
       pinned: [],
       history: [
-        sampleItem('r1', { createdAt: minutesAgo(10) }),
-        sampleItem('r2', { createdAt: minutesAgo(20) }),
+        sampleItem('r1', {
+          sourceApp: 'Notes',
+          sourceAppBundleId: 'com.apple.Notes',
+          createdAt: minutesAgo(10),
+        }),
+        sampleItem('r2', {
+          sourceApp: 'Safari',
+          sourceAppBundleId: 'com.apple.Safari',
+          createdAt: minutesAgo(20),
+        }),
       ],
       settings: null,
       axTrusted: true,
@@ -220,6 +228,15 @@ test('panel recovery: first load retries, then ⌘R re-initialises in place', as
     search.dispatchEvent(new dom.window.Event('input'));
     await flush();
     assert.deepEqual(rowIds(dom), ['r2'], 'pasted text filters the list');
+
+    search.value = 'Safari';
+    search.dispatchEvent(new dom.window.Event('input'));
+    await flush();
+    assert.deepEqual(
+      rowIds(dom),
+      ['r2'],
+      'source application metadata stays in search after its artwork is removed'
+    );
 
     search.value = '';
     search.dispatchEvent(new dom.window.Event('input'));
@@ -337,18 +354,20 @@ test('panel recovery: first load retries, then ⌘R re-initialises in place', as
     clickFilter(dom, 'all');
   });
 
-  await t.test('the source uses one enlarged icon without duplicating its visible name', () => {
-    const source = dom.window.document.querySelector('.row .row-source');
-    const icon = dom.window.document.querySelector('.row .source-icon');
-    assert.ok(icon, 'the stable icon slot remains in the row grid');
-    assert.equal(icon.textContent, '', 'the fallback stays visually quiet');
+  await t.test('the row icon represents content type while source metadata remains accessible', () => {
+    const kind = dom.window.document.querySelector('.row .row-kind');
+    const icon = kind?.querySelector('.content-type-icon');
+    assert.ok(icon, 'the stable semantic icon slot remains in the row grid');
+    assert.equal(icon.textContent, '', 'the local SVG mask stays visually quiet in text content');
     assert.equal(icon.getAttribute('aria-hidden'), 'true');
-    assert.equal(icon.hidden, false, 'the approved source glyph is visible');
-    assert.ok(icon.querySelector('.source-app-glyph'), 'the icon comes from the Figma source set');
-    assert.equal(dom.window.document.querySelector('.row .source-name'), null);
-    assert.equal(source?.getAttribute('role'), 'gridcell');
-    assert.equal(source?.getAttribute('aria-label'), 'المصدر: Notes');
-    assert.equal(source?.title, 'Notes');
+    assert.equal(icon.hidden, false, 'the approved content-type glyph is visible');
+    const glyph = icon.querySelector('.content-type-glyph');
+    assert.ok(glyph, 'the glyph comes from the Figma content-type set');
+    assert.match(glyph.style.getPropertyValue('--figma-icon'), /content-types\/text\.svg/u);
+    assert.equal(kind.getAttribute('role'), 'gridcell');
+    assert.equal(kind.getAttribute('aria-label'), 'نوع المحتوى: نص. المصدر: Notes');
+    assert.equal(kind.title, 'نص • المصدر: Notes');
+    assert.equal(dom.window.document.querySelector('.row .row-source, .row .source-icon'), null);
   });
 
   await t.test('no uncaught errors during the whole session', () => {

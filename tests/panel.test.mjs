@@ -69,10 +69,6 @@ function createFakeTauri(initialState) {
           }
           case 'get_image':
             return Promise.resolve('data:image/png;base64,AAAA');
-          // Every row asks for its source app's icon; `null` (no icon on
-          // disk) is a legitimate answer and must not reject.
-          case 'source_app_icon':
-            return Promise.resolve(null);
           case 'open_settings':
           case 'open_about':
           case 'open_repository':
@@ -188,6 +184,19 @@ test('panel lifecycle: copy/paste an old item, hide, reopen — the list must su
       0,
       'no section headers exist any more'
     );
+    const kind = dom.window.document.querySelector('.row[data-id="newest"] .row-kind');
+    assert.equal(kind.getAttribute('role'), 'gridcell');
+    assert.equal(kind.getAttribute('aria-label'), 'نوع المحتوى: نص. المصدر: Notes');
+    assert.equal(kind.title, 'نص • المصدر: Notes');
+    assert.ok(
+      kind.querySelector('.content-type-icon .content-type-glyph'),
+      'history rows use the synchronous semantic content-type glyph'
+    );
+    assert.equal(
+      dom.window.document.querySelector('.row[data-id="newest"] .source-icon'),
+      null,
+      'source application artwork is not part of row rendering'
+    );
   });
 
   await t.test('reopening after copying an OLD TEXT item still shows the full list', async () => {
@@ -254,8 +263,18 @@ test('panel lifecycle: copy/paste an old item, hide, reopen — the list must su
     fake.setState({
       pinned: [],
       history: [
-        sampleItem('alpha-item', { text: 'alpha', createdAt: now - 1 * MIN }),
-        sampleItem('beta-item', { text: 'beta', createdAt: now - 2 * MIN }),
+        sampleItem('alpha-item', {
+          text: 'alpha',
+          sourceApp: 'Safari',
+          sourceAppBundleId: 'com.apple.Safari',
+          createdAt: now - 1 * MIN,
+        }),
+        sampleItem('beta-item', {
+          text: 'beta',
+          sourceApp: 'Notes',
+          sourceAppBundleId: 'com.apple.Notes',
+          createdAt: now - 2 * MIN,
+        }),
       ],
       settings: null,
       axTrusted: true,
@@ -268,6 +287,15 @@ test('panel lifecycle: copy/paste an old item, hide, reopen — the list must su
     search.dispatchEvent(new dom.window.Event('input'));
     await flush();
     assert.deepEqual(rowIds(dom), ['alpha-item'], 'filtered down while typing');
+
+    search.value = 'Safari';
+    search.dispatchEvent(new dom.window.Event('input'));
+    await flush();
+    assert.deepEqual(
+      rowIds(dom),
+      ['alpha-item'],
+      'source application metadata remains searchable without supplying the row icon'
+    );
 
     // Paste flow: hide (no JS signal), then reopen.
     fake.emit('panel://shown', null);

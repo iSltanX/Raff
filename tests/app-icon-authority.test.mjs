@@ -99,9 +99,9 @@ test('the Icon Composer asset pins every appearance to the SAME light artwork', 
 });
 
 test('no dark app icon is reachable from bundle metadata or runtime code', () => {
-  // Nothing in the Rust runtime may swap the application icon. `app_icon_png`
-  // is the SOURCE app's icon for clipboard rows and is unrelated, so the guard
-  // targets the AppKit call that would rewrite the bundle's own icon.
+  // Nothing in the Rust runtime may read or swap application artwork. History
+  // rows now use local semantic content icons, so there is no source-app icon
+  // exception to this bundle-identity guard.
   const rust = readdirSync(path.join(project, 'src-tauri/src'))
     .filter((f) => f.endsWith('.rs'))
     .map((f) => ({ file: f, text: read(`src-tauri/src/${f}`) }));

@@ -51,9 +51,10 @@ test('panel chrome is fixed to the native viewport while only results scroll', (
   assert.match(executableJs, /listEl\.scrollTop\s*[+-]=/u);
 });
 
-test('the row reserves visual space for copied content and uses an icon-only source', () => {
+test('the row reserves visual space for copied content and one semantic type icon', () => {
   const css = read('src/panel.css');
   const js = read('src/js/panel.js');
+  const logic = read('src/js/logic.js');
 
   assert.doesNotMatch(js, /sourceLabel|row-time|relativeTimeAr/u);
   assert.doesNotMatch(css, /\.source-name|\.row-time|\.time\s*\{/u);
@@ -61,10 +62,17 @@ test('the row reserves visual space for copied content and uses an icon-only sou
      so the row's whole flexible width belongs to the copied content. */
   assert.match(
     css,
-    /\.row\s*\{[\s\S]*?display:\s*grid;[\s\S]*?grid-template-columns:\s*minmax\(0,\s*1fr\)\s+var\(--metric-source-slot-inline\);/u
+    /\.row\s*\{[\s\S]*?display:\s*grid;[\s\S]*?grid-template-columns:\s*minmax\(0,\s*1fr\)\s+var\(--metric-content-type-slot-inline\);/u
   );
   assert.match(css, /\.row-preview\s*\{[\s\S]*?min-width:\s*0;/u);
-  assert.match(css, /\.row-source\s*\{[\s\S]*?width:\s*var\(--metric-source-slot-inline\);/u);
-  assert.match(js, /source\.setAttribute\('aria-label', `المصدر: \$\{sourceName\}`\)/u);
-  assert.match(js, /source\.title\s*=\s*sourceName/u);
+  assert.match(css, /\.row-kind\s*\{[\s\S]*?width:\s*var\(--metric-content-type-slot-inline\);/u);
+  assert.match(js, /const presentation = contentTypeIcon\(item\.type\)/u);
+  assert.match(js, /kind\.title = `\$\{presentation\.label\} • المصدر: \$\{sourceName\}`/u);
+  assert.match(js, /`نوع المحتوى: \$\{presentation\.label\}\. المصدر: \$\{sourceName\}`/u);
+  assert.match(
+    logic,
+    /normalizeArabic\(item\.sourceApp \|\| ''\)\.includes\(q\)/u,
+    'source application metadata remains searchable'
+  );
+  assert.doesNotMatch(js, /source_app_icon|sourceAppIcon|NSWorkspace/u);
 });

@@ -98,6 +98,7 @@ const primitives = {
   '--stone-140': '#e9e3d9',
   '--stone-150': '#eae5df',
   '--stone-160': '#e7e0d5',
+  '--stone-165': '#e7ddd3',
   '--stone-175': '#ebe6df',
   '--stone-200': '#e0dad2',
   '--stone-225': '#ded8d0',
@@ -239,6 +240,7 @@ const semanticAliases = {
   '--color-icon-primary': ['--stone-900', '--graphite-50'],
   '--color-icon-secondary': ['--stone-600', '--graphite-300'],
   '--color-icon-brand': ['--terracotta-500', '--terracotta-400'],
+  '--color-content-type-icon': ['--stone-700', '--stone-165'],
   '--color-status-success': ['--green-600', '--green-400'],
   '--color-status-error': ['--red-600', '--red-400'],
   '--color-status-warning': ['--amber-600', '--amber-400'],
@@ -256,7 +258,6 @@ const semanticAliases = {
   '--color-border-selected': ['--terracotta-500', '--terracotta-400'],
   '--color-border-selected-soft': ['--overlay-selected-light', '--overlay-selected-dark'],
   '--color-fill-subtle': ['--overlay-ink-subtle', '--overlay-white-subtle'],
-  '--color-source-icon-well': ['--stone-70', '--graphite-780'],
   /* v4.1 — `pinned` finally joins the dark ramp. Every sibling brand role
      (bg/border/icon/interactive) steps to terracotta-400 in Dark; leaving this
      at 500 made a pinned marker read dimmer than the selection beside it. */
@@ -282,11 +283,10 @@ const semanticAliases = {
   /* v4.1 — the fade in front of the revealed action cluster, so long content
      slides under it instead of colliding with it. */
   '--metric-row-actions-scrim': ['--space-2xl', '--space-2xl'],
-  /* v4.1 — the slot carries REAL macOS app artwork, not Figma's placeholder
-     outline square, so it went 30→32 with a 20→24 glyph. It stays subordinate
-     to the content because it never gains weight, only legibility. */
-  '--metric-source-slot-inline': ['--size-32', '--size-32'],
-  '--metric-source-glyph': ['--metric-icon-chip', '--metric-icon-chip'],
+  /* «14» content icons keep their 20px optical art inside the existing 32px
+     history-row alignment slot. */
+  '--metric-content-type-slot-inline': ['--size-32', '--size-32'],
+  '--metric-content-type-glyph': ['--size-20', '--size-20'],
 };
 
 /* Optical macOS geometry with no Figma variable counterpart, documented as such
@@ -312,7 +312,7 @@ test('CSS mirrors every approved Figma primitive and semantic alias', () => {
      since it only looks for tokens the fixture forgot). v4.1 added 23
      primitives — the surface ladder, the two new ink levels, the hairlines —
      and one semantic role, --metric-row-actions-scrim. */
-  assert.equal(Object.keys(primitives).length, 136, 'fixture must cover every primitive');
+  assert.equal(Object.keys(primitives).length, 137, 'fixture must cover every primitive');
   assert.equal(
     Object.keys(semanticAliases).length,
     60,
@@ -355,6 +355,23 @@ test('CSS mirrors every approved Figma primitive and semantic alias', () => {
     [],
     'every mirrored token must be in the fixture or the production-only allowlist'
   );
+});
+
+test('content-type icon tokens preserve the exact Figma light, dark and geometry contract', () => {
+  const css = read('src/tokens.css');
+  const light = customProperties(cssRuleBody(css, /:root\s*\{/u, 'Light'));
+  const dark = new Map([
+    ...light,
+    ...customProperties(cssRuleBody(css, /:root\s*\[data-appearance=['"]dark['"]\]\s*\{/u, 'Dark')),
+  ]);
+
+  assert.equal(resolve('--color-content-type-icon', light), '#4d443a');
+  assert.equal(resolve('--color-content-type-icon', dark), '#e7ddd3');
+  assert.equal(resolve('--metric-content-type-slot-inline', light), '32px');
+  assert.equal(resolve('--metric-content-type-glyph', light), '20px');
+  assert.equal(light.has('--color-source-icon-well'), false);
+  assert.equal(light.has('--metric-source-slot-inline'), false);
+  assert.equal(light.has('--metric-source-glyph'), false);
 });
 
 test('semantic contextual pairs meet their intended contrast thresholds', () => {

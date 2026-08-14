@@ -2,8 +2,8 @@
 // Clip content is ALWAYS rendered via textContent — never innerHTML.
 //
 // View structure adapts the approved Raff row language to production density:
-// the copied preview owns the flexible space, one source-app icon identifies
-// provenance, and the paired Figma actions sit together at the trailing edge.
+// the copied preview owns the flexible space, one Raff semantic icon identifies
+// its content type, and the paired Figma actions sit at the trailing edge.
 
 import { api, on } from './store.js';
 import { arabicDigits, filterItems } from './logic.js';
@@ -19,8 +19,7 @@ import {
   ALERT,
   IMAGE,
   SHELF,
-  SOURCE_APP_ICONS,
-  sourceAppAsset,
+  contentTypeIcon,
   createIcon,
 } from './icons.js';
 import { diag, installGlobalTraps } from './diag.js';
@@ -56,7 +55,6 @@ let filter = 'all';
 let selectedId = null;
 let visible = []; // flat filtered list, newest first
 const thumbs = new Map(); // item id → data URL
-const appIcons = new Map(); // bundle id → Promise<data URL | null> | data URL | null
 const optimisticDeletedIds = new Set();
 const optimisticPins = new Map(); // item id → { generation, value }
 const optimisticRestores = new Map(); // item id → deleted-row snapshot during Undo IPC
@@ -67,11 +65,6 @@ let toastGeneration = 0;
 let activeDelete = null; // { token, snapshot }
 const feedbackQueue = [];
 let mutationQueue = Promise.resolve();
-
-/* Mirrors --metric-source-glyph. Real macOS app artwork is the row's identity
-   cue, so it is drawn at 24 rather than the 20 the Figma placeholder square
-   used; the intrinsic <img> size must match or WebKit resamples it soft. */
-const SOURCE_GLYPH_PX = 24;
 
 const PIN_TOAST_MS = 3000;
 const DELETE_TOAST_MS = 5000;
@@ -179,15 +172,15 @@ function loadingView() {
     secondary.className = 'skeleton-block skeleton-line skeleton-line-secondary';
     preview.append(primary, secondary);
 
-    const source = document.createElement('span');
-    source.className = 'skeleton-source';
-    const sourceIcon = document.createElement('span');
-    sourceIcon.className = 'skeleton-block skeleton-source-icon';
-    source.append(sourceIcon);
+    const kind = document.createElement('span');
+    kind.className = 'skeleton-kind';
+    const kindIcon = document.createElement('span');
+    kindIcon.className = 'skeleton-block skeleton-kind-icon';
+    kind.append(kindIcon);
 
     // No action placeholder: the live row reserves no space for its actions,
     // so a skeleton that drew one would promise a column that never arrives.
-    row.append(preview, source);
+    row.append(preview, kind);
     view.append(row);
   }
 
@@ -211,57 +204,6 @@ function failureView() {
   action.addEventListener('click', () => hardReload('failure-view'));
   view.append(action);
   return view;
-}
-
-/** Resolve the installed macOS icon first for every bundle. The approved
- * Raff/Figma glyph is used only when AppKit cannot return native artwork. */
-async function loadAppIcon(bundleId, appName, host) {
-  const approvedAsset = sourceAppAsset(bundleId, appName);
-  const fallbackAsset = approvedAsset ?? SOURCE_APP_ICONS.unknown;
-  if (!bundleId) {
-    paintFigmaAppIcon(host, fallbackAsset);
-    return;
-  }
-  if (appIcons.has(bundleId)) {
-    const cached = await appIcons.get(bundleId);
-    if (cached) paintAppIcon(host, cached);
-    else paintFigmaAppIcon(host, fallbackAsset);
-    return;
-  }
-  // Install the in-flight promise before yielding. A 500-row history from one
-  // app must produce one AppKit lookup, not hundreds queued on the main thread.
-  const request = api
-    .sourceAppIcon(bundleId)
-    .then((url) => url || null)
-    .catch(() => null);
-  appIcons.set(bundleId, request);
-  const url = await request;
-  appIcons.set(bundleId, url);
-  if (url) paintAppIcon(host, url);
-  else paintFigmaAppIcon(host, fallbackAsset);
-}
-
-function revealAppIcon(host) {
-  host.hidden = false;
-}
-
-function paintFigmaAppIcon(host, source) {
-  // A flat monochrome glyph needs a ground to sit on; real app artwork does
-  // not — `.is-fallback` is what carries the well and its hairline.
-  host.classList.add('is-fallback');
-  host.replaceChildren(createIcon(source, 'source-app-glyph'));
-  revealAppIcon(host);
-}
-
-function paintAppIcon(host, url) {
-  const img = document.createElement('img');
-  img.alt = '';
-  img.width = SOURCE_GLYPH_PX;
-  img.height = SOURCE_GLYPH_PX;
-  img.src = url;
-  host.classList.remove('is-fallback');
-  host.replaceChildren(img);
-  revealAppIcon(host);
 }
 
 function textScriptClass(value) {
@@ -331,20 +273,24 @@ function buildRow(item, index) {
     preview.append(title);
   }
 
-  // ── source: icon only. The accessible name and tooltip preserve the app
-  // identity without spending a second visual slot on duplicate text.
-  const source = document.createElement('div');
-  source.className = 'row-source';
-  source.setAttribute('role', 'gridcell');
+  // ── content type: one synchronous local Figma asset. Source application
+  // metadata remains available to search and assistive text, but it never
+  // participates in icon selection or causes native icon resolution.
+  const kind = document.createElement('div');
+  kind.className = 'row-kind';
+  kind.setAttribute('role', 'gridcell');
+  const presentation = contentTypeIcon(item.type);
   const sourceName = item.sourceApp || 'تطبيق غير معروف';
-  source.title = sourceName;
-  source.setAttribute('aria-label', `المصدر: ${sourceName}`);
+  kind.title = `${presentation.label} • المصدر: ${sourceName}`;
+  kind.setAttribute(
+    'aria-label',
+    `نوع المحتوى: ${presentation.label}. المصدر: ${sourceName}`
+  );
   const icon = document.createElement('span');
-  icon.className = 'source-icon';
+  icon.className = 'content-type-icon';
   icon.setAttribute('aria-hidden', 'true');
-  icon.hidden = true;
-  loadAppIcon(item.sourceAppBundleId, item.sourceApp, icon);
-  source.append(icon);
+  icon.replaceChildren(createIcon(presentation.asset, 'content-type-glyph'));
+  kind.append(icon);
 
   const actions = document.createElement('div');
   actions.className = 'row-actions';
@@ -394,9 +340,9 @@ function buildRow(item, index) {
     paste(item.id, e.altKey);
   });
 
-  // Physical order is [ content | source ]; the action cluster is an overlay
+  // Physical order is [ content | type ]; the action cluster is an overlay
   // (see .row-actions) so a resting row reserves no empty block for it.
-  row.append(preview, source, actions);
+  row.append(preview, kind, actions);
 
   if (item.isPinned) {
     const flag = document.createElement('span');

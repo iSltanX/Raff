@@ -290,41 +290,40 @@ test('design-review mock exercises realistic multilingual clipboard geometry', a
   assert.ok(items.some((item) => item.isPinned === true), 'pinned case');
 });
 
-test('source app icons use the compact single-identifier slot', () => {
+test('semantic content icons use the exact Figma canvas in both appearances', () => {
   const panelCss = read('src/panel.css');
   const tokens = read('src/tokens.css');
   const light = cssCustomProperties(cssRuleBody(tokens, /:root\s*\{/, 'light'));
+  const dark = new Map([
+    ...light,
+    ...cssCustomProperties(
+      cssRuleBody(tokens, /:root\s*\[\s*data-appearance\s*=\s*(['"])dark\1\s*\]\s*\{/, 'dark')
+    ),
+  ]);
 
-  assert.match(panelCss, /\.source-icon\s*\{[\s\S]*border-radius:\s*var\(--radius-control\)/u);
-  assert.match(panelCss, /color:\s*var\(--color-interactive-primary\)/u);
-  assert.match(tokens, /--metric-icon-chip:\s*24px/u);
   assert.match(tokens, /--size-32:\s*32px/u);
   assert.match(tokens, /--size-20:\s*20px/u);
-  /* v4.1 — the slot shows REAL macOS app artwork, which needs presence to be
-     recognisable at a glance: 30→32 slot, 20→24 glyph. */
-  assert.match(tokens, /--metric-source-slot-inline:\s*var\(--size-32\)/u);
-  assert.match(tokens, /--metric-source-glyph:\s*var\(--metric-icon-chip\)/u);
-
-  /* The well is now scoped to the FALLBACK only. Real app artwork is already
-     full-colour and self-contained; boxing it in a chip added a second
-     competing shape to every row. A flat monochrome glyph still needs a
-     ground, so `.is-fallback` — and only `.is-fallback` — keeps one. */
+  assert.match(tokens, /--metric-content-type-slot-inline:\s*var\(--size-32\)/u);
+  assert.match(tokens, /--metric-content-type-glyph:\s*var\(--size-20\)/u);
   assert.match(
     panelCss,
-    /\.source-icon\.is-fallback\s*\{[^}]*background:\s*var\(--color-source-icon-well\);/u
+    /\.content-type-icon\s*\{[\s\S]*?width:\s*var\(--metric-content-type-slot-inline\);[\s\S]*?color:\s*var\(--color-content-type-icon\);/u
   );
-  const restingSlot = /\.source-icon\s*\{([^}]*)\}/u.exec(panelCss);
-  assert.ok(restingSlot, '.source-icon must have a rule');
-  assert.doesNotMatch(
-    restingSlot[1],
-    /background:/u,
-    'the resting slot must paint no chip behind native artwork'
+  assert.match(
+    panelCss,
+    /\.content-type-icon \.figma-icon\s*\{[\s\S]*?width:\s*var\(--metric-content-type-glyph\);[\s\S]*?height:\s*var\(--metric-content-type-glyph\);/u
   );
   assert.equal(
-    resolveCustomProperty('--color-source-icon-well', light),
-    '#f6f5f2',
-    'the semantic role resolves through the approved Figma primitive alias'
+    resolveCustomProperty('--color-content-type-icon', light),
+    '#4d443a',
+    'Light resolves to the exact «14» Figma stroke'
   );
+  assert.equal(
+    resolveCustomProperty('--color-content-type-icon', dark),
+    '#e7ddd3',
+    'Dark resolves to the exact «14» Figma stroke'
+  );
+  assert.doesNotMatch(panelCss, /\.source-icon|\.row-source|\.source-app-glyph/u);
 });
 
 /* THE v4.1 FIX, locked. The retired ladder put the canvas at #f7f5f1 and the

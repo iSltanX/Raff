@@ -1,5 +1,5 @@
 /* ===========================================================================
-   رفّ — Raff v4.2.1 design tokens
+   رفّ — Raff v4.2.2 design tokens
    ---------------------------------------------------------------------------
    Single source of truth for every visual value in the app. Generated from the
    approved Figma system:
@@ -194,6 +194,7 @@
   --stone-140: #e9e3d9; /* v4.1 — inert control wells */
   --stone-150: #eae5df;
   --stone-160: #e7e0d5; /* v4.1 — dividers and subtle edges */
+  --stone-165: #e7ddd3; /* «14» content icons, exact Dark stroke */
   --stone-175: #ebe6df;
   --stone-200: #e0dad2;
   --stone-225: #ded8d0;
@@ -319,6 +320,7 @@
   --color-icon-primary: var(--stone-900);
   --color-icon-secondary: var(--stone-600);
   --color-icon-brand: var(--terracotta-500);
+  --color-content-type-icon: var(--stone-700);
   --color-status-success: var(--green-600);
   --color-status-error: var(--red-600);
   --color-status-warning: var(--amber-600);
@@ -329,7 +331,6 @@
   --color-interactive-secondary-hover: var(--stone-175);
 
   --color-fill-subtle: var(--overlay-ink-subtle);
-  --color-source-icon-well: var(--stone-70);
   --color-pinned: var(--terracotta-500);
   --color-app-icon-start: var(--terracotta-500);
   --color-app-icon-end: var(--terracotta-app-icon-end);
@@ -390,13 +391,10 @@
   --metric-control-height: 30px;
   --metric-control-height-sm: 28px;
   --metric-icon-chip: 24px;
-  /* v4.1 — the source slot carries a real macOS app icon, not the outlined
-     placeholder square the Figma master draws. Real artwork needs presence to
-     be recognisable at a glance, so the slot went 30→32 and the glyph 20→24;
-     it stays subordinate to the content because it never gains weight, only
-     legibility. */
-  --metric-source-slot-inline: var(--size-32);
-  --metric-source-glyph: var(--metric-icon-chip);
+  /* «14» uses a 24px component canvas around 20px optical artwork. The row's
+     existing 32px slot supplies the outer alignment without scaling the SVG. */
+  --metric-content-type-slot-inline: var(--size-32);
+  --metric-content-type-glyph: var(--size-20);
 
   /* ─── Radius — «04» ───────────────────────────────────────────────────── */
   --radius-none: 0px;
@@ -517,6 +515,7 @@
   --color-icon-primary: var(--graphite-50);
   --color-icon-secondary: var(--graphite-300);
   --color-icon-brand: var(--terracotta-400);
+  --color-content-type-icon: var(--stone-165);
   --color-status-success: var(--green-400);
   --color-status-error: var(--red-400);
   --color-status-warning: var(--amber-400);
@@ -527,7 +526,6 @@
   --color-interactive-secondary-hover: var(--graphite-600);
 
   --color-fill-subtle: var(--overlay-white-subtle);
-  --color-source-icon-well: var(--graphite-780);
   /* v4.1: `pinned` was the one brand-carrying role that never joined the dark
      ramp — every sibling (bg/border/icon/interactive) steps to terracotta-400
      in Dark while this stayed at 500, so a pinned marker read dimmer in Dark

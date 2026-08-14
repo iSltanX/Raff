@@ -36,34 +36,34 @@ function pxToken(name, seen = new Set()) {
   return pxToken(alias[1], seen);
 }
 
-test('text rows resolve to the compact 56/32 two-track production grid', () => {
+test('rows resolve to the compact 56/32 two-track production grid', () => {
   assert.equal(pxToken('--metric-row-min-height'), 56);
   assert.equal(pxToken('--metric-row-inline'), 12);
-  /* v4.1 — the slot carries real macOS app artwork rather than Figma's
-     placeholder outline square, so it went 30→32 with a 20→24 glyph. */
-  assert.equal(pxToken('--metric-source-slot-inline'), 32);
-  assert.equal(pxToken('--metric-source-glyph'), 24);
+  /* «14 — App & Content Icons»: a 20px optical Figma glyph sits in the
+     existing 32px row slot, preserving the established row alignment. */
+  assert.equal(pxToken('--metric-content-type-slot-inline'), 32);
+  assert.equal(pxToken('--metric-content-type-glyph'), 20);
   assert.equal(pxToken('--metric-row-action'), 32);
   assert.equal(pxToken('--metric-row-actions-gap'), 4);
   assert.equal(pxToken('--metric-row-actions-inline'), 68);
 
   const row = ruleBody('.row');
-  assert.match(row, /direction:\s*ltr;/u, 'physical macOS row order remains text → source');
+  assert.match(row, /direction:\s*ltr;/u, 'physical macOS row order remains preview → type');
   assert.match(row, /display:\s*grid;/u);
   assert.match(
     row,
-    /grid-template-columns:\s*minmax\(0,\s*1fr\)\s+var\(--metric-source-slot-inline\);/u,
-    'exactly two tracks: content and the source slot'
+    /grid-template-columns:\s*minmax\(0,\s*1fr\)\s+var\(--metric-content-type-slot-inline\);/u,
+    'exactly two tracks: content preview and semantic type slot'
   );
   assert.match(row, /column-gap:\s*var\(--space-md\);/u);
   assert.match(row, /min-height:\s*var\(--metric-row-min-height\);/u);
 
-  const source = ruleBody('.source-icon');
-  assert.match(source, /width:\s*var\(--metric-source-slot-inline\);/u);
-  assert.match(source, /height:\s*var\(--metric-source-slot-inline\);/u);
-  const sourceGlyph = ruleBody('.source-icon .figma-icon,\n.source-icon img');
-  assert.match(sourceGlyph, /width:\s*var\(--metric-source-glyph\);/u);
-  assert.match(sourceGlyph, /height:\s*var\(--metric-source-glyph\);/u);
+  const kind = ruleBody('.row-kind');
+  assert.match(kind, /width:\s*var\(--metric-content-type-slot-inline\);/u);
+  assert.match(kind, /height:\s*var\(--metric-content-type-slot-inline\);/u);
+  const kindGlyph = ruleBody('.content-type-icon .figma-icon');
+  assert.match(kindGlyph, /width:\s*var\(--metric-content-type-glyph\);/u);
+  assert.match(kindGlyph, /height:\s*var\(--metric-content-type-glyph\);/u);
 
   const actions = ruleBody('.row-actions');
   assert.match(actions, /gap:\s*var\(--metric-row-actions-gap\);/u);
@@ -140,7 +140,7 @@ test('the action cluster is an overlay and therefore costs the content nothing',
   const skeleton = ruleBody('.skeleton-row');
   assert.match(
     skeleton,
-    /grid-template-columns:\s*minmax\(0,\s*1fr\)\s+var\(--metric-source-slot-inline\);/u
+    /grid-template-columns:\s*minmax\(0,\s*1fr\)\s+var\(--metric-content-type-slot-inline\);/u
   );
   assert.doesNotMatch(css, /\.skeleton-action\b/u, 'no placeholder for a column that never arrives');
   assert.doesNotMatch(panelJs, /skeleton-action/u);
@@ -192,7 +192,7 @@ test('560pt panel arithmetic leaves at least 400pt for text and cannot overflow 
   const rowPadding = 2 * pxToken('--metric-row-inline');
   /* ONE gap now: the row has two tracks, not three. */
   const columnGaps = 1 * pxToken('--space-md');
-  const fixedColumns = pxToken('--metric-source-slot-inline');
+  const fixedColumns = pxToken('--metric-content-type-slot-inline');
   const textWidth =
     panelWidth - panelBorders - listPadding - rowBorders - rowPadding - columnGaps - fixedColumns;
 
@@ -232,13 +232,7 @@ test('text truncation and bidi roles cover Arabic, Latin, and mixed content', ()
   assert.match(panelJs, /title\.dir\s*=\s*'auto';/u);
 });
 
-test('rows prefer distinct native macOS icons and use Figma only after a null lookup', async () => {
-  const nativeIcons = {
-    'com.apple.Notes': 'data:image/png;base64,Tk9URVM=',
-    'com.google.Chrome': 'data:image/png;base64,Q0hST01F',
-    'com.openai.chat': 'data:image/png;base64,Q0hBVEdQVA==',
-    'ai.anthropic.claude': null,
-  };
+test('rows expose a local semantic type icon while retaining source metadata as text', async () => {
   const { dom, fake, uncaught } = await mountPanel(
     {
       pinned: [],
@@ -256,78 +250,41 @@ test('rows prefer distinct native macOS icons and use Figma only after a null lo
           createdAt: minutesAgo(2),
         }),
         sampleItem('mixed', {
+          type: 'code',
           text: 'نتيجة build 2026 جاهزة في production',
           sourceApp: 'ChatGPT',
           sourceAppBundleId: 'com.openai.chat',
           createdAt: minutesAgo(3),
         }),
-        sampleItem('claude-null', {
-          text: 'Native icon unavailable',
-          sourceApp: 'Claude',
-          sourceAppBundleId: 'ai.anthropic.claude',
-          createdAt: minutesAgo(4),
-        }),
       ],
       settings: null,
       axTrusted: true,
-    },
-    { sourceAppIcons: nativeIcons }
+    }
   );
-  await flush(8);
+  await flush();
 
-  assert.deepEqual(
-    new Set(fake.invocationArgs('source_app_icon').map(({ bundleId }) => bundleId)),
-    new Set(Object.keys(nativeIcons)),
-    'every row asks macOS for its original icon, including catalogued Notes/Chrome'
-  );
+  assert.equal(fake.invokeCount('source_app_icon'), 0, 'row rendering never asks macOS for an app icon');
 
-  for (const [id, appName] of [
-    ['arabic', 'Notes'],
-    ['latin', 'Google Chrome'],
-    ['mixed', 'ChatGPT'],
-    ['claude-null', 'Claude'],
+  for (const [id, appName, kindLabel, assetName] of [
+    ['arabic', 'Notes', 'نص', 'text.svg'],
+    ['latin', 'Google Chrome', 'نص', 'text.svg'],
+    ['mixed', 'ChatGPT', 'شفرة برمجية', 'code.svg'],
   ]) {
     const row = dom.window.document.querySelector(`.row[data-id="${id}"]`);
-    const source = row.querySelector('.row-source');
-    assert.equal(source.title, appName);
-    assert.equal(source.getAttribute('aria-label'), `المصدر: ${appName}`);
+    const kind = row.querySelector('.row-kind');
+    assert.equal(kind.title, `${kindLabel} • المصدر: ${appName}`);
+    assert.equal(kind.getAttribute('aria-label'), `نوع المحتوى: ${kindLabel}. المصدر: ${appName}`);
     assert.equal(row.querySelector('.source-name, .row-time, .time'), null);
     assert.equal(row.textContent.includes(appName), false, 'source name is tooltip/AX text, not visible text');
-  }
-
-  for (const id of ['arabic', 'latin', 'mixed']) {
-    const icon = dom.window.document.querySelector(`.row[data-id="${id}"] .source-icon`);
-    const img = icon.querySelector('img');
-    assert.ok(img, `${id} displays the native macOS image`);
-    /* Intrinsic size must match --metric-source-glyph or WebKit resamples the
-       artwork soft. v4.1 raised both from 20 to 24. */
-    assert.equal(img.width, 24);
-    assert.equal(img.height, 24);
-    assert.equal(icon.querySelector('.source-app-glyph'), null, 'Figma is not painted over native art');
-    assert.equal(
-      icon.classList.contains('is-fallback'),
-      false,
-      'real full-colour app artwork is self-contained and gets no chip behind it'
+    const icon = kind.querySelector('.content-type-icon');
+    const glyph = icon.querySelector('.content-type-glyph');
+    assert.ok(glyph, `${id} receives its semantic Figma glyph synchronously`);
+    assert.match(
+      glyph.style.getPropertyValue('--figma-icon'),
+      new RegExp(`content-types/${assetName.replace('.', '\\.')}`, 'u')
     );
+    assert.equal(kind.querySelector('img'), null, 'semantic icons never create an asynchronous image box');
   }
-
-  const claudeFallback = dom.window.document.querySelector(
-    '.row[data-id="claude-null"] .source-app-glyph'
-  );
-  assert.ok(claudeFallback, 'a null native lookup uses the approved Figma fallback');
-  assert.ok(
-    claudeFallback.closest('.source-icon').classList.contains('is-fallback'),
-    'a flat monochrome glyph is the one case that still needs a ground under it'
-  );
-  assert.match(
-    claudeFallback.style.getPropertyValue('--figma-icon'),
-    /source-app\/app-window\.svg/u
-  );
-  assert.doesNotMatch(
-    claudeFallback.style.getPropertyValue('--figma-icon'),
-    /source-app\/ai\.svg/u,
-    'Claude is never replaced by the repeated CPU glyph'
-  );
 
   const arabic = dom.window.document.querySelector('.row[data-id="arabic"] .preview-title');
   const latin = dom.window.document.querySelector('.row[data-id="latin"] .preview-title');
@@ -341,13 +298,11 @@ test('rows prefer distinct native macOS icons and use Figma only after a null lo
   assert.deepEqual(uncaught, []);
 });
 
-test('icon loading has no catalogue early-return or AI-to-CPU substitution', () => {
+test('the row icon path is a single ContentType → local Figma asset mapping', () => {
   const icons = read('src/js/icons.js');
-  assert.doesNotMatch(panelJs, /if\s*\(approvedAsset\)\s*return/u);
-  assert.match(panelJs, /api\s*\.sourceAppIcon\(bundleId\)/u);
-  assert.match(panelJs, /if\s*\(url\)\s*paintAppIcon\(host,\s*url\);[\s\S]*else\s+paintFigmaAppIcon\(host,\s*fallbackAsset\);/u);
-  assert.doesNotMatch(
-    icons,
-    /(?:chatgpt|openai|claude|anthropic)[\s\S]{0,240}SOURCE_APP_ICONS\.ai/u
-  );
+  assert.match(icons, /export const CONTENT_TYPE_ICONS = Object\.freeze\(/u);
+  assert.match(icons, /export function contentTypeIcon\(type = ''\)/u);
+  assert.match(panelJs, /const presentation = contentTypeIcon\(item\.type\);/u);
+  assert.doesNotMatch(panelJs, /sourceAppIcon|source_app_icon|paintAppIcon|paintFigmaAppIcon/u);
+  assert.doesNotMatch(icons, /SOURCE_APP_ICONS|source-app\//u);
 });

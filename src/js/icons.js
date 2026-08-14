@@ -43,29 +43,38 @@ export const SHELF = Object.freeze([
   asset('../assets/v4/empty-shelf-line-3.svg'),
 ]);
 
-// «14 — App & Content Icons» → fallback glyphs used only when NSWorkspace
-// cannot resolve installed native artwork. A category glyph never replaces a
-// real ChatGPT, Claude, Chrome, Figma, or other application icon.
-export const SOURCE_APP_ICONS = Object.freeze({
-  figma: asset('../assets/v4/source-app/figma.svg'),
-  chrome: asset('../assets/v4/source-app/chrome.svg'),
-  safari: asset('../assets/v4/source-app/safari.svg'),
-  notes: asset('../assets/v4/source-app/notes.svg'),
-  vscode: asset('../assets/v4/source-app/app-window.svg'),
-  unknown: asset('../assets/v4/source-app/app-window.svg'),
+// «14 — App & Content Icons» → Content Icons section (12:28).
+// These are the exact isolated Figma exports: 20px optical artwork, 1.5px
+// stroke and round caps. The row supplies the surrounding 24px icon canvas.
+// Source application identity deliberately never participates in this map.
+export const CONTENT_TYPE_ICONS = Object.freeze({
+  text: Object.freeze({
+    asset: asset('../assets/v4/content-types/text.svg'),
+    label: 'نص',
+  }),
+  link: Object.freeze({
+    asset: asset('../assets/v4/content-types/link.svg'),
+    label: 'رابط',
+  }),
+  code: Object.freeze({
+    asset: asset('../assets/v4/content-types/code.svg'),
+    label: 'شفرة برمجية',
+  }),
+  image: Object.freeze({
+    asset: asset('../assets/v4/content-types/image.svg'),
+    label: 'صورة',
+  }),
+  unknown: Object.freeze({
+    asset: asset('../assets/v4/content-types/unknown.svg'),
+    label: 'محتوى غير مصنف',
+  }),
 });
 
-/** Resolves the fallback identities explicitly drawn in the Figma examples. */
-export function sourceAppAsset(bundleId = '', appName = '') {
-  const identity = `${bundleId} ${appName}`.toLocaleLowerCase('en');
-  if (identity.includes('figma')) return SOURCE_APP_ICONS.figma;
-  if (/google\.chrome|\bchrome\b|chromium/u.test(identity)) return SOURCE_APP_ICONS.chrome;
-  if (/apple\.safari|\bsafari\b|سفاري/u.test(identity)) return SOURCE_APP_ICONS.safari;
-  if (/apple\.notes|\bnotes\b|الملاحظات/u.test(identity)) return SOURCE_APP_ICONS.notes;
-  if (/microsoft\.vscode|visual studio code|\bvs code\b/u.test(identity)) {
-    return SOURCE_APP_ICONS.vscode;
-  }
-  return null;
+/** The sole ContentType → Raff Semantic Icon resolver used by history rows. */
+export function contentTypeIcon(type = '') {
+  return Object.prototype.hasOwnProperty.call(CONTENT_TYPE_ICONS, type)
+    ? CONTENT_TYPE_ICONS[type]
+    : CONTENT_TYPE_ICONS.unknown;
 }
 
 /**

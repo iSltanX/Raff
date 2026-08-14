@@ -312,69 +312,6 @@ fn image_data_url(store: &Store, id: &str) -> Option<String> {
     ))
 }
 
-/// Source-app icons are immutable for the life of the process and every row in
-/// the list asks for one, so each bundle id is rendered at most once.
-static APP_ICON_CACHE: std::sync::OnceLock<
-    std::sync::Mutex<std::collections::HashMap<String, Option<String>>>,
-> = std::sync::OnceLock::new();
-
-/// The 40×40 pixel Retina source for the app a clip came from, as a `data:` URL.
-/// Figma «08 — Product Screens» draws it in the row's trailing chip.
-/// `None` when the app is unknown or its icon cannot be rendered — the panel
-/// then uses the design system's generic-app fallback, so this is decorative.
-#[tauri::command]
-pub async fn source_app_icon(bundle_id: String) -> Option<String> {
-    let cache = APP_ICON_CACHE.get_or_init(Default::default);
-    if let Ok(map) = cache.lock() {
-        if let Some(hit) = map.get(&bundle_id) {
-            return hit.clone();
-        }
-    }
-
-    // Resolved on a blocking worker, NOT the macOS main thread.
-    //
-    // This used to hop to the main thread on the theory that an NSWorkspace
-    // icon lookup is AppKit work. Sampling a cold launch showed what it
-    // actually costs: `-[NSImage TIFFRepresentation]` on a workspace icon
-    // drops into IconServices, which does a SYNCHRONOUS XPC round trip
-    // (`__NSXPCCONNECTION_IS_WAITING_FOR_A_SYNCHRONOUS_REPLY__` → `mach_msg`)
-    // and parks the calling thread until the icon daemon answers. A history
-    // spanning ~17 distinct apps therefore queued 17 of those onto the main
-    // thread the moment the panel hydrated, and they ran back to back — a
-    // measured 5.7 SECOND main-thread stall on this machine, longer on a
-    // colder icon cache. Nothing could be serviced meanwhile, so the menu-bar
-    // icon was up but the first clicks went nowhere.
-    //
-    // It is XPC-bound work, not UI work: `NSWorkspace` is documented
-    // thread-safe, each call builds its own `NSImage` and shares nothing, and
-    // the result is bytes rather than anything AppKit keeps. Doing it here
-    // keeps the wait entirely on a worker.
-    let wanted = bundle_id.clone();
-    let png = tauri::async_runtime::spawn_blocking(move || macos::app_icon_png(&wanted))
-        .await
-        .ok()
-        .flatten();
-
-    let data_url = png.and_then(|bytes| {
-        let decoded = image::load_from_memory_with_format(&bytes, image::ImageFormat::Png).ok()?;
-        let small = decoded.thumbnail(APP_ICON_PX, APP_ICON_PX);
-        let mut out = std::io::Cursor::new(Vec::new());
-        small.write_to(&mut out, image::ImageFormat::Png).ok()?;
-        Some(format!(
-            "data:image/png;base64,{}",
-            base64::engine::general_purpose::STANDARD.encode(out.into_inner())
-        ))
-    });
-
-    if let Ok(mut map) = cache.lock() {
-        map.insert(bundle_id, data_url.clone());
-    }
-    data_url
-}
-
-/// The row glyph renders at 20pt; 40px preserves native detail at 2x.
-const APP_ICON_PX: u32 = 40;
-
 #[tauri::command]
 pub fn hide_panel(app: AppHandle) {
     panel::hide(&app);

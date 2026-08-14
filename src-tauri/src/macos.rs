@@ -1,16 +1,13 @@
 //! Thin macOS boundary: NSPasteboard, frontmost app, ⌘V synthesis, Accessibility.
 //!
 //! Everything here goes through audited `objc2-app-kit` / `core-graphics`
-//! bindings. The two unavoidable `unsafe` boundaries (an AppKit dictionary's
-//! erased value type and the Accessibility C FFI) each carry a local SAFETY
-//! argument.
+//! bindings. The unavoidable Accessibility C FFI boundaries carry local
+//! SAFETY arguments.
 
-use objc2::runtime::AnyObject;
 use objc2_app_kit::{
-    NSApplicationActivationOptions, NSBitmapImageFileType, NSBitmapImageRep,
-    NSBitmapImageRepPropertyKey, NSPasteboard, NSRunningApplication, NSWorkspace,
+    NSApplicationActivationOptions, NSPasteboard, NSRunningApplication, NSWorkspace,
 };
-use objc2_foundation::{MainThreadMarker, NSData, NSDictionary, NSString};
+use objc2_foundation::{MainThreadMarker, NSData, NSString};
 
 /// True when the caller is already on the AppKit main thread.
 ///
@@ -162,35 +159,6 @@ pub fn frontmost_app() -> FrontApp {
         },
         None => FrontApp::default(),
     }
-}
-
-/// The Finder icon of an installed application, normalized to PNG bytes.
-///
-/// Raff renders the real source-app icon at 20pt inside a compact 30pt slot at
-/// the end of every clipboard row. Resolved through the documented `NSWorkspace` pair
-/// (`URLForApplicationWithBundleIdentifier` → `iconForFile`); returns `None`
-/// when the bundle id is unknown or not installed. AppKit owns the TIFF → PNG
-/// conversion because some modern app icons (including OpenAI's) use TIFF
-/// representations the Rust `image` decoder cannot reliably read. AppKit —
-/// main thread only.
-pub fn app_icon_png(bundle_id: &str) -> Option<Vec<u8>> {
-    if bundle_id.is_empty() {
-        return None;
-    }
-    let ws = NSWorkspace::sharedWorkspace();
-    let url = ws.URLForApplicationWithBundleIdentifier(&NSString::from_str(bundle_id))?;
-    let path = url.path()?;
-    let image = ws.iconForFile(&path);
-    let tiff = image.TIFFRepresentation()?;
-    let bitmap = NSBitmapImageRep::imageRepWithData(&tiff)?;
-    let properties = NSDictionary::<NSBitmapImageRepPropertyKey, AnyObject>::dictionary();
-    // SAFETY: AppKit requires an NSDictionary whose values match known image
-    // property keys. The dictionary is empty, so it cannot contain a value of
-    // the wrong type and merely requests the default PNG representation.
-    let png = unsafe {
-        bitmap.representationUsingType_properties(NSBitmapImageFileType::PNG, &properties)
-    }?;
-    Some(png.to_vec())
 }
 
 /// Ordinary (Dock-visible) running apps, for the exclusion-list picker.

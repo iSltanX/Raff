@@ -26,7 +26,6 @@ export const api = {
   learningSummary: () => invoke('learning_summary'),
   updateSettings: (settings) => invoke('update_settings', { settings }),
   getImage: (id) => invoke('get_image', { id }),
-  sourceAppIcon: (bundleId) => invoke('source_app_icon', { bundleId }),
   hidePanel: () => invoke('hide_panel'),
   openSettings: () => invoke('open_settings'),
   openAbout: () => invoke('open_about'),

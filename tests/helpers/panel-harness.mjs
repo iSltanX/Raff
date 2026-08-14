@@ -50,7 +50,7 @@ export function emptyState() {
  * times (or forever), so the retry / failure paths are driven exactly the way
  * a flaky or wedged IPC channel would drive them.
  */
-export function createFakeTauri(initialState, { failTimes = 0, sourceAppIcons = {} } = {}) {
+export function createFakeTauri(initialState, { failTimes = 0 } = {}) {
   let state = structuredClone(initialState);
   let remainingFailures = failTimes;
   const listeners = new Map();
@@ -81,15 +81,6 @@ export function createFakeTauri(initialState, { failTimes = 0, sourceAppIcons = 
           return Promise.resolve(structuredClone(state));
         }
         if (cmd === 'get_image') return Promise.resolve('data:image/png;base64,AAAA');
-        // Every row asks for its source app's real icon. The real command may
-        // legitimately answer `null` (no icon on disk) — the row then keeps
-        // its initial. Answering explicitly keeps rows from producing
-        // unhandled rejections that the uncaught-error assertions would see.
-        if (cmd === 'source_app_icon') {
-          const bundleId = args?.bundleId ?? '';
-          const icon = Object.hasOwn(sourceAppIcons, bundleId) ? sourceAppIcons[bundleId] : null;
-          return Promise.resolve(icon);
-        }
         if (
           cmd === 'open_settings' ||
           cmd === 'open_about' ||

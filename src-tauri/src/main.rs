@@ -67,7 +67,6 @@ fn main() {
             commands::learning_summary,
             commands::update_settings,
             commands::get_image,
-            commands::source_app_icon,
             commands::hide_panel,
             commands::open_settings,
             commands::open_about,
