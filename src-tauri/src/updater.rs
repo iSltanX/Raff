@@ -412,6 +412,13 @@ pub fn request_check_from_menu(app: &AppHandle) {
     let _ = app.emit("raff://open-updates", ());
 }
 
+/// «التحقق» in Settings or About found a newer version: open the same update
+/// window the menu opens, so the user can install it from there.
+#[tauri::command]
+pub fn open_updates(app: AppHandle) {
+    request_check_from_menu(&app);
+}
+
 /// Claimed once by the update window (on load, and on `raff://open-updates`).
 /// Returns true to exactly one caller; every later caller gets false, so the
 /// menu can never trigger two checks.

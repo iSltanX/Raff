@@ -202,6 +202,8 @@ settingsUpdateBtn.addEventListener('click', async () => {
     const result = await api.checkForUpdate();
     if (result?.status === 'available' && result.version) {
       settingsUpdateStatus.textContent = `يتوفّر إصدار جديد: ${arabicDigits(result.version)}`;
+      // The install flow lives in the update window; take the user there.
+      api.openUpdates?.().catch(() => {});
     } else if (result?.status === 'upToDate') {
       settingsUpdateStatus.textContent = 'أنت على أحدث إصدار من رفّ.';
     } else {

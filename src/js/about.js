@@ -79,6 +79,7 @@ updateBtn.addEventListener('click', async () => {
     const result = await api.checkForUpdate();
     if (result?.status === 'available' && result.version) {
       setStatus(`يتوفّر إصدار جديد: ${arabicDigits(result.version)}`);
+      api.openUpdates?.().catch(() => {});
     } else if (result?.status === 'upToDate') {
       setStatus(UP_TO_DATE);
     } else {

@@ -80,6 +80,7 @@ fn main() {
             updater::download_and_install_update,
             updater::restart_to_update,
             updater::consume_update_intent,
+            updater::open_updates,
         ])
         .on_window_event(|window, event| match event {
             tauri::WindowEvent::Moved(_) if window.label() == panel::PANEL_LABEL => {

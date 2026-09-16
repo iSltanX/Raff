@@ -39,6 +39,7 @@ export const api = {
   downloadAndInstallUpdate: () => invoke('download_and_install_update'),
   restartToUpdate: () => invoke('restart_to_update'),
   consumeUpdateIntent: () => invoke('consume_update_intent'),
+  openUpdates: () => invoke('open_updates'),
 };
 
 export const on = (event, handler) => listen(event, handler);
