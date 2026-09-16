@@ -1,6 +1,6 @@
 {
   "name": "raff",
-  "version": "5.0.0",
+  "version": "5.0.1",
   "private": true,
   "description": "رفّ — personal, local-only, keyboard-first clipboard manager for macOS",
   "type": "module",
