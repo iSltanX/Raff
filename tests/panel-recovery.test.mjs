@@ -189,9 +189,9 @@ test('panel recovery: first load retries, then ⌘R re-initialises in place', as
   });
 
   await t.test('selected text keeps its native copy menu', () => {
-    // The brand lockup always exists, so this does not depend on list state.
+    // The filter labels always exist, so this does not depend on list state.
     const range = dom.window.document.createRange();
-    range.selectNodeContents(dom.window.document.querySelector('.brand .brand-name'));
+    range.selectNodeContents(dom.window.document.querySelector('#filters .segment'));
     const sel = dom.window.getSelection();
     sel.removeAllRanges();
     sel.addRange(range);
@@ -363,7 +363,7 @@ test('panel recovery: first load retries, then ⌘R re-initialises in place', as
     assert.equal(icon.hidden, false, 'the approved content-type glyph is visible');
     const glyph = icon.querySelector('.content-type-glyph');
     assert.ok(glyph, 'the glyph comes from the Figma content-type set');
-    assert.match(glyph.style.getPropertyValue('--figma-icon'), /content-types\/text\.svg/u);
+    assert.match(glyph.style.getPropertyValue('--icon'), /icons\/text\.svg/u);
     assert.equal(kind.getAttribute('role'), 'gridcell');
     assert.equal(kind.getAttribute('aria-label'), 'نوع المحتوى: نص. المصدر: Notes');
     assert.equal(kind.title, 'نص • المصدر: Notes');

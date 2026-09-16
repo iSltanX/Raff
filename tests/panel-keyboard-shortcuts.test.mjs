@@ -91,6 +91,7 @@ test('panel keyboard contract: navigation, actions, search routing, and native e
         hint.querySelector('.shortcut-label').textContent,
       ]),
       [
+        ['⌘1–9', 'لصق سريع'],
         ['⌘F', 'بحث'],
         ['⌘,', 'الإعدادات'],
       ]

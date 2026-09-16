@@ -416,27 +416,16 @@ const WINDOW_REVEAL_FALLBACK_MS: u64 = 1500;
 /// actually loaded. Showing at build time raced the WKWebView's first paint
 /// and could present a permanently white window (especially when triggered
 /// from the tray menu, whose tracking run loop is still unwinding).
-/// Whether a secondary window draws its own chrome.
 ///
-/// Settings and About are designed in Figma with their own title bar — a warm
-/// surface, a 1px rule, a centred Cairo Bold title and the traffic lights on
-/// the left — inside a 16px rounded shell. A native macOS title bar would sit
-/// *above* all of that, so those windows are built undecorated and transparent
-/// and paint the whole window themselves. Windows with no designed chrome
-/// (first-run, update) keep the native frame.
-#[derive(Clone, Copy, PartialEq)]
-enum Chrome {
-    Native,
-    Designed,
-}
-
+/// Every secondary window uses the native title bar in overlay mode: real
+/// traffic lights and window dragging from macOS, with the page drawing the
+/// whole content area underneath.
 fn open_window_when_ready(
     app: &AppHandle,
     label: &str,
     page: &str,
     title: &str,
     size: (f64, f64),
-    chrome: Chrome,
 ) {
     if let Some(w) = app.get_webview_window(label) {
         // Visible → just focus it. Hidden → it is still loading; the
@@ -446,17 +435,16 @@ fn open_window_when_ready(
         }
         return;
     }
-    let mut builder = WebviewWindowBuilder::new(app, label, WebviewUrl::App(page.into()))
+    let builder = WebviewWindowBuilder::new(app, label, WebviewUrl::App(page.into()))
         .title(title)
         .inner_size(size.0, size.1)
         .resizable(false)
         .maximizable(false)
         .minimizable(false)
         .center()
+        .title_bar_style(tauri::TitleBarStyle::Overlay)
+        .hidden_title(true)
         .visible(false);
-    if chrome == Chrome::Designed {
-        builder = builder.decorations(false).transparent(true).shadow(true);
-    }
     let result = builder
         .on_page_load(|window, payload| {
             if payload.event() == tauri::webview::PageLoadEvent::Finished {
@@ -508,11 +496,7 @@ pub fn open_settings_window(app: &AppHandle) {
             "settings",
             "settings.html",
             "إعدادات رفّ",
-            // Compact macOS preferences shell: the five page tabs expose one
-            // settings group at a time, so the window never becomes a tall
-            // scrolling document or a two-column dashboard.
-            (600.0, 520.0),
-            Chrome::Designed,
+            (560.0, 440.0),
         );
     });
 }
@@ -529,11 +513,7 @@ pub fn open_about_window(app: &AppHandle) {
             "about",
             "about.html",
             "عن رفّ",
-            // Figma's 400pt height is sufficient for the transient status
-            // line and removes the dead lower band found in the live 460pt
-            // translation. The width stays optically widened for Arabic text.
-            (360.0, 400.0),
-            Chrome::Designed,
+            (320.0, 360.0),
         );
     });
 }
@@ -544,8 +524,7 @@ pub fn open_firstrun_window(app: &AppHandle) {
         "firstrun",
         "firstrun.html",
         "رفّ",
-        (480.0, 620.0),
-        Chrome::Native,
+        (460.0, 520.0),
     );
 }
 
@@ -576,7 +555,6 @@ pub fn open_update_window(app: &AppHandle) {
             "update.html",
             "تحديث رفّ",
             (360.0, 280.0),
-            Chrome::Native,
         );
     });
 }

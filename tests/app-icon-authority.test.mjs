@@ -44,22 +44,11 @@ test('the bundle declares exactly one icon set, and no dark variant', () => {
   );
 });
 
-test('the generator derives the shipped .icns from the LIGHT master only', () => {
+test('the generator derives every shipped icon from the one brand master', () => {
   const gen = read('scripts/gen-icons.mjs');
-
-  // The shipped bundle icon is built from the light 1024 master...
-  assert.match(
-    gen,
-    /raff-app-icon-light-1024\.png`,\s*\n\s*'src-tauri\/icons\/icon\.icns'/u,
-    'src-tauri/icons/icon.icns must be generated from the light master'
-  );
-  // ...and the dark master may only ever produce the parked icon-dark.icns,
-  // never the bundle's icon.icns.
-  assert.doesNotMatch(
-    gen,
-    /raff-app-icon-dark-1024\.png`,\s*\n\s*'src-tauri\/icons\/icon\.icns'/u,
-    'the dark master must never be written to the shipped icon.icns'
-  );
+  assert.match(gen, /const MASTER = 'src\/assets\/app-icon\/raff-app-icon-1024\.png';/u);
+  assert.match(gen, /copyFileSync\(join\(generated, 'icon\.icns'\), 'src-tauri\/icons\/icon\.icns'\)/u);
+  assert.doesNotMatch(gen, /dark-1024|icon-dark/u, 'there is no dark app icon to generate');
 });
 
 test('the Icon Composer asset pins every appearance to the SAME light artwork', () => {

@@ -12,11 +12,11 @@ use crate::storage::{detect_kind, ItemKind};
 use crate::{macos, AppState};
 
 const POLL_MS: u64 = 350;
-/// The panel displays image previews at 136×72 logical pixels. Store at 2x
+/// The panel displays image previews at 64×40 logical pixels. Store at 2x
 /// for Retina screens while preserving the source aspect ratio; `thumbnail`
 /// fits inside this box and never crops.
-const THUMB_MAX_W: u32 = 272;
-const THUMB_MAX_H: u32 = 144;
+const THUMB_MAX_W: u32 = 128;
+const THUMB_MAX_H: u32 = 80;
 
 pub fn start(app: AppHandle) {
     std::thread::spawn(move || {
@@ -193,15 +193,15 @@ mod tests {
     fn retina_thumbnail_fits_without_cropping() {
         let wide = image::DynamicImage::new_rgba8(1000, 100);
         let wide_thumb = wide.thumbnail(THUMB_MAX_W, THUMB_MAX_H);
-        assert_eq!(wide_thumb.dimensions(), (272, 27));
+        assert_eq!(wide_thumb.dimensions(), (128, 13));
 
         let tall = image::DynamicImage::new_rgba8(100, 1000);
         let tall_thumb = tall.thumbnail(THUMB_MAX_W, THUMB_MAX_H);
-        assert_eq!(tall_thumb.dimensions(), (14, 144));
+        assert_eq!(tall_thumb.dimensions(), (8, 80));
 
         let square = image::DynamicImage::new_rgba8(800, 800);
         let square_thumb = square.thumbnail(THUMB_MAX_W, THUMB_MAX_H);
-        assert_eq!(square_thumb.dimensions(), (144, 144));
+        assert_eq!(square_thumb.dimensions(), (80, 80));
     }
 
     #[test]
@@ -213,7 +213,7 @@ mod tests {
         let name = "preview.thumb.png".to_string();
         assert_eq!(write_thumbnail(&root, name.clone(), &source), Some(name));
         let decoded = image::open(root.join("preview.thumb.png")).unwrap();
-        assert_eq!(decoded.dimensions(), (192, 144));
+        assert_eq!(decoded.dimensions(), (107, 80));
 
         let missing_parent = root.join("missing");
         assert_eq!(

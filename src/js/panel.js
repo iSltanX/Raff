@@ -6,10 +6,10 @@
 // its content type, and the paired Figma actions sit at the trailing edge.
 
 import { api, on } from './store.js';
-import { arabicDigits, filterItems } from './logic.js';
+import { arabicDigits, filterItems, relativeTimeAr } from './logic.js';
 import {
-  BRAND_MARK,
   SETTINGS,
+  CLOSE,
   SEARCH,
   CLEAR,
   PIN,
@@ -18,7 +18,6 @@ import {
   CHECK,
   ALERT,
   IMAGE,
-  SHELF,
   contentTypeIcon,
   createIcon,
 } from './icons.js';
@@ -43,11 +42,13 @@ const filtersEl = document.getElementById('filters');
 const settingsBtn = document.getElementById('settings-btn');
 const closeBtn = document.getElementById('panel-close');
 
-// Original, author-controlled exports from the approved Figma layers.
-document.getElementById('brand-mark').replaceChildren(createIcon(BRAND_MARK));
 document.getElementById('search-glyph').replaceChildren(createIcon(SEARCH));
 settingsBtn.replaceChildren(createIcon(SETTINGS));
+closeBtn.replaceChildren(createIcon(CLOSE));
 searchClearEl.replaceChildren(createIcon(CLEAR));
+
+/** Quick paste: ⌘1–⌘9 choose the first nine visible rows. */
+const QUICK_SLOTS = 9;
 
 let state = { pinned: [], history: [], settings: null, axTrusted: false };
 let query = '';
@@ -113,6 +114,8 @@ function syncActiveOption() {
   }
 }
 
+const BRAND = Symbol('brand-mark');
+
 function stateView(art, title, sub, extraClass = '') {
   const view = document.createElement('div');
   view.className = `state-view ${extraClass}`.trim();
@@ -132,9 +135,13 @@ function stateView(art, title, sub, extraClass = '') {
   if (art) {
     const artEl = document.createElement('div');
     artEl.className = 'state-art';
-    if (Array.isArray(art)) {
-      artEl.classList.add('shelf-illustration');
-      artEl.replaceChildren(...art.map((line) => createIcon(line)));
+    if (art === BRAND) {
+      artEl.classList.add('brand-art');
+      const base = document.createElement('span');
+      base.className = 'mark-base';
+      const card = document.createElement('span');
+      card.className = 'mark-card';
+      artEl.replaceChildren(base, card);
     } else {
       artEl.replaceChildren(createIcon(art));
     }
@@ -272,6 +279,10 @@ function buildRow(item, index) {
     title.textContent = item.text; // clip content → textContent
     preview.append(title);
   }
+  const time = document.createElement('span');
+  time.className = 'row-time';
+  time.textContent = relativeTimeAr(item.createdAt);
+  preview.append(time);
 
   // ── content type: one synchronous local Figma asset. Source application
   // metadata remains available to search and assistive text, but it never
@@ -291,6 +302,13 @@ function buildRow(item, index) {
   icon.setAttribute('aria-hidden', 'true');
   icon.replaceChildren(createIcon(presentation.asset, 'content-type-glyph'));
   kind.append(icon);
+  if (index < QUICK_SLOTS) {
+    const slot = document.createElement('kbd');
+    slot.className = 'row-index';
+    slot.setAttribute('aria-hidden', 'true');
+    slot.textContent = String(index + 1);
+    kind.append(slot);
+  }
 
   const actions = document.createElement('div');
   actions.className = 'row-actions';
@@ -421,7 +439,7 @@ function renderList() {
       // Copy is «08» COMPONENT 69:397 "State=Empty" verbatim; v4.0 had drifted
       // to its own wording, which the approved composition never carried.
       listEl.append(
-        stateView(SHELF, 'لا يوجد شيء هنا بعد', 'سيظهر سجل الحافظة هنا فور نسخ أول عنصر')
+        stateView(BRAND, 'رفّك جاهز', 'انسخ أي نص أو رابط أو صورة، وسيظهر هنا فورًا.')
       );
     }
     return;
@@ -484,6 +502,7 @@ function syncShortcutBar() {
     ];
   } else {
     actions = [
+      ...(visible.length > 0 ? [['⌘1–9', 'لصق سريع']] : []),
       ['⌘F', 'بحث'],
       ['⌘,', 'الإعدادات'],
     ];
@@ -1178,7 +1197,29 @@ filtersEl.addEventListener('keydown', (e) => {
 
 // ─── Keyboard (full control — mouse optional) ─────────────────────────────
 
+function setQuickSlotsVisible(on) {
+  panelEl.classList.toggle('show-slots', on);
+}
+
+window.addEventListener('keyup', (e) => {
+  if (e.key === 'Meta' || !e.metaKey) setQuickSlotsVisible(false);
+});
+window.addEventListener('blur', () => setQuickSlotsVisible(false));
+
 window.addEventListener('keydown', (e) => {
+  if (e.key === 'Meta') {
+    setQuickSlotsVisible(true);
+    return;
+  }
+  if (e.metaKey && !e.ctrlKey && !e.shiftKey && /^Digit[1-9]$/.test(e.code)) {
+    const item = visible[Number(e.code.slice(5)) - 1];
+    e.preventDefault();
+    if (item) {
+      selectedId = item.id;
+      paste(item.id, e.altKey);
+    }
+    return;
+  }
   if (e.metaKey && (e.code === 'Comma' || e.key === ',')) {
     e.preventDefault();
     api.openSettings();
@@ -1335,20 +1376,12 @@ on('panel://shown', async () => {
   searchEl.value = '';
   selectedId = null;
   setFilter('all');
-  // Repaint before and after the fetch: the first invalidates whatever frozen
-  // frame the suspended web process left behind, the second guarantees the
-  // freshly rendered list is actually composited.
-  forceRepaint();
-  await refresh({ retry: true });
-  forceRepaint();
+  setQuickSlotsVisible(false);
   searchEl.focus();
-  // Measured on this app: `panel://shown` is delivered ~30ms BEFORE WebKit
-  // marks the view visible ("UIProcess is taking a foreground assertion
-  // because the view is visible"). A repaint that lands entirely inside that
-  // window leaves the layer tree clean again just as WebKit unhides it and
-  // waits for an update that never comes. One bounded, one-shot nudge after
-  // the gap closes covers that — it is not a timer loop.
-  setTimeout(forceRepaint, 120);
+  // The webview stays live while hidden, so the list is already painted;
+  // this only reconciles anything that changed while no event arrived.
+  await refresh({ retry: true });
+  listEl.scrollTop = 0;
 }).catch((err) => diag('listen:failed', err));
 
 // Belt-and-suspenders alongside panel://shown: if the panel ever regains

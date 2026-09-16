@@ -2,13 +2,12 @@
 // the permission and closes itself once granted.
 
 import { api } from './store.js';
-import { KEYBOARD, CHECK, createIcon } from './icons.js';
+import { SHIELD, createIcon } from './icons.js';
 
 // The native WKWebView menu is English ("Reload") — never shown in Raff.
 window.addEventListener('contextmenu', (e) => e.preventDefault());
 
-document.getElementById('figure').replaceChildren(createIcon(KEYBOARD));
-document.getElementById('shield').replaceChildren(createIcon(CHECK));
+document.getElementById('shield').replaceChildren(createIcon(SHIELD));
 
 const openSettingsBtn = document.getElementById('open-settings');
 const laterBtn = document.getElementById('later');

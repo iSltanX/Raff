@@ -5,43 +5,32 @@
   <title>عن رفّ</title>
   <script src="theme.js"></script>
   <link rel="stylesheet" href="tokens.css" />
-  <link rel="stylesheet" href="about.css?v=4.2.2" />
+  <link rel="stylesheet" href="about.css" />
 </head>
 <body>
-  <!-- Production About window: 360 × 400 after optical macOS QA. -->
   <main class="about" id="about">
-    <!-- Controls-Left (2:8060). Physically left, as on every macOS window —
-         the traffic lights never mirror in RTL. -->
     <div class="window-controls" data-tauri-drag-region>
       <button type="button" class="dot dot-close" id="about-close" title="إغلاق" aria-label="إغلاق نافذة عن رفّ" tabindex="-1"></button>
       <span class="dot dot-min" aria-hidden="true"></span>
       <span class="dot dot-zoom" aria-hidden="true"></span>
     </div>
-
-    <!-- Compact vertical identity header. About uses the same approved app
-         icon that Finder, Update and the signed bundle use; the superseded
-         Arabic wordmark tile is no longer a second active identity. -->
     <div class="identity-row">
-      <img class="logo-graphic" src="assets/app-icon.png" width="80" height="80" alt="" aria-hidden="true" />
-      <!-- Filled by about.js from the running app's own version. -->
+      <img class="logo-graphic" src="assets/app-icon.png" width="96" height="96" alt="" aria-hidden="true" />
+      <h1 class="app-name">رفّ</h1>
+      <p class="tagline">كل ما نسخته، على رفٍّ قريب.</p>
       <p class="app-version" id="app-version" lang="en" dir="ltr"></p>
     </div>
 
     <div class="credit">
-      <!-- Author (7:1609) -->
       <p class="author">تطوير وتصميم سلطان</p>
-      <!-- Repository (7:1610). Not an <a href> — the webview may never
-           navigate away; the URL lives in Rust behind `open_repository`. -->
       <button type="button" class="repo-link" id="repo-link">github.com/iSltanX/Raff</button>
     </div>
-
-    <!-- Actions-Bottom (2:8072) -->
     <div class="actions-bottom">
       <button type="button" class="push-btn" id="update-btn">التحقق من التحديثات</button>
       <p class="update-status" id="update-status" role="status" hidden></p>
       <p class="copyright">حقوق الطبع والنشر © ٢٠٢٦ رفّ. جميع الحقوق محفوظة.</p>
     </div>
   </main>
-  <script type="module" src="js/about.js?v=4.2.2"></script>
+  <script type="module" src="js/about.js"></script>
 </body>
 </html>

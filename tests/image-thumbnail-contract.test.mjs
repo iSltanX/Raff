@@ -10,12 +10,12 @@ const read = (file) => readFileSync(path.join(project, file), 'utf8');
 
 test('native and CSS thumbnail contracts agree at 2x without cropping', () => {
   const monitor = read('src-tauri/src/monitor.rs');
-  assert.match(monitor, /const THUMB_MAX_W: u32 = 272;/u);
-  assert.match(monitor, /const THUMB_MAX_H: u32 = 144;/u);
+  assert.match(monitor, /const THUMB_MAX_W: u32 = 128;/u);
+  assert.match(monitor, /const THUMB_MAX_H: u32 = 80;/u);
   assert.match(monitor, /decoded\.thumbnail\(THUMB_MAX_W, THUMB_MAX_H\)/u);
 
   const css = read('src/panel.css');
-  assert.match(css, /\.preview-thumb\s*\{[^}]*width:\s*136px;[^}]*height:\s*72px;/su);
+  assert.match(css, /\.preview-thumb\s*\{[^}]*width:\s*64px;[^}]*height:\s*40px;/su);
   assert.match(css, /\.preview-thumb img\s*\{[^}]*object-fit:\s*contain;/su);
   assert.doesNotMatch(css, /\.preview-thumb img\s*\{[^}]*object-fit:\s*cover;/su);
 });

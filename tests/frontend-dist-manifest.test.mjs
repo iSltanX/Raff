@@ -30,7 +30,7 @@ test('frontend distribution contains exactly the production allowlist', () => {
   assert.equal(manifest.schemaVersion, 1);
   assert.deepEqual(actual, manifest.files);
   assert.ok(actual.includes('index.html'));
-  assert.ok(actual.includes('assets/v4/icons/image.svg'));
+  assert.ok(actual.includes('assets/icons/image.svg'));
   assert.ok(actual.includes('fonts/Cairo-Regular.ttf'));
 
   for (const file of actual) {

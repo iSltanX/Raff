@@ -1,99 +1,73 @@
-/* ===========================================================================
-   First-run accessibility primer.
-   Not one of the approved Figma product screens, so it is composed from the
-   same system those screens are built from: the panel's surface treatment, the
-   empty-state text stack, and the shared Push Button.
-   =========================================================================== */
+/* First run — one permission, explained once, calmly. */
 
+html,
 body {
-  background: var(--color-bg-secondary);
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg-window);
 }
 
 .firstrun {
   display: flex;
   flex-direction: column;
-  height: 100%;
-  padding: 34px 40px 28px;
-  overflow-y: auto;
+  justify-content: center;
+  height: 100vh;
+  padding: 36px 32px 24px;
 }
 
 .figure {
-  width: 80px;
-  height: 80px;
-  margin: 0 auto 24px;
-  border-radius: var(--radius-2xl);
-  background: var(--color-bg-selected);
-  color: var(--color-interactive-primary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.figure .figma-icon {
-  width: 40px;
-  height: 40px;
-  display: block;
+  width: 88px;
+  height: 88px;
+  margin: 0 auto 10px;
 }
 
 .title {
-  margin: 0 0 10px;
-  font-family: var(--font-ar);
-  font-weight: 800;
-  font-size: 22px;
-  line-height: normal;
-  color: var(--color-text-primary);
+  margin: 0 0 6px;
+  font-size: 20px;
+  font-weight: 700;
   text-align: center;
 }
 
 .body-text {
-  margin: 0 0 21px;
-  font-family: var(--font-ar);
-  font-weight: 400;
+  margin: 0 0 16px;
   font-size: var(--text-body);
-  line-height: 1.7;
-  color: var(--color-text-secondary);
+  color: var(--ink-2);
   text-align: center;
 }
 
 .body-text strong {
-  font-weight: 700;
-  color: var(--color-text-primary);
+  font-weight: 600;
+  color: var(--ink);
 }
 
 .privacy-note {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 10px;
-  margin-bottom: 21px;
-  padding: 12px 16px;
+  padding: 12px 14px;
   border-radius: var(--radius-lg);
-  background: var(--color-bg-selected);
-  border: 1px solid var(--color-border-default);
+  background: var(--success-soft);
 }
 
 .privacy-note p {
   margin: 0;
-  font-family: var(--font-ar);
-  font-weight: 400;
-  font-size: var(--text-caption);
-  line-height: 1.7;
-  color: var(--color-text-secondary);
+  font-size: var(--text-small);
+  color: var(--ink-2);
 }
 
 .shield {
-  display: flex;
-  flex: none;
-  color: var(--color-interactive-primary);
+  color: var(--success);
 }
 
-.shield .figma-icon {
+.shield .icon {
   width: 20px;
   height: 20px;
-  display: block;
 }
 
 .steps {
-  margin: 0 0 21px;
+  display: grid;
+  gap: 10px;
+  margin: 18px 0 0;
   padding: 0;
   list-style: none;
 }
@@ -102,68 +76,43 @@ body {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 7px 0;
-  font-family: var(--font-ar);
-  font-weight: 400;
-  font-size: 12px;
-  line-height: normal;
-  color: var(--color-text-primary);
+  font-size: var(--text-body);
 }
 
 .step-num {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
   flex: none;
   border-radius: 50%;
-  background: var(--color-bg-selected);
-  font-family: var(--font-ar);
-  font-weight: 600;
-  font-size: var(--text-caption);
-  color: var(--color-text-brand);
+  background: var(--accent-soft);
+  font-size: var(--text-small);
+  font-weight: 700;
+  color: var(--accent-ink);
 }
 
 .actions {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-top: auto;
-}
-
-.actions .btn {
-  width: 100%;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  margin-top: 28px;
 }
 
 .btn.big {
   min-height: 34px;
-  border-radius: var(--radius-md);
 }
 
 .permission-status {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: var(--space-md);
-  margin-top: 14px;
-  text-align: center;
-  font-family: var(--font-ar);
-  font-weight: 500;
-  font-size: var(--text-body);
-  color: var(--color-status-success);
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 12px;
+  font-size: var(--text-small);
+  color: var(--ink-3);
 }
 
 .permission-status.is-error {
-  color: var(--color-status-error);
-}
-
-.permission-status[hidden] {
-  display: none;
-}
-
-.permission-retry {
-  min-height: 34px;
-  width: 100%;
-  color: var(--color-text-primary);
+  color: var(--danger);
 }

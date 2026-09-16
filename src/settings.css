@@ -1,1003 +1,595 @@
-/* ==========================================================================
-   Raff Settings — compact macOS preferences window.
+/* Settings — native title bar overlay, toolbar tabs, grouped cards. */
 
-   The v4 Figma foundations supply typography, colour, controls and rhythm.
-   Navigation is a native-style tab toolbar: one page is visible at a time,
-   the window itself never becomes a long scrolling settings document.
-   ========================================================================== */
-
+html,
 body {
-  background: var(--color-bg-secondary);
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg-canvas);
 }
 
 .settings-window {
-  position: relative;
   display: flex;
   flex-direction: column;
-  height: 100%;
-  min-width: 0;
-  overflow: hidden;
-  background: var(--color-bg-secondary);
-  border: 1px solid var(--color-border-default);
-  border-radius: var(--radius-xl);
+  height: 100vh;
 }
 
-/* Window chrome remains physically LTR, as it does throughout macOS. */
+/* The native traffic lights draw over this band; the painted dots stay in
+   the DOM only as keyboard/test hooks. */
 .title-bar {
-  direction: ltr;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  min-height: 48px;
-  padding: 0 var(--space-xl);
+  justify-content: center;
+  height: 30px;
   flex: none;
-  background: var(--color-bg-primary);
+  background: var(--bg-window);
 }
 
-.window-controls {
-  display: flex;
-  align-items: center;
-  gap: var(--space-md);
-}
-
-.dot {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  flex: none;
-}
-
-.dot-close {
-  background: var(--color-system-stoplight-close);
-}
-
-.dot-min {
-  background: var(--color-system-stoplight-minimize);
-}
-
-.dot-zoom {
-  background: var(--color-system-stoplight-zoom);
+.window-controls,
+.title-bar-spacer {
+  display: none;
 }
 
 .title-bar-title {
   margin: 0;
-  direction: rtl;
-  font-family: var(--font-ar);
   font-size: var(--text-body);
-  font-weight: 700;
-  line-height: var(--leading-body);
-  color: var(--color-text-primary);
+  font-weight: 600;
+  color: var(--ink-2);
 }
 
 .title-latin {
-  direction: ltr;
-  unicode-bidi: isolate;
-  font-family: var(--font-latin);
-  font-size: var(--text-caption);
-}
-
-.title-bar-spacer {
-  width: 52px;
-  height: 1px;
-  flex: none;
-}
-
-/* macOS-style preferences toolbar. It is intentionally flat: the active page
-   is expressed by text weight, a quiet tint and the Raff accent hairline.
-
-   The title bar and this toolbar are the SAME surface, so the hairline that
-   used to run between them split one block of chrome for no reason. The only
-   stroke here is the one that actually separates chrome from canvas, and it
-   matches the footer's top edge exactly. */
-.settings-tabs {
-  direction: rtl;
-  display: flex;
-  align-items: stretch;
-  justify-content: center;
-  gap: var(--space-xs);
-  min-height: 62px;
-  padding: var(--space-md) var(--space-xl);
-  flex: none;
-  background: var(--color-bg-primary);
-  border-bottom: 1px solid var(--color-border-default);
-}
-
-.settings-tab {
-  position: relative;
-  min-width: 78px;
-  min-height: 44px;
-  padding: 0 var(--space-lg);
-  border-radius: var(--radius-md);
-  font-family: var(--font-ar);
-  font-size: var(--text-caption);
-  font-weight: 500;
-  line-height: var(--leading-caption);
-  color: var(--color-text-secondary);
-  transition:
-    background var(--t-fast) var(--ease-standard),
-    color var(--t-fast) var(--ease-standard);
-}
-
-.settings-tab::after {
-  content: '';
-  position: absolute;
-  right: var(--space-lg);
-  bottom: var(--space-xs);
-  left: var(--space-lg);
-  height: 2px;
-  border-radius: var(--radius-full);
-  background: transparent;
-}
-
-.settings-tab:hover:not(.is-active) {
-  background: var(--color-bg-hover);
-  color: var(--color-text-primary);
-}
-
-.settings-tab.is-active {
-  background: var(--color-bg-selected);
-  color: var(--color-text-brand);
-  font-weight: 700;
-}
-
-.settings-tab.is-active::after {
-  background: var(--color-interactive-primary);
-}
-
-.settings-window :focus-visible {
-  outline-color: var(--color-focus-ring);
-}
-
-/* NOTE: controls deliberately declare no `:focus-visible` border-radius here.
-   The shared rule in tokens.css used to force `--radius-sm` on focus, which
-   changed each control's SHAPE mid-interaction; that was fixed at the root, so
-   every control now simply keeps its own geometry and focus adds only a ring. */
-
-/* One fixed-height page. Expanded managers scroll internally, never the shell. */
-.settings-body {
-  position: relative;
-  flex: 1;
-  min-height: 0;
-  overflow: hidden;
-  background: var(--color-bg-secondary);
-}
-
-.settings-page {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-lg);
-  height: 100%;
-  min-height: 0;
-  padding: var(--space-lg) var(--space-xl);
-  overflow: hidden;
-  outline: none;
-}
-
-.settings-page[hidden] {
   display: none;
 }
 
-/* ─── The five reading ranks ───────────────────────────────────────────────
-   page → section → setting → explanation → control. Each rank is separated
-   from the next by SIZE and WEIGHT and INK LEVEL together, never by colour
-   alone, and the groups are separated from the canvas by the same tone +
-   hairline + micro-lift the clipboard rows use, so both windows read as one
-   product.                                                                  */
+/* ─── Toolbar tabs ────────────────────────────────────────────────────── */
 
-.page-heading {
-  flex: none;
-}
-
-/* Rank 1 — the page. It used to be brand terracotta, which made colour the
-   hierarchy device and spent brand paint on a title that is merely present.
-   Brand is now reserved for the active tab and other live moments. */
-.page-heading h2 {
-  margin: 0;
-  font-family: var(--font-ar);
-  font-size: var(--text-subhead);
-  font-weight: 700;
-  line-height: var(--leading-subhead);
-  color: var(--color-text-primary);
-}
-
-/* Rank 4 — pure explanation, tertiary ink, under everything it explains. */
-.page-heading p {
-  margin: var(--space-2xs) 0 0;
-  font-family: var(--font-ar);
-  font-size: var(--text-caption);
-  font-weight: 400;
-  line-height: var(--leading-caption);
-  color: var(--color-text-tertiary);
-}
-
-/* The group stack is the only part of a page allowed to scroll, so an expanded
-   manager grows the page instead of being silently clipped by the fixed
-   window. The 2px inline padding — cancelled by the matching negative margin —
-   keeps the cards on the page gutter while giving their hairline and
-   micro-lift room inside the scroll container's clip. */
-.settings-groups {
+.settings-tabs {
   display: flex;
+  justify-content: center;
+  gap: 2px;
+  flex: none;
+  padding: 0 16px 8px;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg-window);
+}
+
+.settings-tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 68px;
+  padding: 6px 8px 4px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  font-size: var(--text-caption);
+  font-weight: 500;
+  color: var(--ink-2);
+}
+
+.settings-tab::before {
+  content: '';
+  width: 20px;
+  height: 20px;
+  background-color: currentColor;
+  -webkit-mask: var(--tab-icon) center / 20px no-repeat;
+  mask: var(--tab-icon) center / 20px no-repeat;
+}
+
+#settings-tab-general { --tab-icon: url('assets/icons/general.svg'); }
+#settings-tab-capture { --tab-icon: url('assets/icons/capture.svg'); }
+#settings-tab-privacy { --tab-icon: url('assets/icons/privacy.svg'); }
+#settings-tab-learning { --tab-icon: url('assets/icons/learning.svg'); }
+#settings-tab-about { --tab-icon: url('assets/icons/about.svg'); }
+
+.settings-tab:hover {
+  background: var(--bg-hover);
+}
+
+.settings-tab.is-active {
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+  font-weight: 600;
+}
+
+/* ─── Pages ───────────────────────────────────────────────────────────── */
+
+.settings-body {
   flex: 1;
   min-height: 0;
-  flex-direction: column;
-  gap: var(--space-lg);
-  padding-inline: var(--space-2xs);
-  margin-inline: calc(var(--space-2xs) * -1);
   overflow-y: auto;
+  padding: 18px 24px 20px;
 }
 
-.settings-group {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-sm);
-  flex: none;
+.settings-page {
+  outline: none;
 }
 
-/* Rank 2 — the section. Only a page with more than one genuine group carries
-   one; a lone group is already named by the page heading above it. The indent
-   lands the label on the same optical line as the setting titles below it. */
+.page-heading {
+  display: none;
+}
+
+.settings-groups {
+  display: grid;
+  gap: 18px;
+}
+
 .group-title {
-  margin: 0;
-  padding-inline-start: var(--space-lg);
-  font-family: var(--font-ar);
+  margin: 0 4px 6px;
   font-size: var(--text-caption);
-  font-weight: 700;
-  line-height: var(--leading-caption);
-  color: var(--color-text-secondary);
+  font-weight: 600;
+  color: var(--ink-3);
 }
 
-/* Rank 3 — the settings themselves, on one raised card. */
 .settings-rows {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  flex: none;
-  padding-inline: var(--space-lg);
-  border: 1px solid var(--color-border-subtle);
+  overflow: hidden;
+  border: 1px solid var(--line);
   border-radius: var(--radius-lg);
-  background: var(--color-bg-row);
-  box-shadow: var(--elev-row);
+  background: var(--bg-raised);
 }
 
-.row {
-  direction: ltr;
+.settings-rows > .row {
   display: flex;
+  flex-direction: row-reverse;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-xl);
-  min-height: 54px;
-  padding: var(--space-md) 0;
-  flex: none;
+  gap: 16px;
+  min-height: 48px;
+  padding: 9px 14px;
 }
 
-/* One hairline BETWEEN settings, inset by the card's own padding, so no
-   divider ever runs into the card's border or its rounded corners. Anchoring
-   it to the row's top rather than the previous row's bottom keeps it correct
-   when a collapsed disclosure region sits between two rows. */
-.settings-rows > .row:not(:first-child) {
-  border-top: 1px solid var(--color-border-divider);
+.settings-rows > * + * {
+  border-top: 1px solid var(--line);
 }
 
 .row-label {
-  display: flex;
-  flex: 1;
+  display: grid;
+  gap: 1px;
   min-width: 0;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: var(--space-2xs);
 }
 
 .label-title {
-  font-family: var(--font-ar);
   font-size: var(--text-body);
-  font-weight: 500;
-  line-height: var(--leading-body);
-  color: var(--color-text-primary);
-  text-align: right;
-  text-wrap: pretty;
 }
 
-/* Rank 4 again — where the sub-line is pure explanation it drops to tertiary,
-   which is what makes the 13/500 title above it read as the setting. */
 .label-sub {
-  font-family: var(--font-ar);
   font-size: var(--text-caption);
-  font-weight: 400;
-  line-height: var(--leading-caption);
-  color: var(--color-text-tertiary);
-  text-align: right;
-  text-wrap: pretty;
-}
-
-/* Live state and identifying data are not explanation — they carry real
-   information, so they hold the secondary rank and are read first. Both are
-   class-based, never id-based, so the error state below can still win. */
-.label-sub.is-status,
-.label-sub.latin {
-  color: var(--color-text-secondary);
+  color: var(--ink-3);
 }
 
 .label-sub.error {
-  color: var(--color-status-error);
+  color: var(--danger);
 }
 
-/* Controls use the Figma component metrics with slightly larger hit areas. */
+/* ─── Controls ────────────────────────────────────────────────────────── */
+
 .switch {
   position: relative;
-  width: 48px;
-  height: 28px;
+  width: 36px;
+  height: 22px;
   flex: none;
-  border: 1px solid var(--color-border-default);
-  border-radius: var(--radius-full);
-  background: var(--color-bg-control);
-  transition:
-    background var(--t-base) var(--ease-standard),
-    border-color var(--t-base) var(--ease-standard);
+  padding: 0;
+  border: 0;
+  border-radius: 11px;
+  background: var(--toggle-off);
+  transition: background var(--t-base) var(--ease);
 }
 
 .switch-knob {
   position: absolute;
   top: 2px;
-  left: 2px;
-  width: 22px;
-  height: 22px;
-  border-radius: var(--radius-full);
-  background: var(--color-text-on-system-tint);
-  box-shadow: var(--elev-1);
-  transition: transform var(--t-base) var(--ease-standard);
+  right: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--knob);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  transition: transform var(--t-base) var(--ease);
 }
 
 .switch[aria-checked='true'] {
-  border-color: var(--color-interactive-primary);
-  background: var(--color-interactive-primary);
+  background: var(--accent);
 }
 
 .switch[aria-checked='true'] .switch-knob {
-  transform: translateX(20px);
+  transform: translateX(-14px);
 }
 
 .checkbox {
   position: relative;
-  width: 24px;
-  height: 24px;
+  width: 18px;
+  height: 18px;
   flex: none;
-  border: 1px solid var(--color-border-default);
-  border-radius: var(--radius-sm);
-  background: var(--color-bg-control);
-  transition:
-    background var(--t-fast) var(--ease-standard),
-    border-color var(--t-fast) var(--ease-standard);
-}
-
-.checkbox::after {
-  content: '';
-  position: absolute;
-  top: 5px;
-  left: 8px;
-  width: 5px;
-  height: 9px;
-  border: solid var(--color-text-on-accent);
-  border-width: 0 2px 2px 0;
-  border-radius: 1px;
-  transform: rotate(45deg);
-  opacity: 0;
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 5px;
+  background: var(--bg-raised);
 }
 
 .checkbox[aria-checked='true'] {
-  border-color: var(--color-interactive-primary);
-  background: var(--color-interactive-primary);
+  border-color: transparent;
+  background: var(--accent);
 }
 
 .checkbox[aria-checked='true']::after {
-  opacity: 1;
+  content: '';
+  position: absolute;
+  inset: 1px;
+  background: var(--on-accent);
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path d='M4 8.4l2.6 2.6L12 5.2' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+  mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path d='M4 8.4l2.6 2.6L12 5.2' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/></svg>");
 }
 
 .segments {
-  direction: rtl;
-  display: flex;
-  align-items: center;
-  min-height: 30px;
-  padding: var(--space-2xs);
+  display: inline-flex;
   flex: none;
-  border: 1px solid var(--color-border-default);
-  border-radius: var(--radius-control);
-  background: var(--color-bg-control);
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--radius-md);
+  background: var(--bg-sunken);
 }
 
 .seg-tab {
-  min-height: 24px;
-  padding: 0 var(--space-md);
+  height: 24px;
+  padding: 0 12px;
+  border: 0;
   border-radius: var(--radius-sm);
   background: transparent;
-  font-family: var(--font-ar);
-  font-size: var(--text-caption);
-  font-weight: 400;
-  line-height: var(--leading-caption);
-  color: var(--color-text-secondary);
-  white-space: nowrap;
+  font-size: var(--text-small);
+  color: var(--ink-2);
 }
 
-.seg-tab:hover:not(.is-active) {
-  background: var(--color-bg-hover);
-  color: var(--color-text-primary);
-}
-
-/* Selection is a genuinely active moment, so it may spend brand paint — but it
-   also gains weight, because no state in this system is expressed by colour
-   alone. */
-.seg-tab.is-active {
-  background: var(--color-bg-selected);
-  color: var(--color-text-brand);
-  font-weight: 500;
-}
-
-.hotkey-badge,
-.push-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 30px;
-  padding: 0 var(--space-lg);
-  flex: none;
-  border: 1px solid var(--color-border-default);
-  border-radius: var(--radius-control);
-  background: var(--color-bg-control);
-  color: var(--color-text-primary);
-  white-space: nowrap;
-  transition:
-    background var(--t-fast) var(--ease-standard),
-    border-color var(--t-fast) var(--ease-standard),
-    color var(--t-fast) var(--ease-standard);
-}
-
-.hotkey-badge {
-  direction: ltr;
-  unicode-bidi: isolate;
-  font-family: var(--font-latin);
-  font-size: var(--text-caption);
-  font-weight: 700;
-}
-
-.push-btn {
-  direction: rtl;
-  position: relative;
-  font-family: var(--font-ar);
-  font-size: var(--text-caption);
-  font-weight: 400;
-  line-height: var(--leading-caption);
-}
-
-.hotkey-badge:hover,
-.push-btn:hover {
-  border-color: var(--color-interactive-primary);
-  background: var(--color-bg-hover);
-  color: var(--color-text-brand);
-}
-
-.hotkey-badge.recording {
-  direction: rtl;
-  border-color: var(--color-interactive-primary);
-  color: var(--color-text-brand);
-  font-family: var(--font-ar);
-  font-weight: 500;
-}
-
-/* A destructive action must READ as destructive without SHOUTING at rest. The
-   red outline used to make «مسح سجل الحافظة» the loudest object in the footer,
-   outweighing «تم» — the action you actually came to take. At rest the button
-   now carries the neutral chrome of every other button and states its danger in
-   ink alone; the red edge and wash arrive on hover and focus, at the moment the
-   pointer is actually on it. The transparent fill also keeps the red legible on
-   whichever surface the button happens to sit on. */
-.push-btn.is-destructive {
-  overflow: hidden;
-  border-color: var(--color-border-default);
-  background: transparent;
-  color: var(--color-status-error);
-}
-
-.push-btn.is-destructive::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: currentColor;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity var(--t-fast) var(--ease-standard);
-}
-
-.push-btn.is-destructive:hover,
-.push-btn.is-destructive:focus-visible {
-  border-color: var(--color-status-error);
-  background: transparent;
-  color: var(--color-status-error);
-}
-
-.push-btn.is-destructive:hover::before,
-.push-btn.is-destructive:focus-visible::before {
-  opacity: 0.1;
-}
-
-/* In the confirmation sheet the destructive button IS the committed action, so
-   there it keeps its full red edge at rest. Prominence is contextual, not a
-   property of the class. */
-.confirm-actions .push-btn.is-destructive {
-  border-color: var(--color-status-error);
-}
-
-.push-btn.is-preferred {
-  border-color: var(--color-interactive-primary);
-  background: var(--color-interactive-primary);
-  color: var(--color-text-on-accent);
-}
-
-.push-btn.is-preferred:hover {
-  border-color: var(--color-interactive-primary-hover);
-  background: var(--color-interactive-primary-hover);
-  color: var(--color-text-on-accent);
+.seg-tab[aria-checked='true'] {
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-control);
+  font-weight: 600;
+  color: var(--ink);
 }
 
 .select-wrap {
   position: relative;
-  display: flex;
-  align-items: center;
   flex: none;
 }
 
 .select {
-  appearance: none;
+  height: 28px;
+  min-width: 120px;
+  padding: 0 10px 0 28px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-control);
+  font-size: var(--text-small);
   -webkit-appearance: none;
-  min-width: 110px;
-  height: 30px;
-  padding: 0 var(--space-md) 0 var(--space-xl);
-  border: 1px solid var(--color-border-default);
-  border-radius: var(--radius-control);
-  background: var(--color-bg-control);
-  color: var(--color-text-primary);
-  direction: rtl;
-  font-family: var(--font-ar);
-  font-size: var(--text-caption);
-  text-align: right;
-}
-
-.select:hover {
-  border-color: var(--color-interactive-primary);
-  background: var(--color-bg-hover);
-}
-
-.select.is-latin {
-  direction: ltr;
-  padding: 0 var(--space-xl) 0 var(--space-md);
-  font-family: var(--font-latin);
-  text-align: left;
+  appearance: none;
 }
 
 .select-wrap::after {
   content: '';
   position: absolute;
-  top: 10px;
+  top: 50%;
   left: 9px;
-  width: 5px;
-  height: 5px;
-  border-right: 1.5px solid var(--color-text-secondary);
-  border-bottom: 1.5px solid var(--color-text-secondary);
-  transform: rotate(45deg);
-  pointer-events: none;
-}
-
-.select-wrap.is-latin::after {
-  right: 9px;
-  left: auto;
-}
-
-/* The note is not a setting, so it sits beside the card rather than inside it —
-   that is what used to put a bordered box inside a bordered container. It is
-   recessed instead of raised and carries no lift, so its rank is unmistakable
-   next to the card it follows. */
-.privacy-note {
-  display: flex;
-  align-items: center;
-  gap: var(--space-md);
-  padding: var(--space-md) var(--space-lg);
-  flex: none;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-lg);
-  background: var(--color-bg-tertiary);
-  font-family: var(--font-ar);
-  font-size: var(--text-caption);
-  line-height: var(--leading-caption);
-  color: var(--color-text-secondary);
-}
-
-/* Reassurance, not a brand moment: it earns its emphasis from weight and ink
-   level, exactly like every other lead line in the window. */
-.privacy-note strong {
-  color: var(--color-text-primary);
-  font-weight: 700;
-}
-
-/* A disclosure region lives INSIDE the settings card, so it must not be a
-   second bordered box: it is a well cut back down to the canvas tone, which is
-   the same 1.15:1 step the card itself is lifted by. Its radius stays one step
-   under the card's so the nested corners stay concentric. */
-.expandable-region {
-  margin-block: var(--space-md);
-  padding: var(--space-md);
-  min-height: 0;
-  border-radius: var(--radius-md);
-  background: var(--color-bg-secondary);
-}
-
-.expandable-region[hidden] {
-  display: none;
-}
-
-.excluded-manager {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-md);
-  max-height: 92px;
-}
-
-.excluded-list {
-  display: flex;
-  flex: 1;
-  min-height: 22px;
-  flex-direction: column;
-  gap: var(--space-xs);
-  margin: 0;
-  padding: 0;
-  overflow-y: auto;
-  list-style: none;
-}
-
-/* The list scrolls, so a focus ring drawn outside a control would be clipped by
-   the well's edge. Inside this region the ring draws inward instead. */
-.excluded-list :focus-visible {
-  outline-offset: -2px;
-}
-
-.excluded-list:empty::after {
-  content: 'لا تطبيقات مستبعَدة بعد';
-  font-family: var(--font-ar);
-  font-size: var(--text-caption);
-  line-height: var(--leading-caption);
-  color: var(--color-text-tertiary);
-}
-
-/* Hairlines between items only — never a trailing stroke against the well. */
-.excluded-item {
-  direction: ltr;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-md);
-  min-height: 28px;
-  padding: var(--space-xs) var(--space-md);
-  flex: none;
-}
-
-.excluded-item + .excluded-item {
-  border-top: 1px solid var(--color-border-divider);
-}
-
-.excluded-item .bundle {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  color: var(--color-text-secondary);
-  direction: ltr;
-  font-family: var(--font-latin);
-  font-size: var(--text-caption);
-  text-overflow: ellipsis;
-  unicode-bidi: isolate;
-  white-space: nowrap;
-}
-
-.remove-excluded {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  flex: none;
-  color: var(--color-text-tertiary);
-}
-
-.remove-excluded:hover {
-  color: var(--color-status-error);
-}
-
-.remove-excluded .figma-icon {
-  display: block;
   width: 12px;
   height: 12px;
+  margin-top: -6px;
+  background: var(--ink-3);
+  pointer-events: none;
+  -webkit-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path d='M4.5 6.5L8 10l3.5-3.5' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/></svg>") center / contain no-repeat;
+  mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path d='M4.5 6.5L8 10l3.5-3.5' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/></svg>") center / contain no-repeat;
 }
 
-.excluded-add {
-  direction: ltr;
-  display: flex;
-  align-items: center;
-  gap: var(--space-md);
-  flex: none;
-}
-
-.excluded-add[hidden] {
-  display: none;
-}
-
-.excluded-add .select-wrap,
-.excluded-add .select {
-  flex: 1;
-  min-width: 0;
-}
-
-.inline-error {
-  direction: rtl;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-md);
-  min-height: 30px;
-  color: var(--color-status-error);
-  font-family: var(--font-ar);
-  font-size: var(--text-caption);
-  line-height: var(--leading-caption);
-}
-
-.inline-error[hidden] {
-  display: none;
-}
-
+.push-btn,
 .inline-retry {
-  min-height: 30px;
-  padding: 0 var(--space-md);
+  height: 28px;
   flex: none;
-  border: 1px solid currentColor;
-  border-radius: var(--radius-control);
-  font-family: var(--font-ar);
-  font-size: var(--text-caption);
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-control);
+  font-size: var(--text-small);
   font-weight: 500;
 }
 
+.push-btn:hover:not(:disabled),
 .inline-retry:hover {
-  background: var(--color-bg-hover);
+  background: var(--bg-hover);
+}
+
+.push-btn:disabled {
+  opacity: 0.45;
+}
+
+.push-btn.is-destructive {
+  color: var(--danger);
+}
+
+.push-btn.is-preferred {
+  border-color: transparent;
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.push-btn.is-preferred:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.hotkey-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 30px;
+  min-width: 96px;
+  flex: none;
+  justify-content: center;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--bg-sunken);
+  font-family: var(--font-latin);
+  font-size: var(--text-body);
+  font-weight: 700;
+  letter-spacing: 1px;
+  direction: ltr;
+}
+
+.hotkey-badge.recording {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  font-family: var(--font-ar);
+  font-size: var(--text-small);
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--accent-ink);
+}
+
+/* ─── Expandable regions ──────────────────────────────────────────────── */
+
+.expandable-region {
+  padding: 10px 14px 12px;
+  background: var(--bg-sunken);
+}
+
+.excluded-list {
+  display: grid;
+  gap: 2px;
+  margin: 0 0 8px;
+  padding: 0;
+  list-style: none;
+}
+
+.excluded-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 30px;
+  font-size: var(--text-small);
+}
+
+.bundle {
+  font-family: var(--font-latin);
+  direction: ltr;
+}
+
+.remove-excluded {
+  height: 24px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  font-size: var(--text-caption);
+  color: var(--danger);
+}
+
+.remove-excluded:hover {
+  background: var(--danger-soft);
+}
+
+.excluded-add {
+  display: flex;
+  gap: 8px;
+}
+
+.excluded-add .select-wrap {
+  flex: 1;
+}
+
+.excluded-add .select {
+  width: 100%;
+}
+
+.inline-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: var(--text-small);
+  color: var(--danger);
 }
 
 .learning-view {
-  display: flex;
-  flex-direction: column;
-  max-height: 76px;
-  overflow-y: auto;
+  display: grid;
+  gap: 4px;
 }
 
 .learn-row {
   display: flex;
-  align-items: center;
   justify-content: space-between;
-  gap: var(--space-lg);
-  padding: var(--space-xs) 0;
-  flex: none;
-}
-
-.learn-row + .learn-row {
-  border-top: 1px solid var(--color-border-divider);
+  gap: 12px;
+  font-size: var(--text-small);
 }
 
 .learn-text {
-  flex: 1;
   min-width: 0;
   overflow: hidden;
-  color: var(--color-text-primary);
-  font-family: var(--font-ar);
-  font-size: var(--text-caption);
-  line-height: var(--leading-caption);
-  text-align: right;
-  text-overflow: ellipsis;
   white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .learn-counts {
   flex: none;
-  color: var(--color-text-tertiary);
-  font-family: var(--font-ar);
-  font-size: var(--text-micro);
-  line-height: var(--leading-micro);
-  white-space: nowrap;
+  color: var(--ink-3);
 }
 
 .learning-empty {
-  padding: var(--space-md) 0;
-  color: var(--color-text-tertiary);
-  font-family: var(--font-ar);
-  font-size: var(--text-caption);
-  line-height: var(--leading-caption);
+  font-size: var(--text-small);
+  color: var(--ink-3);
 }
+
+.privacy-note {
+  display: flex;
+  gap: 6px;
+  padding: 12px 14px;
+  border-radius: var(--radius-lg);
+  background: var(--success-soft);
+  font-size: var(--text-small);
+  color: var(--ink-2);
+}
+
+.privacy-note strong {
+  color: var(--success);
+}
+
+/* ─── About tab ───────────────────────────────────────────────────────── */
 
 .about-summary {
   display: flex;
   align-items: center;
-  gap: var(--space-lg);
-  flex: none;
-}
-
-/* The About page's identity header stands in for the page heading, so it holds
-   rank 1 with the same neutral ink. The icon is the brand moment here; the
-   wordmark does not need to repeat it in paint. */
-.about-summary h2 {
-  margin: 0;
-  font-family: var(--font-ar);
-  font-size: var(--text-subhead);
-  font-weight: 700;
-  line-height: var(--leading-subhead);
-  color: var(--color-text-primary);
-}
-
-.about-summary p {
-  margin: var(--space-2xs) 0 0;
-  font-family: var(--font-ar);
-  font-size: var(--text-caption);
-  font-weight: 400;
-  line-height: var(--leading-caption);
-  color: var(--color-text-tertiary);
+  gap: 14px;
+  margin-bottom: 18px;
 }
 
 .about-mark {
-  display: block;
-  width: 58px;
-  height: 58px;
+  width: 64px;
+  height: 64px;
   flex: none;
-  filter: drop-shadow(var(--elev-appicon));
+}
+
+.about-summary h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
 }
 
 .about-summary h2 .latin {
-  font-size: 14px;
+  margin-inline-start: 4px;
+  font-size: var(--text-body);
+  font-weight: 400;
+  color: var(--ink-3);
 }
 
-/* The version is identifying data, not explanation, so it outranks the line
-   beneath it by one ink level. */
-.about-summary .about-version {
-  min-height: var(--leading-caption);
-  font-family: var(--font-mixed);
-  direction: rtl;
-  unicode-bidi: plaintext;
-  color: var(--color-text-secondary);
+.about-summary p {
+  margin: 0;
+  font-size: var(--text-small);
+  color: var(--ink-2);
+}
+
+.about-version {
+  font-family: var(--font-latin);
+  color: var(--ink-3) !important;
+}
+
+/* ─── Load state, footer, confirm ─────────────────────────────────────── */
+
+.settings-load-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 8px 16px;
+  font-size: var(--text-small);
+  color: var(--ink-3);
+}
+
+.settings-window:not([aria-busy='true']) .settings-load-state:not(.is-error) {
+  display: none;
+}
+
+.settings-load-state.is-error {
+  color: var(--danger);
 }
 
 .bottom-row {
-  direction: ltr;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--space-lg);
-  min-height: 56px;
-  padding: var(--space-lg) var(--space-xl);
+  gap: 12px;
   flex: none;
-  border-top: 1px solid var(--color-border-default);
-  background: var(--color-bg-primary);
+  padding: 10px 16px;
+  border-top: 1px solid var(--line);
+  background: var(--bg-window);
 }
 
-.bottom-row .push-btn {
-  font-size: var(--text-body);
+.bottom-row #done-btn {
+  margin-inline-start: auto;
+}
+
+.bottom-row #clear-history {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
 }
 
 .status-note {
   flex: 1;
   min-width: 0;
-  color: var(--color-text-secondary);
-  font-family: var(--font-ar);
   font-size: var(--text-caption);
-  line-height: var(--leading-caption);
+  color: var(--ink-3);
   text-align: center;
 }
 
 .status-note.is-error {
-  color: var(--color-status-error);
-  font-weight: 500;
-}
-
-.status-note[hidden] {
-  display: none;
-}
-
-.settings-load-state {
-  position: absolute;
-  z-index: 100;
-  top: 110px;
-  right: 0;
-  bottom: 56px;
-  left: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-lg);
-  padding: var(--space-xl);
-  background: var(--color-bg-secondary);
-  color: var(--color-text-secondary);
-  font-family: var(--font-ar);
-  font-size: var(--text-body);
-  line-height: var(--leading-body);
-  text-align: center;
-}
-
-.settings-load-state.is-error {
-  color: var(--color-status-error);
-}
-
-.settings-load-state[hidden] {
-  display: none;
+  color: var(--danger);
 }
 
 .confirm-overlay {
   position: fixed;
   inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--space-xl);
-  animation: overlay-fade var(--t-base) var(--ease-standard);
-}
-
-.confirm-overlay::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: var(--color-bg-primary);
-  opacity: 0.78;
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
-}
-
-.confirm-overlay {
-  z-index: 110;
-}
-
-.confirm-overlay[hidden] {
-  display: none;
-}
-
-/* A sheet, and --radius-2xl is the system's sheet radius — it was the one
-   surface in the window drawing a card's corner instead of its own. */
-.confirm-dialog {
-  position: relative;
-  border: 1px solid var(--color-border-default);
-  border-radius: var(--radius-2xl);
-  background: var(--color-bg-elevated);
-  box-shadow: var(--elev-3);
-  color: var(--color-text-primary);
+  display: grid;
+  place-items: center;
+  background: var(--bg-overlay);
 }
 
 .confirm-dialog {
-  width: 100%;
-  max-width: 380px;
-  padding: var(--space-xl);
+  display: grid;
+  gap: 10px;
+  width: 300px;
+  padding: 22px 20px 16px;
+  border-radius: 14px;
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-float);
+  text-align: center;
 }
 
 .confirm-title {
-  color: var(--color-text-primary);
-  font-family: var(--font-ar);
-  font-size: var(--text-subhead);
+  font-size: var(--text-title);
   font-weight: 700;
-  line-height: var(--leading-subhead);
 }
 
 .confirm-text {
-  margin: var(--space-md) 0 0;
-  color: var(--color-text-secondary);
-  font-family: var(--font-ar);
-  font-size: var(--text-body);
-  line-height: var(--leading-body);
+  margin: 0;
+  font-size: var(--text-small);
+  color: var(--ink-2);
 }
 
 .confirm-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--space-md);
-  margin-top: var(--space-xl);
+  display: grid;
+  gap: 8px;
+  margin-top: 6px;
 }
 
-@keyframes overlay-fade {
-  from { opacity: 0; }
-  to { opacity: 1; }
+.confirm-actions .push-btn {
+  width: 100%;
+}
+
+.confirm-actions .is-destructive {
+  order: -1;
+  border-color: transparent;
+  background: var(--danger);
+  color: #fff;
 }

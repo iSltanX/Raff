@@ -80,7 +80,7 @@ test('row actions and feedback are transactional, accessible, and deterministic'
       [...dom.window.document.querySelectorAll('#footer-hint .shortcut-hint')].map((hint) =>
         hint.textContent
       ),
-      ['⌘Fبحث', '⌘,الإعدادات']
+      ['⌘1–9لصق سريع', '⌘Fبحث', '⌘,الإعدادات']
     );
   });
 

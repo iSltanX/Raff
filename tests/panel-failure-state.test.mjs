@@ -1,5 +1,5 @@
 // A load that fails permanently must land on the Arabic failure state — never
-// a silent blank panel and never the «لا يوجد شيء هنا بعد» empty shelf, which would
+// a silent blank panel and never the «رفّك جاهز» empty shelf, which would
 // falsely tell the user their saved clips are gone.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';

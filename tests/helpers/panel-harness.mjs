@@ -238,7 +238,7 @@ export function listText(dom) {
  *  the call sites are updated. It lives here so a copy change is one edit and
  *  cannot leave a `doesNotMatch` guarding a string the product no longer says.
  *  v4.1 repointed it from «الرفّ فارغ» to «08» COMPONENT 69:397's own wording. */
-export const EMPTY_SHELF_HEADLINE = /لا يوجد شيء هنا بعد/u;
+export const EMPTY_SHELF_HEADLINE = /رفّك جاهز/u;
 /** The failure state, which the empty shelf must never be mistaken for. */
 export const FAILURE_HEADLINE = /تعذّر عرض محتوى رفّ/u;
 

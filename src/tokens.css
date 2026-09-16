@@ -1,567 +1,119 @@
-/* ===========================================================================
-   رفّ — Raff v4.2.2 design tokens
-   ---------------------------------------------------------------------------
-   Single source of truth for every visual value in the app. Generated from the
-   approved Figma system:
+/* رفّ — design tokens.
+   Palette «الميزان»: ash, marble, ink, silk and sage. Cairo sets Arabic,
+   Almarai sets Latin, numerals and key glyphs. Nothing else declares colour. */
 
-     Figma file  j3EzLpDw4tIHQQSRQm8ZDM
-     «03 — Color & Typography»   (2:4)  — primitive ramps + type scale
-     «04 — Foundations & Variables» (2:5) — spacing / radius / elevation / tokens
-     «08 — Product Screens»      (2:9)  — the product surfaces
-     «09 — Light & Dark»         (2:10) — the light↔dark token pairs
-
-   This file mirrors Figma's local Primitives (113 variables) and Semantic
-   (59 variables) collections one-for-one. Semantic values remain aliases here
-   just as they are in Figma, so changing a primitive cannot leave a component
-   with a second, contradictory literal. Page 08 remains the authority for
-   product structure and is composed from these same roles.
-
-   Semantic colours and reusable scales belong here. A component may retain a
-   documented optical pixel metric where its approved Figma geometry or native
-   macOS hit target is role-specific rather than a reusable system primitive.
-   =========================================================================== */
-
-/* ─── Typefaces ────────────────────────────────────────────────────────────
-   Cairo is the Arabic face (headings and all Arabic UI strings).
-   Almarai is the Latin/numeral face (English metadata, hex, numerals and the
-   macOS modifier glyphs ⌘ ⌥ ⇧ ⌫). At the 13px body size the two are used at
-   the same size and leading so mixed Ar/Latin lines stay optically level.
-   — «03 — Color & Typography», Font Pairing Specimen.                        */
-
-@font-face {
-  font-family: 'Cairo';
-  src: url('fonts/Cairo-Regular.ttf') format('truetype');
-  font-weight: 400;
-  font-style: normal;
-  font-display: block;
-}
-@font-face {
-  font-family: 'Cairo';
-  src: url('fonts/Cairo-Medium.ttf') format('truetype');
-  font-weight: 500;
-  font-style: normal;
-  font-display: block;
-}
-@font-face {
-  font-family: 'Cairo';
-  src: url('fonts/Cairo-SemiBold.ttf') format('truetype');
-  font-weight: 600;
-  font-style: normal;
-  font-display: block;
-}
-@font-face {
-  font-family: 'Cairo';
-  src: url('fonts/Cairo-Bold.ttf') format('truetype');
-  font-weight: 700;
-  font-style: normal;
-  font-display: block;
-}
-@font-face {
-  font-family: 'Cairo';
-  src: url('fonts/Cairo-ExtraBold.ttf') format('truetype');
-  font-weight: 800;
-  font-style: normal;
-  font-display: block;
-}
-@font-face {
-  font-family: 'Almarai';
-  src: url('fonts/Almarai-Regular.ttf') format('truetype');
-  font-weight: 400;
-  font-style: normal;
-  font-display: block;
-}
-
-/* Script-aware face for the few runs that genuinely mix Arabic and Latin in
-   one DOM text node. Arabic shapes with Cairo; Latin, Western numerals and
-   macOS symbols shape with Almarai. Pure-language roles continue to use the
-   explicit --font-ar / --font-latin families below. */
-@font-face {
-  font-family: 'Raff Mixed';
-  src: url('fonts/Cairo-Regular.ttf') format('truetype');
-  font-weight: 400;
-  font-style: normal;
-  font-display: block;
-  unicode-range: U+0600-06ff, U+0750-077f, U+08a0-08ff, U+fb50-fdff, U+fe70-feff, U+1ee00-1eeff;
-}
-@font-face {
-  font-family: 'Raff Mixed';
-  src: url('fonts/Almarai-Regular.ttf') format('truetype');
-  font-weight: 400;
-  font-style: normal;
-  font-display: block;
-  unicode-range: U+0000-024f, U+2000-206f, U+20a0-20cf, U+2100-214f, U+2190-23ff, U+25a0-25ff;
-}
-@font-face {
-  font-family: 'Raff Mixed';
-  src: url('fonts/Cairo-Medium.ttf') format('truetype');
-  font-weight: 500;
-  font-style: normal;
-  font-display: block;
-  unicode-range: U+0600-06ff, U+0750-077f, U+08a0-08ff, U+fb50-fdff, U+fe70-feff, U+1ee00-1eeff;
-}
-@font-face {
-  font-family: 'Raff Mixed';
-  src: url('fonts/Almarai-Regular.ttf') format('truetype');
-  font-weight: 500;
-  font-style: normal;
-  font-display: block;
-  unicode-range: U+0000-024f, U+2000-206f, U+20a0-20cf, U+2100-214f, U+2190-23ff, U+25a0-25ff;
-}
-@font-face {
-  font-family: 'Raff Mixed';
-  src: url('fonts/Cairo-SemiBold.ttf') format('truetype');
-  font-weight: 600;
-  font-style: normal;
-  font-display: block;
-  unicode-range: U+0600-06ff, U+0750-077f, U+08a0-08ff, U+fb50-fdff, U+fe70-feff, U+1ee00-1eeff;
-}
-@font-face {
-  font-family: 'Raff Mixed';
-  src: url('fonts/Almarai-Bold.ttf') format('truetype');
-  font-weight: 600;
-  font-style: normal;
-  font-display: block;
-  unicode-range: U+0000-024f, U+2000-206f, U+20a0-20cf, U+2100-214f, U+2190-23ff, U+25a0-25ff;
-}
-@font-face {
-  font-family: 'Raff Mixed';
-  src: url('fonts/Cairo-Bold.ttf') format('truetype');
-  font-weight: 700;
-  font-style: normal;
-  font-display: block;
-  unicode-range: U+0600-06ff, U+0750-077f, U+08a0-08ff, U+fb50-fdff, U+fe70-feff, U+1ee00-1eeff;
-}
-@font-face {
-  font-family: 'Raff Mixed';
-  src: url('fonts/Almarai-Bold.ttf') format('truetype');
-  font-weight: 700;
-  font-style: normal;
-  font-display: block;
-  unicode-range: U+0000-024f, U+2000-206f, U+20a0-20cf, U+2100-214f, U+2190-23ff, U+25a0-25ff;
-}
-@font-face {
-  font-family: 'Almarai';
-  src: url('fonts/Almarai-Bold.ttf') format('truetype');
-  font-weight: 700;
-  font-style: normal;
-  font-display: block;
-}
+@font-face { font-family: 'Cairo'; src: url('fonts/Cairo-Regular.ttf') format('truetype'); font-weight: 400; font-display: block; }
+@font-face { font-family: 'Cairo'; src: url('fonts/Cairo-Medium.ttf') format('truetype'); font-weight: 500; font-display: block; }
+@font-face { font-family: 'Cairo'; src: url('fonts/Cairo-SemiBold.ttf') format('truetype'); font-weight: 600; font-display: block; }
+@font-face { font-family: 'Cairo'; src: url('fonts/Cairo-Bold.ttf') format('truetype'); font-weight: 700; font-display: block; }
+@font-face { font-family: 'Almarai'; src: url('fonts/Almarai-Regular.ttf') format('truetype'); font-weight: 400; font-display: block; }
+@font-face { font-family: 'Almarai'; src: url('fonts/Almarai-Bold.ttf') format('truetype'); font-weight: 700; font-display: block; }
 
 :root {
   color-scheme: light;
 
-  /* ─── Primitives — «03 — Color & Typography» ────────────────────────────
-     Raw values. Never referenced directly by a component; semantic aliases
-     below are what the UI uses.                                             */
+  --font-ar: 'Cairo', system-ui, sans-serif;
+  --font-latin: 'Almarai', 'Cairo', system-ui, sans-serif;
 
-  /* Terracotta (brand) */
-  --terracotta-50: #fdf5f0;
-  --terracotta-75: #fbede5;
-  --terracotta-80: #fbe7da; /* v4.1 — selection tint that survives the deeper canvas */
-  --terracotta-100: #f9e6da;
-  --terracotta-200: #f0c9b0;
-  --terracotta-300: #e4a882;
-  --terracotta-400: #d4855a;
-  --terracotta-500: #c4704b; /* الأساسي — the brand colour */
-  --terracotta-600: #a85a3a;
-  --terracotta-700: #8a452d;
-  --terracotta-800: #6c3522;
-  --terracotta-900: #4e2619;
-  --terracotta-950: #2e160e;
-  --terracotta-app-icon-end: #a35634;
-  /* Dark-appearance app-icon construction — «11 — Brand Applications»,
-     COMPONENT_SET "Brand / App Icon" (157:102), Mode=Dark variant. Promoted
-     2026-08-12; exist only for the app icon, matching --terracotta-app-icon-end's
-     own single-purpose precedent above. */
-  --terracotta-app-icon-dark-bg-start: #2a2018;
-  --terracotta-app-icon-dark-bg-end: #1b140f;
-  --terracotta-app-icon-mark-dark: #f5ede5;
-
-  /* Warm neutral (stone) */
-  --stone-0: #ffffff;
-  --stone-15: #fdfcfa; /* v4.1 — the raised row/card plane */
-  --stone-25: #fcfbf9;
-  --stone-40: #fbfaf7;
-  --stone-45: #f7f4ef; /* v4.1 — recessed tertiary plane */
-  --stone-50: #faf8f6;
-  --stone-60: #f7f5f1;
-  --stone-70: #f6f5f2;
-  --stone-80: #f5f0ea;
-  --stone-85: #f6f1e9; /* v4.1 — row hover, one warm step above the row */
-  --stone-90: #f1ede7;
-  --stone-100: #f2efeb;
-  --stone-120: #f0ece6; /* v4.1 — the window canvas rows sit on */
-  --stone-140: #e9e3d9; /* v4.1 — inert control wells */
-  --stone-150: #eae5df;
-  --stone-160: #e7e0d5; /* v4.1 — dividers and subtle edges */
-  --stone-165: #e7ddd3; /* «14» content icons, exact Dark stroke */
-  --stone-175: #ebe6df;
-  --stone-200: #e0dad2;
-  --stone-225: #ded8d0;
-  --stone-240: #ddd5c9; /* v4.1 — the hairline that gives a row its edge */
-  --stone-300: #cec5ba;
-  --stone-400: #b0a596;
-  --stone-500: #8f8275;
-  --stone-550: #766d65;
-  --stone-575: #6f665b; /* v4.1 — tertiary ink, AA on the deeper canvas */
-  --stone-600: #6b6054;
-  --stone-650: #5c5349; /* v4.1 — secondary ink, one clear step under primary */
-  --stone-700: #4d443a;
-  --stone-725: #4a382b;
-  --stone-800: #342d26;
-  --stone-850: #2a2420;
-  --stone-900: #1e1a17;
-  --stone-950: #110f0d;
-
-  /* Neutral Dark surfaces — intentionally graphite, not the retired brown
-     large-surface palette. */
-  --graphite-40: #f6f4f1; /* v4.1 — primary ink, step-matched to Light */
-  --graphite-50: #f4f2ef;
-  --graphite-300: #b9b4ae;
-  --graphite-320: #b6b1aa; /* v4.1 — secondary ink */
-  --graphite-400: #98928b;
-  --graphite-420: #9a948c; /* v4.1 — tertiary ink */
-  --graphite-600: #3a3b3f;
-  --graphite-620: #3d3f45; /* v4.1 — the hairline that gives a row its edge */
-  --graphite-650: #303136;
-  --graphite-660: #303237; /* v4.1 — dividers and subtle edges */
-  --graphite-700: #292a2e;
-  --graphite-750: #27282c;
-  --graphite-780: #2e3035; /* v4.1 — inert control wells */
-  --graphite-800: #222326;
-  --graphite-810: #2a2c31; /* v4.1 — row hover, one step above the row */
-  --graphite-820: #282a2e; /* v4.1 — elevated plane */
-  --graphite-825: #202125;
-  --graphite-840: #212327; /* v4.1 — the raised row/card plane */
-  --graphite-850: #202124;
-  --graphite-860: #1e1f22; /* v4.1 — opaque base plane */
-  --graphite-875: #1d1e21;
-  --graphite-880: #1a1b1e; /* v4.1 — recessed input well */
-  --graphite-890: #1a1c1e; /* v4.1 — recessed tertiary plane */
-  --graphite-900: #17181a;
-  --graphite-925: #141517; /* v4.1 — the window canvas rows sit on */
-  --warm-dark-selected: #3a2a20;
-
-  /* Status */
-  --indigo-50: #f0f1f8;
-  --indigo-100: #dddff0;
-  --indigo-200: #b8bce1;
-  --indigo-300: #8e94ce;
-  --indigo-400: #6a72bb;
-  --indigo-500: #4e56a0;
-  --indigo-600: #3e4580;
-  --indigo-700: #303562;
-  --indigo-800: #232746;
-  --indigo-900: #171a2f;
-  --indigo-950: #0d0f1c;
-  --green-400: #5cb37a;
-  --green-500: #3d9960;
-  --green-600: #2b7045; /* v4.1 — regains AA against the deeper Light canvas */
-  --red-400: #d46b6b;
-  --red-500: #c04e4e;
-  --red-600: #a33c3c;
-  --amber-400: #d9a641;
-  --amber-500: #c4902c;
-  --amber-600: #a57724;
-
-  /* Alpha and native-system primitives. */
-  --overlay-selected-light: rgba(196, 112, 75, 0.2);
-  --overlay-selected-dark: rgba(212, 133, 90, 0.42);
-  --overlay-ink-subtle: rgba(30, 26, 23, 0.055);
-  --overlay-white-subtle: rgba(255, 255, 255, 0.06);
-  --system-stoplight-close: #ff5f56;
-  --system-stoplight-minimize: #ffbd2e;
-  --system-stoplight-zoom: #27c93f;
-  --system-control-tint: #0868e8;
-  --system-destructive: #ff383c;
-
-  /* ─── Semantic colour — LIGHT ──────────────────────────────────────────
-     «04 — Foundations & Variables» semantic token table, confirmed value for
-     value by the «09 — Light & Dark» comparison table.                      */
-
-  /* The surface ladder. v4.1 deepened the canvas and lifted the row plane so a
-     row reads as a card sitting ON the window instead of dissolving into it:
-     canvas → row is now 1.15:1 in Light and 1.16:1 in Dark — the SAME
-     perceived step in both appearances, where it used to be ~1.06:1. */
-  --color-bg-primary: var(--stone-0);
-  --color-bg-secondary: var(--stone-120);
-  --color-bg-tertiary: var(--stone-45);
-  --color-bg-elevated: var(--stone-0);
-  --color-bg-hover: var(--stone-85);
-  --color-bg-selected: var(--terracotta-80);
-  --color-bg-brand: var(--terracotta-500);
-  --color-bg-accent: var(--indigo-500);
-  --color-bg-row: var(--stone-15);
-  --color-bg-field: var(--stone-0);
-  --color-bg-control: var(--stone-140);
-
-  /* Four ink levels. The RATIO between levels — not the absolute value — is
-     what both appearances hold constant. */
-  --color-text-primary: var(--stone-900);
-  --color-text-secondary: var(--stone-650);
-  --color-text-tertiary: var(--stone-575);
-  --color-text-inverse: var(--stone-0);
-  --color-text-brand: var(--terracotta-700);
-  --color-text-accent: var(--indigo-600);
-  --color-text-link: var(--indigo-600);
-  --color-text-on-accent: var(--stone-900);
-  --color-text-on-system-tint: var(--stone-0);
-  --color-text-credit: var(--stone-725);
-
-  --color-border-default: var(--stone-240);
-  --color-border-subtle: var(--stone-160);
-  --color-border-strong: var(--stone-500);
-  --color-border-brand: var(--terracotta-500);
-  --color-border-focus: var(--indigo-500);
-  --color-border-divider: var(--stone-160);
-  --color-border-selected: var(--terracotta-500);
-  --color-border-selected-soft: var(--overlay-selected-light);
-
-  --color-icon-primary: var(--stone-900);
-  --color-icon-secondary: var(--stone-600);
-  --color-icon-brand: var(--terracotta-500);
-  --color-content-type-icon: var(--stone-700);
-  --color-status-success: var(--green-600);
-  --color-status-error: var(--red-600);
-  --color-status-warning: var(--amber-600);
-
-  --color-interactive-primary: var(--terracotta-500);
-  --color-interactive-primary-hover: var(--terracotta-600);
-  --color-interactive-secondary: var(--stone-90);
-  --color-interactive-secondary-hover: var(--stone-175);
-
-  --color-fill-subtle: var(--overlay-ink-subtle);
-  --color-pinned: var(--terracotta-500);
-  --color-app-icon-start: var(--terracotta-500);
-  --color-app-icon-end: var(--terracotta-app-icon-end);
-  --color-app-icon-mark: var(--stone-0);
-  --color-focus-ring: var(--indigo-500);
-  --color-system-stoplight-close: var(--system-stoplight-close);
-  --color-system-stoplight-minimize: var(--system-stoplight-minimize);
-  --color-system-stoplight-zoom: var(--system-stoplight-zoom);
-  --color-system-control-tint: var(--system-control-tint);
-  --color-system-destructive: var(--system-destructive);
-
-  /* ─── Spacing — «04», φ scale from a 13px base ─────────────────────────── */
-  --space-2xs: 2px;
-  --space-xs: 4px;
-  --space-sm: 6px;
-  --space-md: 8px;
-  --space-lg: 13px; /* الأساس — the base step */
-  --space-xl: 21px;
-  --space-2xl: 34px;
-  --space-3xl: 55px;
-  --space-4xl: 89px;
-
-  /* Component geometry primitives. These mirror the Figma `size/*` values;
-     production components consume the semantic `--metric-*` aliases below. */
-  --size-12: 12px;
-  --size-20: 20px;
-  --size-30: 30px;
-  --size-32: 32px;
-  --size-56: 56px;
-  --size-68: 68px;
-
-  /* Production geometry — optical macOS sizes, not presentation-frame
-     measurements. Centralising these prevents each screen from drifting into
-     its own density system.
-
-     «04» also declared five `space/*` purpose aliases (panel-padding,
-     item-gap, section-gap, inline-gap, content-padding). They were retired on
-     2026-08-12: nothing consumed them, and `space/panel-padding` claimed a
-     13px outer margin while the approved «08» master gutters the panel at
-     18px. A token that names a purpose it does not govern invites someone to
-     "correct" the panel to a value the design never asked for.               */
-  --metric-panel-inline: 18px;
-  /* Width of the clipboard list's classic scrollbar. It consumes layout width,
-     so the list subtracts it from the inline-end gutter to stay on the grid. */
-  --metric-list-scrollbar: 6px;
-  --metric-row-inline: var(--size-12);
-  --metric-row-block: var(--space-sm);
-  --metric-row-min-height: var(--size-56);
-  --metric-row-action: var(--size-32);
-  --metric-row-actions-gap: var(--space-xs);
-  /* v4.1 — the action cluster's own width. It is NO LONGER a reserved grid
-     column: the cluster is an overlay on the row's inline-end, so this width
-     costs the content nothing at rest. See `.row-actions` in panel.css. */
-  --metric-row-actions-inline: var(--size-68);
-  /* How far the fade in front of the revealed cluster runs, so content slides
-     under it instead of colliding with it. */
-  --metric-row-actions-scrim: var(--space-2xl);
-  --metric-control-height: 30px;
-  --metric-control-height-sm: 28px;
-  --metric-icon-chip: 24px;
-  /* «14» uses a 24px component canvas around 20px optical artwork. The row's
-     existing 32px slot supplies the outer alignment without scaling the SVG. */
-  --metric-content-type-slot-inline: var(--size-32);
-  --metric-content-type-glyph: var(--size-20);
-
-  /* ─── Radius — «04» ───────────────────────────────────────────────────── */
-  --radius-none: 0px;
-  --radius-sm: 4px; /* controls / أزرار */
-  --radius-md: 8px; /* default / افتراضي */
-  --radius-lg: 12px; /* cards / بطاقات */
-  --radius-xl: 16px; /* panels / ألواح */
-  --radius-2xl: 20px; /* sheets / الحوارات */
-  --radius-full: 9999px; /* pills / دائرية */
-  --radius-control: 6px; /* macOS kit Button/Radius */
-
-  /* ─── Elevation — «04» ────────────────────────────────────────────────── */
-  /* v4.1 — the row's own micro-lift. Depth in Light comes from tone + hairline
-     + this, never from saturation. Dark overrides it below. */
-  --elev-row: 0 1px 1px rgba(30, 26, 23, 0.045);
-  --elev-1: 0 1px 1.5px rgba(0, 0, 0, 0.04); /* raised — default cards */
-  --elev-2: 0 6px 6px rgba(0, 0, 0, 0.08); /* floating — clipboard & tools */
-  --elev-3: 0 12px 12px rgba(0, 0, 0, 0.11); /* overlay — panels & menus */
-  /* The window drop shadow the product screens mock. Identical in both
-     appearances («09»). Windows get this from macOS itself; the token exists
-     for in-page surfaces that must match. */
-  --elev-window: 0 12px 24px rgba(0, 0, 0, 0.15);
-  /* The canonical app icon's in-product drop shadow. Tinted with the brand
-     instead of black, and unchanged in dark. */
-  --elev-appicon: 0 8px 8px rgba(196, 112, 75, 0.25);
-
-  /* ─── Typography — «03», φ scale from a 13px baseline ─────────────────── */
-  --font-ar: 'Cairo', -apple-system, 'SF Arabic', system-ui, sans-serif;
-  --font-latin: 'Almarai', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
-  --font-mixed: 'Raff Mixed', 'Cairo', 'Almarai', system-ui, sans-serif;
-
-  --text-micro: 9px;
-  --text-display-1: 55px;
-  --text-display-2: 34px;
-  --text-title-1: 28px;
-  --text-title-2: 21px;
-  --text-title-3: 17px;
-  --text-subhead: 15px;
+  /* Type scale */
+  --text-title: 15px;
   --text-body: 13px;
+  --text-small: 12px;
   --text-caption: 11px;
+  --leading: 1.5;
 
-  --leading-display-1: 64px;
-  --leading-display-2: 42px;
-  --leading-title-1: 36px;
-  --leading-title-2: 28px;
-  --leading-title-3: 24px;
-  --leading-subhead: 20px;
-  --leading-body: 18px;
-  --leading-caption: 15px;
-  --leading-micro: 12px;
+  /* Surfaces */
+  --bg-window: #f8f6f3;
+  --bg-canvas: #f0ede8;
+  --bg-raised: #fdfcfa;
+  --bg-sunken: rgba(28, 25, 23, 0.06);
+  --bg-glass: rgba(248, 246, 243, 0.8);
+  --bg-hover: rgba(28, 25, 23, 0.05);
+  --bg-selected: rgba(124, 140, 120, 0.18);
+  --bg-overlay: rgba(28, 25, 23, 0.28);
 
-  --tracking-display-1: -0.01em;
-  --tracking-display-2: -0.005em;
+  /* Lines */
+  --line: rgba(28, 25, 23, 0.08);
+  --line-strong: #d6d0c8;
 
-  /* ─── Decorative weight ──────────────────────────────────────────────────
-     Visual weight is a semantic property, not a per-appearance accident. A
-     decorative brand motif (currently: the empty-shelf bars) must rank BELOW
-     primary/secondary text in both appearances — but an identical opacity on
-     an identical warm hue does not produce an identical rank, because a
-     saturated colour gains contrast against a near-black Dark canvas far
-     faster than the same colour does against a pale Light one. v4.1 — added
-     2026-08-13 for exactly one consumer so far; a future decorative-only
-     motif should reuse this rather than inventing a sibling token. */
-  --opacity-motif: 1;
+  /* Ink */
+  --ink: #1c1917;
+  --ink-2: #57524c;
+  --ink-3: #6d665f;
+  --ink-disabled: #afa89f;
 
-  /* ─── Motion ──────────────────────────────────────────────────────────────
-     «04» defines no motion tokens. These are the minimum needed for the
-     interaction states «07 — Patterns & States» documents, kept deliberately
-     short so the panel never feels laggy on open. */
-  --t-fast: 90ms;
-  --t-base: 150ms;
-  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  /* Accent — sage. `--accent` fills, `--accent-ink` writes. */
+  --accent: #5e6e5b;
+  --accent-hover: #4f5e4c;
+  --accent-ink: #56664f;
+  --accent-soft: #e3e8e0;
+  --on-accent: #ffffff;
+  --brand-sage: #7c8c78;
+
+  --danger: #a8432f;
+  --danger-soft: #f4e2dc;
+  --success: #4f6b4a;
+  --success-soft: #e3ebe0;
+  --focus: rgba(124, 140, 120, 0.55);
+
+  --toggle-off: #d6d0c8;
+  --knob: #ffffff;
+
+  /* Geometry */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-panel: 16px;
+
+  --shadow-float: 0 1px 2px rgba(28, 25, 23, 0.08), 0 12px 32px rgba(28, 25, 23, 0.12);
+  --shadow-control: 0 1px 1px rgba(28, 25, 23, 0.06);
+
+  /* Motion */
+  --t-fast: 120ms;
+  --t-base: 180ms;
+  --ease: cubic-bezier(0.2, 0, 0, 1);
 }
 
 :root[data-appearance='dark'] {
   color-scheme: dark;
 
-  /* Dark mode deliberately neutralises large surfaces. Raff's warm identity
-     now lives in selection, focus and brand details instead of coating the
-     whole window in brown. */
-  /* Same ladder, same steps — only the lighting changes. "Raised" still means
-     "lighter" here, so the mental model does not invert between appearances.
-     Inputs are the one deliberate exception: a field is a well you type into,
-     so it recesses BELOW the canvas in Dark exactly as it rises above it in
-     Light — the role (a distinct, non-card surface) is preserved either way. */
-  --color-bg-primary: var(--graphite-860);
-  --color-bg-secondary: var(--graphite-925);
-  --color-bg-tertiary: var(--graphite-890);
-  --color-bg-elevated: var(--graphite-820);
-  --color-bg-hover: var(--graphite-810);
-  --color-bg-selected: var(--warm-dark-selected);
-  --color-bg-brand: var(--terracotta-400);
-  --color-bg-accent: var(--indigo-200);
-  --color-bg-row: var(--graphite-840);
-  --color-bg-field: var(--graphite-880);
-  --color-bg-control: var(--graphite-780);
+  --bg-window: #1c1a18;
+  --bg-canvas: #151412;
+  --bg-raised: #242220;
+  --bg-sunken: rgba(240, 237, 232, 0.07);
+  --bg-glass: rgba(28, 26, 24, 0.74);
+  --bg-hover: rgba(240, 237, 232, 0.06);
+  --bg-selected: rgba(154, 170, 149, 0.2);
+  --bg-overlay: rgba(0, 0, 0, 0.45);
 
-  --color-text-primary: var(--graphite-40);
-  --color-text-secondary: var(--graphite-320);
-  --color-text-tertiary: var(--graphite-420);
-  --color-text-inverse: var(--stone-900);
-  --color-text-brand: var(--terracotta-300);
-  --color-text-accent: var(--indigo-200);
-  --color-text-link: var(--indigo-200);
-  --color-text-on-accent: var(--stone-900);
-  --color-text-on-system-tint: var(--stone-0);
-  --color-text-credit: var(--graphite-300);
+  --line: rgba(240, 237, 232, 0.09);
+  --line-strong: #3d3935;
 
-  --color-border-default: var(--graphite-620);
-  --color-border-subtle: var(--graphite-660);
-  --color-border-strong: var(--stone-600);
-  --color-border-brand: var(--terracotta-400);
-  --color-border-focus: var(--indigo-200);
-  --color-border-divider: var(--graphite-660);
-  --color-border-selected: var(--terracotta-400);
-  --color-border-selected-soft: var(--overlay-selected-dark);
+  --ink: #f0ede8;
+  --ink-2: #b5aea6;
+  --ink-3: #8c857d;
+  --ink-disabled: #57524c;
 
-  --color-icon-primary: var(--graphite-50);
-  --color-icon-secondary: var(--graphite-300);
-  --color-icon-brand: var(--terracotta-400);
-  --color-content-type-icon: var(--stone-165);
-  --color-status-success: var(--green-400);
-  --color-status-error: var(--red-400);
-  --color-status-warning: var(--amber-400);
+  --accent: #9aaa95;
+  --accent-hover: #aebda9;
+  --accent-ink: #a8b8a3;
+  --accent-soft: #262c25;
+  --on-accent: #141612;
+  --brand-sage: #9aaa95;
 
-  --color-interactive-primary: var(--terracotta-400);
-  --color-interactive-primary-hover: var(--terracotta-500);
-  --color-interactive-secondary: var(--graphite-700);
-  --color-interactive-secondary-hover: var(--graphite-600);
+  --danger: #e08a76;
+  --danger-soft: #3a221d;
+  --success: #9cc096;
+  --success-soft: #1f2a1e;
+  --focus: rgba(154, 170, 149, 0.6);
 
-  --color-fill-subtle: var(--overlay-white-subtle);
-  /* v4.1: `pinned` was the one brand-carrying role that never joined the dark
-     ramp — every sibling (bg/border/icon/interactive) steps to terracotta-400
-     in Dark while this stayed at 500, so a pinned marker read dimmer in Dark
-     than the selection it sits beside. */
-  --color-pinned: var(--terracotta-400);
-  /* Dark app-icon construction is a genuine, different treatment — a deep
-     neutral brown, not a darker terracotta — matching the real approved
-     Figma master (COMPONENT_SET 157:102, Mode=Dark) promoted 2026-08-12. Was
-     previously mode-invariant (same value as Light) because no dark master
-     existed at all. */
-  --color-app-icon-start: var(--terracotta-app-icon-dark-bg-start);
-  --color-app-icon-end: var(--terracotta-app-icon-dark-bg-end);
-  --color-app-icon-mark: var(--terracotta-app-icon-mark-dark);
-  --color-focus-ring: var(--indigo-200);
-  --color-system-stoplight-close: var(--system-stoplight-close);
-  --color-system-stoplight-minimize: var(--system-stoplight-minimize);
-  --color-system-stoplight-zoom: var(--system-stoplight-zoom);
-  --color-system-control-tint: var(--system-control-tint);
-  --color-system-destructive: var(--system-destructive);
+  --toggle-off: #3d3935;
+  --knob: #f0ede8;
 
-  /* Elevation shadows need more weight on a dark surface to read at all. */
-  --elev-row: 0 1px 2px rgba(0, 0, 0, 0.32);
-  --elev-1: 0 1px 1.5px rgba(0, 0, 0, 0.3);
-  --elev-2: 0 6px 6px rgba(0, 0, 0, 0.38);
-  --elev-3: 0 12px 12px rgba(0, 0, 0, 0.45);
-
-  /* Solved, not guessed: at 1 the empty-shelf bars (--terracotta-400 on the
-     Dark canvas) contrast 6.35:1 — LOUDER than --text-secondary's own
-     8.58:1, reversing the intended rank. 0.6 brings the composited bar to
-     ~3.1:1, the same rank the Light bars hold against --text-secondary's
-     6.4:1 (3.09:1). See the full derivation in panel.css beside
-     `.state-art.shelf-illustration`. */
-  --opacity-motif: 0.6;
+  --shadow-float: 0 1px 2px rgba(0, 0, 0, 0.4), 0 16px 40px rgba(0, 0, 0, 0.45);
+  --shadow-control: 0 1px 1px rgba(0, 0, 0, 0.3);
 }
-
-/* ─── Reset & shared base ─────────────────────────────────────────────────── */
 
 *,
 *::before,
@@ -572,22 +124,14 @@
 html,
 body {
   margin: 0;
-  padding: 0;
-  height: 100%;
-}
-
-body {
   font-family: var(--font-ar);
   font-size: var(--text-body);
-  line-height: var(--leading-body);
-  color: var(--color-text-primary);
-  background: var(--color-bg-secondary);
+  line-height: var(--leading);
+  color: var(--ink);
   -webkit-font-smoothing: antialiased;
-  text-rendering: optimizeLegibility;
-  overflow: hidden;
-  cursor: default;
   -webkit-user-select: none;
   user-select: none;
+  cursor: default;
 }
 
 button,
@@ -595,82 +139,55 @@ input,
 select {
   font: inherit;
   color: inherit;
-  margin: 0;
 }
 
 button {
-  border: 0;
-  background: none;
-  padding: 0;
   cursor: default;
 }
 
-/* Original Figma SVG exports are consumed as masks so their geometry stays
-   untouched while semantic state colour remains controlled by the component.
-   WebKit's prefixed form covers the macOS WKWebView versions Raff supports. */
-.figma-icon {
-  display: inline-block;
-  width: 1em;
-  height: 1em;
-  flex: none;
-  background-color: currentColor;
-  -webkit-mask-image: var(--figma-icon);
-  -webkit-mask-position: center;
-  -webkit-mask-repeat: no-repeat;
-  -webkit-mask-size: contain;
-  mask-image: var(--figma-icon);
-  mask-position: center;
-  mask-repeat: no-repeat;
-  mask-size: contain;
-}
-
-/* Keep the familiar 12px macOS stoplight while giving its custom close
-   action a 24px pointer target. Negative margins preserve the native visual
-   spacing and title centring in all three windows. */
-button.dot-close {
-  position: relative;
-  width: 24px;
-  height: 24px;
-  margin: -6px;
-  border-radius: var(--radius-full);
-  background: transparent;
-}
-
-button.dot-close::before {
-  content: '';
-  position: absolute;
-  inset: 6px;
-  border-radius: 50%;
-  background: var(--color-system-stoplight-close);
-}
-
-/* v4.1 root-cause fix: this rule used to also set `border-radius: --radius-sm`,
-   which MUTATED THE GEOMETRY of every focusable control the moment it received
-   keyboard focus — the pill switch squared off, tabs and buttons shrank their
-   corners, and rounded surfaces visibly changed shape mid-interaction. A focus
-   style must describe the ring, never the element. WebKit already draws the
-   outline along each element's own border-radius, so nothing is lost by
-   removing it and every control now keeps its shape while focused. */
 :focus-visible {
-  outline: 2px solid var(--color-focus-ring);
+  outline: 2px solid var(--focus);
   outline-offset: 2px;
 }
 
-/* Latin runs, numerals and macOS modifier glyphs are Almarai and must never be
-   reordered by the bidi algorithm inside an RTL line. */
+[hidden] {
+  display: none !important;
+}
+
 .latin,
+.is-latin,
 kbd {
   font-family: var(--font-latin);
-  direction: ltr;
-  unicode-bidi: isolate;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Mask icon: one geometry, colour comes from `currentColor`. */
+.icon {
+  display: inline-block;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  background-color: currentColor;
+  -webkit-mask: var(--icon) center / contain no-repeat;
+  mask: var(--icon) center / contain no-repeat;
 }
 
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
+    transition-duration: 0ms !important;
+    animation-duration: 0ms !important;
   }
 }

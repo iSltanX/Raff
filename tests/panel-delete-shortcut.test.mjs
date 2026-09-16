@@ -71,8 +71,9 @@ test('delete shortcut: ⌘⌫ removes the selected item', async (t) => {
       hint.querySelector('.shortcut-label')?.textContent,
     ]);
 
-  await t.test('idle content exposes only Search and Settings', () => {
+  await t.test('idle content exposes quick paste, Search and Settings', () => {
     assert.deepEqual(shortcutPairs(), [
+      ['⌘1–9', 'لصق سريع'],
       ['⌘F', 'بحث'],
       ['⌘,', 'الإعدادات'],
     ]);

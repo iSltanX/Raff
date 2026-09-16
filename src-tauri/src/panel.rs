@@ -14,11 +14,9 @@ use crate::storage::PanelPlacement;
 use crate::{macos, AppState};
 
 pub const PANEL_LABEL: &str = "panel";
-/// Production width after optical QA at normal macOS scale. The 360px Figma
-/// frame documents hierarchy, not a usable physical width for real clipboard
-/// content. MUST stay in sync with `app.windows[0].width` in tauri.conf.json.
-const PANEL_WIDTH: f64 = 560.0;
-const PANEL_HEIGHT: f64 = 640.0;
+/// MUST stay in sync with `app.windows[0]` in tauri.conf.json.
+const PANEL_WIDTH: f64 = 460.0;
+const PANEL_HEIGHT: f64 = 540.0;
 const PANEL_EDGE_MARGIN: f64 = 12.0;
 /// NSWindowStyleMaskNonActivatingPanel — the panel can become key (receive
 /// keyboard) without activating the app that owns it.
@@ -42,6 +40,10 @@ static PLACEMENT_DEBOUNCE: OnceLock<Mutex<Option<std::sync::mpsc::Sender<()>>>> 
 /// for is undone in the same gesture, so the click appears to do nothing
 /// (or a second click is needed to see any visible effect at all).
 static LAST_RESIGN_HIDE_MS: AtomicU64 = AtomicU64::new(0);
+/// Whether the panel is presented to the user. The window itself stays
+/// ordered in (fully transparent and click-through) while "hidden" — see
+/// `present` / `conceal` — so AppKit's `isVisible` no longer answers this.
+static SHOWN: AtomicBool = AtomicBool::new(false);
 /// Comfortably above the AppKit resign-key -> Tauri click-up delivery gap
 /// (single-digit to low double-digit milliseconds in practice), while short
 /// enough that a deliberate, separate reopen click — which takes a human
@@ -110,13 +112,8 @@ pub fn init(app: &AppHandle) -> tauri::Result<()> {
         .get_webview_window(PANEL_LABEL)
         .expect("panel window missing from tauri.conf.json");
 
-    // No vibrancy: the product panel is an opaque semantic surface with a
-    // 1px border and a 16px radius in both appearances,
-    // all painted by CSS. A frosted NSVisualEffectView underneath would only
-    // be visible at the corners, where its own radius never matched the CSS
-    // shell's. The window stays `transparent: true` so the rounded CSS corners
-    // are not clipped by a square opaque backing, and macOS draws the window
-    // shadow the design mocks as `0 12px 24px rgba(0,0,0,.15)`.
+    // The native popover material (tauri.conf.json `windowEffects`, 16pt
+    // radius) sits under a translucent CSS surface of the same radius.
     let panel = window.to_panel()?;
     panel.set_level(PANEL_LEVEL);
     panel.set_style_mask(STYLE_MASK_NON_ACTIVATING_PANEL);
@@ -145,7 +142,47 @@ pub fn init(app: &AppHandle) -> tauri::Result<()> {
         }
     }));
     panel.set_delegate(delegate);
+
+    // Keep the web content live between openings. An ordered-out window makes
+    // WebKit suspend its content process; on macOS 27 the resumed process does
+    // not composite again until some unrelated event arrives, so the panel
+    // opened blank and only "appeared" after the next click. Instead the panel
+    // stays ordered in, transparent and click-through, and WebKit is told not
+    // to throttle it for being occluded. Opening is then a single alpha change.
+    let _ = window.with_webview(|webview| unsafe {
+        let view = webview.inner() as *mut objc2::runtime::AnyObject;
+        if view.is_null() {
+            return;
+        }
+        let selector = objc2::sel!(_setWindowOcclusionDetectionEnabled:);
+        let responds: bool = objc2::msg_send![view, respondsToSelector: selector];
+        if responds {
+            let _: () = objc2::msg_send![view, _setWindowOcclusionDetectionEnabled: false];
+        }
+    });
+    conceal(&panel);
+    panel.order_front_regardless();
     Ok(())
+}
+
+/// Presents the (already ordered-in) panel and gives it keyboard focus.
+fn present(panel: &tauri_nspanel::raw_nspanel::RawNSPanel) {
+    panel.set_ignore_mouse_events(false);
+    panel.set_alpha_value(1.0);
+    panel.show();
+    SHOWN.store(true, Ordering::Release);
+}
+
+/// Hides the panel without ordering it out: transparent, click-through, and
+/// no longer key, so keystrokes return to the app underneath.
+fn conceal(panel: &tauri_nspanel::raw_nspanel::RawNSPanel) {
+    SHOWN.store(false, Ordering::Release);
+    panel.set_alpha_value(0.0);
+    panel.set_ignore_mouse_events(true);
+    // orderOut drops key status; ordering straight back in keeps the window on
+    // screen (invisible) so WebKit never suspends it.
+    panel.order_out(None);
+    panel.order_front_regardless();
 }
 
 /// Shows the panel at its last safe origin, or centred on first launch, while
@@ -167,7 +204,7 @@ pub fn show(app: &AppHandle) {
             PLACEMENT_READY.store(true, Ordering::Release);
         }
         if let Ok(panel) = handle.get_webview_panel(PANEL_LABEL) {
-            panel.show();
+            present(&panel);
             crate::startup_trace::mark("PANEL_VISIBLE");
         }
         let _ = handle.emit_to(PANEL_LABEL, "panel://shown", ());
@@ -207,8 +244,8 @@ pub fn hide(app: &AppHandle) {
     let handle = app.clone();
     on_main(move || {
         if let Ok(panel) = handle.get_webview_panel(PANEL_LABEL) {
-            if panel.is_visible() {
-                panel.order_out(None);
+            if SHOWN.load(Ordering::Acquire) {
+                conceal(&panel);
             }
         }
     });
@@ -221,8 +258,8 @@ pub fn toggle(app: &AppHandle) {
             Ok(panel) => panel,
             Err(_) => return show(&handle),
         };
-        if panel.is_visible() {
-            panel.order_out(None);
+        if SHOWN.load(Ordering::Acquire) {
+            conceal(&panel);
             return;
         }
         // The panel is already hidden. If that happened moments ago because
@@ -354,7 +391,7 @@ mod tests {
             width: 1440.0,
             height: 875.0,
         };
-        assert_eq!(centered_origin((560.0, 640.0), area), (440.0, 142.5));
+        assert_eq!(centered_origin((460.0, 540.0), area), (490.0, 192.5));
     }
 
     #[test]

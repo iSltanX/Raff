@@ -1,444 +1,270 @@
-/* ===========================================================================
-   The floating panel — Figma «08/09» translated to a real macOS utility.
-     Production window: 560 × 640 (fixed, draggable from the header)
-     screen ٢  search active      2:7791
-     screen ٣  empty shelf        2:7880
-   Every value here comes from those nodes; colours resolve through tokens.css.
-   =========================================================================== */
+/* The floating panel — 460 × 540, glass over the native popover material. */
 
-/* The NSPanel is transparent so the 16px corners are not clipped by a square
-   opaque backing; macOS draws the window shadow around what we paint. */
+html,
 body {
+  height: 100%;
+  overflow: hidden;
   background: transparent;
 }
 
 .panel {
-  /* The utility chrome is a viewport surface, never document content. Keeping
-     it fixed makes WebKit focus/AX scroll requests incapable of shifting the
-     header or filters out of the native window. Only `.items-list` scrolls. */
-  position: fixed;
-  inset: 0;
+  position: relative;
   display: flex;
   flex-direction: column;
-  height: 100%;
+  height: 100vh;
   overflow: hidden;
-  background: var(--color-bg-secondary);
-  border: 1px solid var(--color-border-default);
-  border-radius: var(--radius-xl);
-  box-shadow: inset 0 1px 0 var(--color-fill-subtle);
+  border-radius: var(--radius-panel);
+  background: var(--bg-glass);
+  box-shadow: inset 0 0 0 0.5px var(--line);
 }
 
-/* ─── Header (2:7685) ─────────────────────────────────────────────────────── */
+/* ─── Header: search owns the row ─────────────────────────────────────── */
 
 .panel-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  min-height: 62px;
-  padding: 16px var(--metric-panel-inline) 14px;
-  border-bottom: 1px solid var(--color-border-divider);
-  /* Physical order: traffic lights left, brand centre, gear right. macOS
-     window chrome does not mirror — «10 — RTL & Accessibility». */
-  direction: ltr;
-  flex: none;
+  gap: 4px;
+  padding: 12px 12px 8px;
 }
 
-.window-controls {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-}
-
-.dot {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  flex: none;
-}
-
-.dot-close {
-  background: var(--color-system-stoplight-close);
-}
-.dot-min {
-  background: var(--color-system-stoplight-minimize);
-}
-.dot-zoom {
-  background: var(--color-system-stoplight-zoom);
-}
-
-.brand {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  direction: rtl;
-}
-
-/* Colour rides the MARK, not the word. v4.0 set the wordmark ExtraBold 17 in
-   terracotta, which made the app's own name the highest-contrast object on a
-   screen whose subject is the user's content. «08» renders it at body size in
-   neutral ink beside a brand-coloured mark — identity without competition. */
-.brand-name {
-  font-family: var(--font-ar);
-  font-weight: 700;
-  font-size: var(--text-subhead);
-  line-height: var(--leading-subhead);
-  color: var(--color-text-primary);
-}
-
-.brand-mark {
-  display: flex;
-  width: 24px;
-  height: 18px;
-  align-items: center;
-  justify-content: center;
-  color: var(--color-interactive-primary);
-}
-
-.brand-mark .figma-icon {
-  width: 24px;
-  height: 16px;
-  display: block;
-}
-
-.header-actions {
-  display: flex;
-  align-items: center;
-}
-
-.action-btn {
-  display: flex;
-  width: 30px;
-  height: 30px;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-control);
-  background: var(--color-fill-subtle);
-  color: var(--color-text-primary);
-  transition: background var(--t-fast) var(--ease-standard);
-}
-
-.action-btn:hover {
-  background: var(--color-bg-hover);
-  color: var(--color-interactive-primary);
-}
-
-.action-btn .figma-icon {
-  width: 16px;
-  height: 16px;
-  display: block;
-}
-
-/* ─── Search (2:7700) ─────────────────────────────────────────────────────── */
-
-.search-container {
-  padding: 12px var(--metric-panel-inline) 8px;
-  flex: none;
-}
-
-/* RTL reading order — magnifier trailing (right), clear control leading (left)
-   — «06 — Components», Search Bar. */
 .search-field {
   display: flex;
+  flex: 1;
   align-items: center;
-  gap: 9px;
+  gap: 8px;
   height: 36px;
-  padding: 0 11px;
-  border-radius: var(--radius-md);
-  background: var(--color-bg-field);
-  border: 1px solid var(--color-border-default);
-  transition:
-    border-color var(--t-fast) var(--ease-standard),
-    background var(--t-fast) var(--ease-standard);
+  padding: 0 10px;
+  border-radius: 10px;
+  background: var(--bg-sunken);
+  color: var(--ink-3);
+  transition: box-shadow var(--t-fast) var(--ease);
 }
 
-/* The panel focuses this field on EVERY open, so `:focus-within` here is the
-   resting state of the whole product, not a focus event. v4.0 painted the full
-   2px indigo keyboard ring on it, which meant the single loudest colour in the
-   interface was permanently on, signalling nothing, and competing with the
-   terracotta identity for the eye's first fixation.
-   The focused field now reads "active" the macOS way — it lifts to the
-   elevated surface and firms its border. Indigo is reserved for focus the user
-   can actually MOVE (segments, buttons, row actions), where a ring carries
-   real information. Same treatment as Spotlight, which likewise ships no ring
-   on its always-focused field. */
 .search-field:focus-within {
-  background: var(--color-bg-elevated);
-  border-color: var(--color-border-strong);
-}
-
-.search-glyph {
-  display: flex;
-  color: var(--color-text-tertiary);
-  flex: none;
-  order: 1; /* RTL leading edge — the magnifier sits on the right */
-}
-
-.search-field:focus-within .search-glyph {
-  color: var(--color-text-secondary);
-}
-
-/* Figma «10 — RTL & Accessibility»: Indigo communicates keyboard focus;
-   Terracotta remains the brand/selection accent. Kept for every control focus
-   can travel to — the exception above is the field it never leaves. */
-.panel :focus-visible {
-  outline-color: var(--color-focus-ring);
-}
-
-.search-glyph .figma-icon {
-  width: 16px;
-  height: 16px;
-  display: block;
+  box-shadow: 0 0 0 2px var(--focus);
 }
 
 .search-input {
-  order: 2;
   flex: 1;
   min-width: 0;
+  height: 100%;
   border: 0;
-  background: none;
-  outline: none;
-  font-family: var(--font-ar);
+  outline: 0;
+  background: transparent;
   font-size: 14px;
-  line-height: 22px;
-  color: var(--color-text-primary);
-  /* Let a pasted Latin query read left-to-right without flipping the field. */
-  unicode-bidi: plaintext;
+  color: var(--ink);
   -webkit-user-select: text;
   user-select: text;
 }
 
 .search-input::placeholder {
-  color: var(--color-text-secondary);
-  opacity: 1;
+  color: var(--ink-3);
+}
+
+.search-clear,
+.icon-btn {
+  display: grid;
+  place-items: center;
+  flex: none;
+  border: 0;
+  background: transparent;
+  color: var(--ink-3);
 }
 
 .search-clear {
-  order: 3; /* RTL trailing edge — the clear control sits on the left */
-  display: flex;
-  width: 24px;
-  height: 24px;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-sm);
-  color: var(--color-text-tertiary);
-  flex: none;
+  width: 20px;
+  height: 20px;
 }
 
-.search-clear:hover {
-  color: var(--color-text-secondary);
-}
-
-.search-clear[hidden] {
-  display: none;
-}
-
-.search-clear .figma-icon {
+.search-clear .icon {
   width: 14px;
   height: 14px;
-  display: block;
 }
 
-/* ─── Filters (2:7710) ────────────────────────────────────────────────────── */
+.icon-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-md);
+  transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
+}
+
+.icon-btn:hover,
+.search-clear:hover {
+  background: var(--bg-hover);
+  color: var(--ink);
+}
+
+/* ─── Filters ─────────────────────────────────────────────────────────── */
 
 .filters {
   display: flex;
-  justify-content: center;
-  gap: var(--space-md);
-  padding: 4px var(--metric-panel-inline) 12px;
-  flex: none;
+  gap: 4px;
+  padding: 0 12px 8px;
 }
 
 .segment {
-  min-height: var(--metric-control-height-sm);
-  padding: 3px 12px;
-  border-radius: var(--radius-md);
+  height: 26px;
+  padding: 0 11px;
+  border: 0;
+  border-radius: 13px;
   background: transparent;
-  border: 1px solid transparent;
-  font-family: var(--font-ar);
+  font-size: var(--text-small);
   font-weight: 500;
-  font-size: 12px;
-  line-height: 20px;
-  color: var(--color-text-secondary);
-  white-space: nowrap;
-  transition:
-    background var(--t-fast) var(--ease-standard),
-    color var(--t-fast) var(--ease-standard);
+  color: var(--ink-2);
+  transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
 }
 
-.segment:hover:not(.is-active) {
-  background: var(--color-bg-hover);
-  border-color: var(--color-border-divider);
-  color: var(--color-text-primary);
+.segment:hover {
+  background: var(--bg-hover);
+  color: var(--ink);
 }
 
 .segment.is-active {
-  background: var(--color-bg-selected);
-  border-color: var(--color-border-selected-soft);
-  font-weight: 700;
-  color: var(--color-text-brand);
-  box-shadow: inset 0 -2px 0 var(--color-interactive-primary);
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+  font-weight: 600;
 }
 
-/* ─── Items list (2:7721) ─────────────────────────────────────────────────── */
+/* ─── List ────────────────────────────────────────────────────────────── */
 
 .items-list {
   flex: 1;
   min-height: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-sm);
-  /* The list shares the panel's single 18px content gutter with the search
-     field, the filters and the footer. Its scrollbar is a classic one that
-     consumes layout width, so the inline-end padding is short by exactly that
-     width, and `scroll` keeps the gutter reserved whether or not the list
-     currently overflows. Together these hold every row edge on the 18px grid
-     in both states — plain `auto` with symmetric padding puts rows 6px off it
-     the moment the list becomes scrollable. */
-  padding-block: 4px 12px;
-  padding-inline-start: var(--metric-panel-inline);
-  padding-inline-end: calc(var(--metric-panel-inline) - var(--metric-list-scrollbar));
-  overflow-y: scroll;
-  overflow-x: hidden;
+  padding: 2px 8px 8px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
-.items-list::-webkit-scrollbar {
-  /* Shares one token with the list's inline-end padding so the two can never
-     drift out of step and knock the rows off the gutter. */
-  width: var(--metric-list-scrollbar);
-}
-.items-list::-webkit-scrollbar-thumb {
-  background: var(--color-border-default);
-  border-radius: var(--radius-full);
-}
-.items-list::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-/* Clipboard row — ONE coherent object, complete at rest.
-   ---------------------------------------------------------------------------
-   RTL scan path (the eye enters from the right):
-       ① content-type icon   ② copied content   ③ contextual actions
-   Physical LTR order is therefore [ content | type ], with the action
-   cluster overlaid on the inline-end (left) edge and revealed on interaction.
-
-   v4.1: the approved Figma master (60:46) reserves a FIXED 68×32 "Row Actions"
-   frame in EVERY state and only toggles the two buttons' opacity — so an idle
-   row draws a permanent 68px hole that the RTL eye hits FIRST, before it ever
-   reaches the content. That is the defect being corrected here; the reserve is
-   gone and the cluster now floats over the row, so a resting row is whole and
-   the 68px returns to copied content. Figma is being synced to match.
-
-   `--row-surface` carries the row's current background so the reveal scrim can
-   never drift out of step with the state it is fading from. */
 .row {
-  --row-surface: var(--color-bg-row);
   position: relative;
-  direction: ltr;
-  display: grid;
-  grid-template-columns:
-    minmax(0, 1fr)
-    var(--metric-content-type-slot-inline);
+  display: flex;
   align-items: center;
-  column-gap: var(--space-md);
-  min-height: var(--metric-row-min-height);
-  padding: var(--metric-row-block) var(--metric-row-inline);
-  border-radius: var(--radius-lg);
-  /* Depth in Light comes from tone + hairline + a micro-lift, never from
-     saturation. The resting hairline is what stops a row dissolving into the
-     canvas the way the borderless v4.0 row did. */
-  border: 1px solid var(--color-border-subtle);
-  background: var(--row-surface);
-  box-shadow: var(--elev-row);
-  flex: none;
-  transition:
-    background var(--t-fast) var(--ease-standard),
-    border-color var(--t-fast) var(--ease-standard);
+  gap: 10px;
+  min-height: 44px;
+  padding: 6px 8px;
+  border-radius: 10px;
 }
 
-.row:hover:not(.selected) {
-  --row-surface: var(--color-bg-hover);
-  border-color: var(--color-border-default);
+.row:hover {
+  background: var(--bg-hover);
 }
 
 .row.selected {
-  --row-surface: var(--color-bg-selected);
-  border-color: var(--color-border-selected);
-  box-shadow:
-    var(--elev-row),
-    inset -3px 0 0 var(--color-border-selected);
+  background: var(--bg-selected);
 }
 
-/* Pinned is a STATE, not a permanently-parked button. The row carries a quiet
-   brand edge; the unpin control stays contextual like every other action. */
-.row.is-pinned:not(.selected) {
-  border-color: var(--color-border-selected-soft);
+.row-kind {
+  order: -1;
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex: none;
+  border-radius: var(--radius-md);
+  background: var(--bg-sunken);
+  color: var(--ink-2);
+}
+
+.row.selected .row-kind {
+  background: var(--bg-raised);
+  color: var(--accent-ink);
+}
+
+.row.is-pinned .row-kind {
+  color: var(--accent-ink);
+}
+
+.content-type-icon {
+  display: grid;
+  place-items: center;
+}
+
+.row-index {
+  position: absolute;
+  inset: 0;
+  display: none;
+  width: auto;
+  height: auto;
+  border-radius: var(--radius-md);
+  background: var(--accent);
+  font-size: var(--text-small);
+  color: var(--on-accent);
+}
+
+.panel.show-slots .row-index {
+  display: grid;
 }
 
 .row-preview {
-  width: 100%;
-  min-width: 0;
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  text-align: right;
+  flex: 1;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
 }
 
 .preview-title {
-  font-family: var(--font-ar);
-  font-weight: 500;
-  font-size: var(--text-body);
-  line-height: var(--leading-body);
-  color: var(--color-text-primary);
-  width: 100%;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
+  font-size: var(--text-body);
+  line-height: 20px;
+  white-space: nowrap;
   text-overflow: ellipsis;
-  overflow-wrap: anywhere;
+  unicode-bidi: plaintext;
+  text-align: right;
 }
 
 .preview-title.is-latin,
-.preview-title.is-code {
+.preview-title.is-code,
+.preview-title.is-link {
   font-family: var(--font-latin);
-  font-weight: 400;
-  direction: ltr;
-  text-align: left;
-}
-
-.preview-title.is-code {
-  font-family: var(--font-latin);
-  font-size: 12px;
-  line-height: var(--leading-body);
-}
-
-.preview-title.is-mixed {
-  font-family: var(--font-mixed);
-  unicode-bidi: plaintext;
 }
 
 .preview-title.is-link {
-  font-family: var(--font-latin);
-  font-weight: 400;
-  color: var(--color-text-brand);
+  color: var(--accent-ink);
   direction: ltr;
-  text-align: left;
-  font-size: var(--text-body);
-  line-height: var(--leading-body);
-  -webkit-line-clamp: 2;
-  word-break: break-all;
 }
 
-/* Production image thumbnail — 136×72 logical / 272×144 stored at 2x. */
+.preview-title.is-code {
+  font-size: var(--text-small);
+  color: var(--ink-2);
+}
+
+.row-time {
+  flex: none;
+  /* Same width as the two row actions that replace it on hover/selection. */
+  min-width: 56px;
+  text-align: left;
+  font-size: var(--text-caption);
+  color: var(--ink-3);
+  transition: opacity var(--t-fast) var(--ease);
+}
+
 .preview-thumb {
   position: relative;
-  width: 136px;
-  height: 72px;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--color-border-default);
-  overflow: hidden;
-  background: var(--color-bg-primary);
+  width: 64px;
+  height: 40px;
   flex: none;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  background: var(--bg-sunken);
+  box-shadow: inset 0 0 0 0.5px var(--line);
+}
+
+.preview-thumb img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  opacity: 0;
+  transition: opacity var(--t-base) var(--ease);
+}
+
+.preview-thumb[data-state='ready'] img {
+  opacity: 1;
 }
 
 .preview-thumb-placeholder {
@@ -446,111 +272,28 @@ body {
   inset: 0;
   display: grid;
   place-items: center;
-  color: var(--color-text-tertiary);
-  background: var(--color-bg-control);
-  transition: opacity var(--t-fast) var(--ease-standard);
-}
-
-.preview-thumb-placeholder .figma-icon {
-  width: 24px;
-  height: 24px;
-  opacity: 0.72;
-}
-
-.preview-thumb img {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  display: block;
-  opacity: 0;
-  transition: opacity var(--t-fast) var(--ease-standard);
+  color: var(--ink-3);
 }
 
 .preview-thumb[data-state='ready'] .preview-thumb-placeholder {
-  opacity: 0;
+  display: none;
 }
 
-.preview-thumb[data-state='ready'] img {
-  opacity: 1;
+.row[data-type='image'] .row-preview {
+  justify-content: space-between;
 }
 
-.preview-thumb[data-state='unavailable'] .preview-thumb-placeholder {
-  color: var(--color-text-tertiary);
-}
-
-.row-kind {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex: none;
-  width: var(--metric-content-type-slot-inline);
-  height: var(--metric-content-type-slot-inline);
-  direction: ltr;
-}
-
-/* «14 — App & Content Icons» content-type glyph. The 32px row slot preserves
-   existing alignment; the exact 20px Figma export supplies the optical art,
-   equivalent to its 24px component canvas with 2px internal padding. */
-.content-type-icon {
-  width: var(--metric-content-type-slot-inline);
-  height: var(--metric-content-type-slot-inline);
-  color: var(--color-content-type-icon);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex: none;
-}
-
-.content-type-icon .figma-icon {
-  width: var(--metric-content-type-glyph);
-  height: var(--metric-content-type-glyph);
-  display: block;
-}
-
-/* Figma Row / Action Button (77:603) geometry — two adjacent 32px controls,
-   4px apart, each retaining the exact 28px visual well and 16px exported
-   glyph — but mounted as an OVERLAY on the row's inline-end instead of a
-   reserved column, so a resting row never shows a hole where they will be.
-   Content simply slides under the fade when a row is long. */
+/* Actions float over the time slot; a resting row reserves no space. */
 .row-actions {
   position: absolute;
-  inset-inline-start: var(--metric-row-inline);
-  top: 50%;
-  transform: translateY(-50%);
-  display: grid;
-  grid-template-columns: repeat(2, var(--metric-row-action));
-  align-items: center;
-  gap: var(--metric-row-actions-gap);
-  width: var(--metric-row-actions-inline);
-  z-index: 1;
+  inset-inline-end: 8px;
+  display: flex;
+  gap: 2px;
   opacity: 0;
   pointer-events: none;
-  transition: opacity var(--t-fast) var(--ease-standard);
+  transition: opacity var(--t-fast) var(--ease);
 }
 
-/* The fade that integrates the cluster into the row instead of parking it on
-   an opaque block. It is painted from the row's CURRENT surface, so hover and
-   selected states can never leave a mismatched rectangle behind. */
-.row-actions::before {
-  content: '';
-  position: absolute;
-  inset-block: calc(-1 * var(--metric-row-block));
-  inset-inline-start: calc(-1 * var(--metric-row-inline));
-  inset-inline-end: calc(-1 * var(--metric-row-actions-scrim));
-  border-start-start-radius: var(--radius-lg);
-  border-end-start-radius: var(--radius-lg);
-  background: linear-gradient(
-    to right,
-    var(--row-surface) 0%,
-    var(--row-surface) 62%,
-    transparent 100%
-  );
-  z-index: -1;
-}
-
-/* Progressive disclosure: information at rest, actions on interaction.
-   The buttons stay in the tab order at rest (opacity, not visibility) so
-   keyboard users can reach them — focus-within then reveals the cluster. */
 .row:hover .row-actions,
 .row.selected .row-actions,
 .row:focus-within .row-actions {
@@ -558,514 +301,291 @@ body {
   pointer-events: auto;
 }
 
-/* A pinned row states its condition quietly at rest, in the same place the
-   controls will appear, and hands that space over the moment they do. */
-.row-pin-flag {
-  position: absolute;
-  inset-inline-start: var(--metric-row-inline);
-  top: 50%;
-  transform: translateY(-50%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: var(--metric-row-action);
-  height: var(--metric-row-action);
-  color: var(--color-pinned);
-  pointer-events: none;
-  transition: opacity var(--t-fast) var(--ease-standard);
-}
-
-.row-pin-flag .figma-icon {
-  width: 14px;
-  height: 14px;
-  display: block;
-}
-
-.row:hover .row-pin-flag,
-.row.selected .row-pin-flag,
-.row:focus-within .row-pin-flag {
+.row:hover .row-time,
+.row.selected .row-time,
+.row:focus-within .row-time {
   opacity: 0;
 }
 
 .row-action {
-  position: relative;
-  width: var(--metric-row-action);
-  height: var(--metric-row-action);
-  border-radius: var(--radius-full);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--color-text-tertiary);
-  flex: none;
-  transition:
-    opacity var(--t-fast) var(--ease-standard),
-    background var(--t-fast) var(--ease-standard),
-    color var(--t-fast) var(--ease-standard);
-}
-
-.row-action::before {
-  content: '';
-  position: absolute;
-  inset: 2px;
-  border-radius: var(--radius-full);
-  background: transparent;
-  transition: background var(--t-fast) var(--ease-standard);
-}
-
-.row-action .figma-icon {
-  width: 16px;
-  height: 16px;
-  display: block;
-  position: relative;
-  z-index: 1;
-}
-
-/* Reveal is owned by `.row-actions` as one cluster (above), so the individual
-   buttons no longer carry their own opacity — they only carry emphasis.
-   Resting emphasis is deliberately subordinate: tertiary ink, no fill. */
-.row-action:hover {
-  color: var(--color-interactive-primary);
-}
-
-.row-action:hover::before,
-.row-action:focus-visible::before {
-  background: var(--color-fill-subtle);
-}
-
-/* Destructive weight is earned on approach, not advertised at rest. */
-.delete-btn:hover,
-.delete-btn:focus-visible {
-  color: var(--color-status-error);
-}
-
-.pin-btn.is-pinned {
-  color: var(--color-pinned);
-}
-
-/* End-of-results marker (2:7875) — only ever shown under an active query. */
-.results-end {
-  padding: 28px var(--metric-panel-inline);
-  text-align: center;
-  font-family: var(--font-ar);
-  font-weight: 400;
-  font-size: var(--text-body);
-  line-height: 1.6;
-  color: var(--color-text-secondary);
-  flex: none;
-}
-
-/* ─── Full-pane states (2:7906) ───────────────────────────────────────────── */
-
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
   border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink-2);
 }
 
-/* Loading/Skeleton (2:9830–2:9836). It mirrors the final row grid so the
-   panel does not jump when native data arrives. */
-.loading-state {
+.row-action:hover {
+  background: var(--bg-hover);
+  color: var(--ink);
+}
+
+.row-action.delete-btn:hover {
+  color: var(--danger);
+}
+
+.row-action.pin-btn.is-pinned {
+  color: var(--accent-ink);
+}
+
+.row-pin-flag {
+  position: absolute;
+  inset-inline-start: 30px;
+  top: 4px;
+  width: 12px;
+  height: 12px;
+  color: var(--accent-ink);
+}
+
+.row-pin-flag .icon {
+  width: 12px;
+  height: 12px;
+}
+
+.results-end {
+  padding: 10px 0 4px;
+  text-align: center;
+  font-size: var(--text-caption);
+  color: var(--ink-3);
+}
+
+/* ─── States ──────────────────────────────────────────────────────────── */
+
+.state-view {
   display: flex;
   flex-direction: column;
-  gap: var(--space-sm);
-  flex: none;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  height: 100%;
+  padding: 24px 40px 40px;
+  text-align: center;
+}
+
+.state-art {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 20px;
+  background: var(--bg-sunken);
+  color: var(--ink-3);
+}
+
+.state-art .icon {
+  width: 24px;
+  height: 24px;
+}
+
+.state-view.is-failure .state-art {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.brand-art,
+.footer-mark {
+  position: relative;
+}
+
+.brand-art .mark-base,
+.brand-art .mark-card {
+  position: absolute;
+  inset: 10px;
+}
+
+.mark-base,
+.mark-card {
+  display: block;
+  -webkit-mask: center / contain no-repeat;
+  mask: center / contain no-repeat;
+}
+
+.mark-base {
+  background: var(--ink);
+  -webkit-mask-image: url('assets/brand/mark-base.svg');
+  mask-image: url('assets/brand/mark-base.svg');
+}
+
+.mark-card {
+  background: var(--brand-sage);
+  -webkit-mask-image: url('assets/brand/mark-card.svg');
+  mask-image: url('assets/brand/mark-card.svg');
+}
+
+.state-text {
+  display: grid;
+  gap: 2px;
+}
+
+.state-title {
+  font-size: var(--text-title);
+  font-weight: 600;
+}
+
+.state-sub {
+  max-width: 280px;
+  font-size: var(--text-small);
+  color: var(--ink-2);
+}
+
+.state-action {
+  height: 28px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--bg-raised);
+  font-weight: 500;
+}
+
+.loading-state {
+  display: grid;
+  gap: 2px;
 }
 
 .skeleton-row {
-  direction: ltr;
-  display: grid;
-  /* Mirrors the live row exactly — including the absence of a reserved action
-     column — so the list cannot jump when native data arrives. */
-  grid-template-columns:
-    minmax(0, 1fr)
-    var(--metric-content-type-slot-inline);
+  display: flex;
   align-items: center;
-  column-gap: var(--space-md);
-  min-height: var(--metric-row-min-height);
-  padding: var(--metric-row-block) var(--metric-row-inline);
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--color-border-subtle);
-  background: var(--color-bg-row);
-  box-shadow: var(--elev-row);
+  gap: 10px;
+  height: 44px;
+  padding: 0 8px;
+}
+
+.skeleton-kind {
+  order: -1;
+}
+
+.skeleton-preview {
+  display: grid;
+  flex: 1;
+  gap: 6px;
 }
 
 .skeleton-block {
   display: block;
-  background: var(--color-fill-subtle);
-  animation: panel-skeleton-pulse 1.4s var(--ease-standard) infinite alternate;
-}
-
-.skeleton-preview {
-  display: flex;
-  width: 100%;
-  min-width: 0;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: var(--space-sm);
-}
-
-.skeleton-line {
-  height: 9px;
-  border-radius: var(--radius-full);
-}
-
-.skeleton-line-primary {
-  width: min(92%, 220px);
-}
-
-.skeleton-line-secondary {
-  width: min(58%, 140px);
-}
-
-.skeleton-kind {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: var(--metric-content-type-slot-inline);
-  flex: none;
+  border-radius: var(--radius-xs);
+  background: var(--bg-sunken);
+  animation: skeleton 1.2s var(--ease) infinite alternate;
 }
 
 .skeleton-kind-icon {
-  width: var(--metric-content-type-slot-inline);
-  height: var(--metric-content-type-slot-inline);
-  border-radius: var(--radius-control);
-  flex: none;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-md);
 }
 
-@keyframes panel-skeleton-pulse {
-  from {
-    opacity: 0.44;
-  }
+.skeleton-line-primary {
+  width: 72%;
+  height: 10px;
+}
+
+.skeleton-line-secondary {
+  width: 36%;
+  height: 8px;
+}
+
+@keyframes skeleton {
   to {
-    opacity: 0.9;
+    opacity: 0.45;
   }
 }
 
-.state-view {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 24px;
-  padding: 40px;
-  text-align: center;
-}
-
-.state-view.is-no-results {
-  gap: 0;
-}
-
-.state-art {
-  color: var(--color-border-default);
-  display: flex;
-}
-
-.state-art .figma-icon {
-  width: 160px;
-  height: 32px;
-  display: block;
-}
-
-/* The empty shelf IS the Raff mark — the same descending-bar motif as the
-   logo, drawn at identity scale. Matches the approved «08» composition
-   (COMPONENT 69:397) exactly: 92/72/50 × 6 bars, r3, brand-coloured, 19px
-   apart, opacity 1 — Figma's own canonical Light treatment, unchanged.
-
-   Deliberately NOT paired with a second logo lockup: drawing the same glyph
-   twice at two weights reads as a mistake. The "airy / atmospheric" quality
-   the empty state needs comes from generous space (`.state-view`'s own
-   24px gap / 40px padding), not from a duplicate graphic.
-
-   v4.1 had ALSO added a radial wash behind the bars — Figma's canonical has
-   none, in Light or (since it defines no Dark empty-state at all) Dark. That
-   wash is what caused the actual regression this fixes: at its coded 0.75
-   opacity it measured 1.015:1 against Light's canvas (imperceptible, "fine")
-   but 1.226:1 against Dark's — 15× the excess contrast for the identical
-   token and opacity, because a saturated warm tone gains contrast against a
-   near-black canvas far faster than the same tone does against a pale one.
-   Removed rather than re-tuned: it contributed nothing visible in Light (by
-   design) and Figma's own reference treatment never had it, so the honest
-   fix is one fewer non-canonical layer, not a second opacity to keep in
-   parity forever.
-
-   --opacity-motif carries what's left to tune: the bars' own weight relative
-   to the title/message ink above them, which the same warm-on-near-black
-   effect quietly inverts if left at 1 in both appearances. Light stays 1
-   (Figma's value, already ranks below --text-secondary at 6.4:1 vs the
-   bars' 3.1:1). Dark is 0.6 — solved so the composited bar contrast lands at
-   ~3.1:1 too, the same rank relative to Dark's own --text-secondary
-   (8.6:1), not merely the same opacity. */
-.state-art.shelf-illustration {
-  width: 120px;
-  height: 74px;
-  padding-block: 8px 10px;
-  flex-direction: column;
-  align-items: center;
-  justify-content: space-between;
-  color: var(--color-icon-brand);
-  opacity: var(--opacity-motif);
-}
-
-.state-art.shelf-illustration .figma-icon {
-  height: 6px;
-}
-
-.state-art.shelf-illustration .figma-icon:nth-child(1) {
-  width: 92px;
-}
-
-.state-art.shelf-illustration .figma-icon:nth-child(2) {
-  width: 72px;
-}
-
-.state-art.shelf-illustration .figma-icon:nth-child(3) {
-  width: 50px;
-}
-
-.state-view.is-failure .state-art {
-  color: var(--color-status-warning);
-}
-
-.state-view.is-failure .state-art .figma-icon {
-  width: 40px;
-  height: 40px;
-}
-
-.state-text {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-}
-
-/* «08» COMPONENT 69:397: Cairo Bold 17/24 in NEUTRAL primary ink — not the
-   brand. v4.0 rendered it ExtraBold 21 in terracotta, which made absence the
-   loudest thing on screen and spent the brand colour where nothing was
-   happening. Brand now appears in the mark above it; the words stay calm. */
-.state-title {
-  font-family: var(--font-ar);
-  font-weight: 700;
-  font-size: var(--text-title-3);
-  line-height: var(--leading-title-3);
-  color: var(--color-text-primary);
-}
-
-.state-view.is-failure .state-title {
-  color: var(--color-text-primary);
-}
-
-.state-sub {
-  font-family: var(--font-ar);
-  font-weight: 400;
-  font-size: var(--text-body);
-  line-height: var(--leading-body);
-  color: var(--color-text-secondary);
-  max-width: 320px;
-}
-
-.state-action {
-  padding: 4px 18px;
-  min-height: var(--metric-control-height);
-  border-radius: var(--radius-control);
-  background: var(--color-bg-primary);
-  border: 1px solid var(--color-border-default);
-  font-family: var(--font-ar);
-  font-weight: 500;
-  font-size: var(--text-caption);
-  color: var(--color-text-primary);
-}
-
-.state-action:hover {
-  background: var(--color-bg-hover);
-  color: var(--color-text-brand);
-}
-
-/* ─── Feedback (COMPONENT_SET "Feedback / Toast" 74:476, «06 — Components»)
-   ───────────────────────────────────────────────────────────────────────
-   The wrapper carries NO surface of its own — no fill, no divider — so
-   nothing changes on screen except the pill itself when a toast appears.
-   Figma agrees: its toast instances sit in a frame named literally
-   "Toast Slot / Reserved Above Toolbar", floating on the bare canvas, not on
-   a coloured band. `.panel-feedback` stays in normal flow rather than an
-   overlay (never position:fixed/absolute — see panel-feedback-contract.test)
-   so the list above it can never be covered; centring it here is the only
-   job left for the wrapper to do. */
+/* ─── Feedback ────────────────────────────────────────────────────────── */
 
 .panel-feedback {
-  direction: inherit;
-  padding: var(--space-md) var(--metric-panel-inline);
-  flex: none;
+  position: absolute;
+  inset-inline: 0;
+  bottom: 48px;
   display: flex;
   justify-content: center;
+  padding: 0 16px;
+  pointer-events: none;
 }
 
-.panel-feedback[hidden] {
-  display: none;
-}
-
-/* Figma's own 5 variants (Success/Pin/Unpin/Error/Delete) all fill
-   `color/bg/elevated` and differ ONLY by a 1px stroke + icon tint — except
-   Delete, whose canonical fill is `color/text/primary` (#1e1a17 opaque):
-   a text-role token bound as a background, and exactly the "large dark
-   capsule" defect being fixed here, present in Figma before it ever reached
-   this file. Delete now matches its four siblings: one shared elevated
-   surface, kind carried by a thin stroke and the icon alone — never by
-   painting the whole container. */
 .toast {
-  min-height: 42px;
-  width: fit-content;
-  max-width: 100%;
-  padding: var(--space-xs) var(--space-lg);
-  border: 1px solid var(--color-status-success); /* base = the default "success" kind */
-  border-radius: var(--radius-full);
-  background: var(--color-bg-elevated);
-  box-shadow: var(--elev-2); /* matches Figma's own DROP_SHADOW: 0/6/6, 8% */
-  color: var(--color-text-primary);
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--space-lg);
-  font-family: var(--font-ar);
-  font-weight: 500;
-  font-size: 12px;
-  line-height: 20px;
-  animation: panel-toast-enter var(--t-fast) var(--ease-standard) both;
-  transition:
-    opacity var(--t-fast) var(--ease-standard),
-    transform var(--t-fast) var(--ease-standard);
-}
-
-/* Pin/Unpin carry a neutral stroke in Figma (color/border/default) — the
-   brand accent already lives in the pin icon itself, so the edge stays
-   quiet rather than doubling the same colour. */
-.toast[data-kind='pin'],
-.toast[data-kind='unpin'] {
-  border-color: var(--color-border-default);
-}
-
-/* Delete and Error share one stroke colour: this is the toast's entire
-   destructive vocabulary — a thin red-tinted edge plus the icon — never a
-   filled surface. */
-.toast[data-kind='delete'],
-.toast[data-kind='error'] {
-  border-color: var(--color-status-error);
-}
-
-.toast-icon {
-  width: 16px;
-  height: 16px;
-  color: var(--color-status-success);
-  display: flex;
-  flex: none;
-}
-
-.toast-icon .figma-icon {
-  width: 16px;
-  height: 16px;
-  display: block;
-}
-
-.toast[data-kind='delete'] .toast-icon,
-.toast[data-kind='error'] .toast-icon {
-  color: var(--color-status-error);
-}
-
-.toast[data-kind='pin'] .toast-icon,
-.toast[data-kind='unpin'] .toast-icon {
-  color: var(--color-pinned);
-}
-
-.toast[hidden] {
-  display: none;
+  gap: 8px;
+  max-width: 100%;
+  min-height: 38px;
+  padding: 6px 8px 6px 12px;
+  border-radius: 12px;
+  background: var(--ink);
+  box-shadow: var(--shadow-float);
+  font-size: var(--text-small);
+  color: var(--bg-window);
+  pointer-events: auto;
+  animation: toast-in var(--t-base) var(--ease) both;
 }
 
 .toast.is-leaving {
   opacity: 0;
-  transform: translateY(2px);
-  pointer-events: none;
+  transform: translateY(4px);
+  transition: opacity var(--t-fast) var(--ease), transform var(--t-fast) var(--ease);
+}
+
+.toast-icon .icon {
+  width: 14px;
+  height: 14px;
+}
+
+.toast[data-kind='error'] .toast-icon {
+  color: var(--danger);
 }
 
 .toast-message {
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
-/* A coloured, bold WORD — not a bordered button inside a bordered pill.
-   Figma's "Undo Action" is a bare TEXT layer, no fill or stroke of its own;
-   a second nested border here was v4.1's own box-within-a-box, not the
-   canonical design. Discoverability comes from weight + colour + generous
-   hit padding, the same macOS pattern as Mail's "Undo Send" — undo stays a
-   confident word, never a second capsule stacked inside the first. */
-.toast-undo {
-  min-width: 40px;
-  min-height: 28px;
-  padding: 0 var(--space-sm);
-  border-radius: var(--radius-control);
+.toast-btn {
+  height: 26px;
+  padding: 0 10px;
   border: 0;
-  color: var(--color-text-brand);
-  background: transparent;
-  font-family: var(--font-ar);
-  font-weight: 700;
-  font-size: 12px;
-  line-height: 20px;
-  flex: none;
-  transition: background var(--t-fast) var(--ease-standard);
+  border-radius: var(--radius-sm);
+  background: rgba(127, 127, 127, 0.22);
+  font-weight: 600;
+  color: var(--brand-sage);
 }
 
-.toast-undo:hover,
-.toast-undo:focus-visible {
-  background: var(--color-fill-subtle);
-}
-
-.toast-undo[hidden] {
-  display: none;
-}
-
-@keyframes panel-toast-enter {
+@keyframes toast-in {
   from {
     opacity: 0;
-    transform: translateY(2px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
+    transform: translateY(6px);
   }
 }
+
+/* ─── Footer ──────────────────────────────────────────────────────────── */
 
 .panel-footer {
   display: flex;
   align-items: center;
-  justify-content: center;
-  padding: 12px var(--metric-panel-inline);
-  background: var(--color-bg-elevated);
-  border-top: 1px solid var(--color-border-divider);
+  justify-content: space-between;
+  gap: 12px;
+  height: 40px;
+  padding: 0 14px;
+  border-top: 1px solid var(--line);
+}
+
+.footer-mark {
+  width: 16px;
+  height: 16px;
   flex: none;
-  min-height: 48px;
+  order: 2;
+  opacity: 0.8;
+}
+
+.footer-mark .mark-base,
+.footer-mark .mark-card {
+  position: absolute;
+  inset: 0;
 }
 
 .footer-shortcuts {
-  font-family: var(--font-ar);
-  font-weight: 400;
-  font-size: 12px;
-  line-height: 20px;
-  color: var(--color-text-secondary);
-  direction: rtl;
   display: flex;
   align-items: center;
-  justify-content: center;
-  flex-wrap: nowrap;
-  gap: var(--space-md);
-  width: 100%;
+  gap: 14px;
   min-width: 0;
   overflow: hidden;
 }
@@ -1073,28 +593,8 @@ body {
 .shortcut-hint {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-xs);
-  min-width: 0;
-  white-space: nowrap;
-}
-
-.shortcut-hint + .shortcut-hint {
-  padding-inline-start: var(--space-md);
-  border-inline-start: 1px solid var(--color-border-divider);
-}
-
-.shortcut-label {
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.footer-shortcuts[hidden] {
-  display: none;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .toast {
-    animation: none;
-    transition: none;
-  }
+  gap: 6px;
+  flex: none;
+  font-size: var(--text-caption);
+  color: var(--ink-3);
 }
