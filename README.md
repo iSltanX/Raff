@@ -1,12 +1,6 @@
 <div align="center">
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/raff-hero-dark.png">
-  <source media="(prefers-color-scheme: light)" srcset="docs/assets/raff-hero-light.png">
-  <img alt="رفّ — كل ما نسخته، على رفٍّ قريب" src="docs/assets/raff-hero-light.png" width="100%">
-</picture>
-
-# رفّ
+<img alt="رفّ — Raff: رفّك القريب لكل ما نسخت" src="docs/assets/raff-cover.png" width="100%">
 
 **مدير حافظة عربي لنظام macOS — سريع، هادئ، وخاص بالكامل.**
 
