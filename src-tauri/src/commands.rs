@@ -60,6 +60,9 @@ pub struct StatePayload {
     pub settings: Settings,
     pub ax_trusted: bool,
     pub version: String,
+    /// True when a stored layer could not be read on this launch. An empty
+    /// list then means something very different, and the panel says so.
+    pub unreadable_layer: bool,
 }
 
 #[tauri::command]
@@ -74,6 +77,7 @@ pub fn get_state(app: AppHandle, state: State<AppState>) -> StatePayload {
         settings: store.settings.clone(),
         ax_trusted: macos::ax_trusted(),
         version: app.package_info().version.to_string(),
+        unreadable_layer: store.unreadable_layer,
     }
 }
 

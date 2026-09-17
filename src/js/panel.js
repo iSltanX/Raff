@@ -434,6 +434,18 @@ function renderList() {
       // Search-empty is text-only in «07 — Patterns & States»; the shelf
       // illustration belongs exclusively to a genuinely empty collection.
       listEl.append(stateView(null, 'لا نتائج', 'جرّب كلمة أخرى أو صنفًا مختلفًا', 'is-no-results'));
+    } else if (state.unreadableLayer) {
+      // The list is empty because a layer did not parse, not because nothing
+      // was ever saved. Saying «رفّك جاهز» here would report the user's clips
+      // as gone, which is the opposite of what happened.
+      listEl.append(
+        stateView(
+          null,
+          'تعذّرت قراءة سجلّك',
+          'محتواك لم يُفقد، واحتفظ رفّ بنسخة منه جانبًا. ما تنسخه من الآن يُحفظ كالمعتاد.',
+          'is-unreadable'
+        )
+      );
     } else {
       // Genuinely nothing saved yet — never shown for a failed fetch.
       // Copy is «08» COMPONENT 69:397 "State=Empty" verbatim; v4.0 had drifted

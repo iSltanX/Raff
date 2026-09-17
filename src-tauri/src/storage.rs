@@ -162,6 +162,10 @@ pub struct Store {
     pub history: Vec<ClipItem>,
     pub pinned: Vec<ClipItem>,
     pub settings: Settings,
+    /// A layer could not be parsed on this launch and was copied aside. The
+    /// panel needs this to tell "nothing is saved" apart from "your content is
+    /// there, it just was not read" — two states an empty list looks identical in.
+    pub unreadable_layer: bool,
     pending_delete: Option<PendingDelete>,
     pending_pin: Option<PendingPin>,
 }
@@ -352,6 +356,7 @@ impl Store {
             history,
             pinned,
             settings,
+            unreadable_layer: !(history_metadata_loaded && pinned_metadata_loaded),
             pending_delete,
             pending_pin,
         };
