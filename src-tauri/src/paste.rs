@@ -121,7 +121,12 @@ pub async fn paste_item(app: &AppHandle, id: &str, plain: bool) -> Result<bool, 
                     crate::startup_trace::mark(&format!(
                         "PASTE CGEvent cmd-v: still_trusted={still_trusted} sent={sent}"
                     ));
-                    let pasted = still_trusted && sent;
+                    let pasted = paste_confirmed(
+                        still_trusted,
+                        sent,
+                        previous_pid,
+                        front_before_paste.pid,
+                    );
                     bump_paste_signals(&handle2, &id);
                     crate::startup_trace::mark(&format!("PASTE COMPLETE pasted={pasted}"));
                     let _ = tx.send(pasted);
@@ -149,6 +154,27 @@ pub async fn paste_item(app: &AppHandle, id: &str, plain: bool) -> Result<bool, 
         panel::show(app);
     }
     Ok(pasted)
+}
+
+/// Whether a paste may be reported as done.
+///
+/// `sent` only means a CGEvent was posted: nothing in that says it was
+/// delivered, or to whom. The one thing that can be checked is where it was
+/// aimed — if the app that held the front before the panel opened is not the
+/// app in front when the keystroke goes out, then activation did not take and
+/// the keystroke went somewhere else entirely. Calling that a successful paste
+/// is a claim رفّ cannot make, and the fallback it triggers instead is true in
+/// every case: the content is on the clipboard.
+///
+/// A missing `previous_pid` means nothing was ever claimed about the target,
+/// so there is nothing to contradict.
+fn paste_confirmed(
+    still_trusted: bool,
+    sent: bool,
+    previous_pid: Option<i32>,
+    front_pid: i32,
+) -> bool {
+    still_trusted && sent && previous_pid.is_none_or(|pid| pid == front_pid)
 }
 
 fn bump_paste_signals(app: &AppHandle, id: &str) {
@@ -195,4 +221,35 @@ fn bump_signals(app: &AppHandle, id: &str, bump: impl Fn(&mut crate::storage::Cl
     store.mark_signals_dirty(pinned_touched);
     drop(store);
     let _ = app.emit("raff://changed", ());
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const TARGET: i32 = 4242;
+
+    #[test]
+    fn a_keystroke_aimed_at_the_wrong_app_is_not_a_successful_paste() {
+        // Everything Raff used to look at says yes: the permission is there
+        // and the event was posted. But activation did not take, so ⌘V went to
+        // whatever happened to be in front.
+        assert!(!paste_confirmed(true, true, Some(TARGET), 99));
+    }
+
+    #[test]
+    fn the_target_being_in_front_is_what_makes_it_a_paste() {
+        assert!(paste_confirmed(true, true, Some(TARGET), TARGET));
+    }
+
+    #[test]
+    fn nothing_claimed_about_the_target_leaves_nothing_to_contradict() {
+        assert!(paste_confirmed(true, true, None, 99));
+    }
+
+    #[test]
+    fn the_old_conditions_still_have_to_hold() {
+        assert!(!paste_confirmed(false, true, Some(TARGET), TARGET));
+        assert!(!paste_confirmed(true, false, Some(TARGET), TARGET));
+    }
 }
