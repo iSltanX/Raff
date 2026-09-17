@@ -3,15 +3,20 @@
 
 use std::hash::{Hash, Hasher};
 use std::sync::atomic::Ordering;
-use std::time::Duration;
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
 
 use base64::Engine;
 use tauri::{AppHandle, Emitter, Manager};
 
-use crate::storage::{detect_kind, ItemKind};
+use crate::storage::{detect_kind, ItemKind, Store};
 use crate::{macos, AppState};
 
 const POLL_MS: u64 = 350;
+/// How far back a capture looks when asking who owned the clipboard. A change
+/// noticed at `T` happened somewhere in `(T - POLL_MS, T]`, so that is exactly
+/// the span whose frontmost apps have to clear the exclusion list.
+const SOURCE_WINDOW: Duration = Duration::from_millis(POLL_MS);
 /// The panel displays image previews at 64×40 logical pixels. Store at 2x
 /// for Retina screens while preserving the source aspect ratio; `thumbnail`
 /// fits inside this box and never crops.
@@ -19,6 +24,7 @@ const THUMB_MAX_W: u32 = 128;
 const THUMB_MAX_H: u32 = 80;
 
 pub fn start(app: AppHandle) {
+    macos::start_activation_watch();
     std::thread::spawn(move || {
         let mut last = macos::change_count();
         loop {
@@ -28,6 +34,7 @@ pub fn start(app: AppHandle) {
                 continue;
             }
             last = count;
+            let detected_at = Instant::now();
 
             let state = app.state::<AppState>();
             // Skip our own paste/copy writes.
@@ -46,33 +53,78 @@ pub fn start(app: AppHandle) {
             if !enabled {
                 continue;
             }
+
+            // Exclusion is decided before the pasteboard is touched at all, and
+            // over the whole window the copy could have happened in — not just
+            // over whoever is frontmost by the time the poll runs.
+            let activations = macos::activation_snapshot();
+            let front_now = macos::frontmost_app();
+            if excluded.contains(&front_now.bundle_id)
+                || macos::window_has_excluded(&activations, &excluded, detected_at, SOURCE_WINDOW)
+            {
+                continue;
+            }
+
+            // Bracket the probe and the read: if the pasteboard changes in
+            // between, what we hold mixes two clipboards and the concealed-type
+            // answer belongs to the older one.
+            let before = macos::change_count();
             // Never store password-manager / auto-generated content.
             if respect_concealed && macos::has_concealed_type() {
                 continue;
             }
-            let front = macos::frontmost_app();
-            if excluded.contains(&front.bundle_id) {
-                continue;
-            }
+            let clip = macos::read_clip();
+            let after = macos::change_count();
 
-            if capture_current(&app, front) {
+            let reading = ClipReading {
+                before,
+                after,
+                clip,
+                source: macos::front_at(&activations, detected_at, SOURCE_WINDOW)
+                    .unwrap_or(front_now),
+            };
+            if capture_reading(&state.store, reading) {
                 let _ = app.emit("raff://changed", ());
             }
         }
     });
 }
 
-/// Reads the pasteboard and stores it. Returns true when the store changed.
-fn capture_current(app: &AppHandle, front: macos::FrontApp) -> bool {
-    let raw = macos::read_clip();
-    let state = app.state::<AppState>();
+/// A pasteboard read bracketed by change counts, plus the app credited with it.
+struct ClipReading {
+    before: isize,
+    after: isize,
+    clip: macos::RawClip,
+    source: macos::FrontApp,
+}
+
+impl ClipReading {
+    /// False when the pasteboard changed while we were probing and reading it.
+    /// Such a reading describes no single clipboard, and the checks that
+    /// guarded it answered for content we no longer hold, so it is dropped —
+    /// the next poll sees the new content from its own beginning.
+    fn is_stable(&self) -> bool {
+        self.before == self.after
+    }
+}
+
+/// Stores a pasteboard reading. Returns true when the store changed.
+fn capture_reading(store_lock: &Mutex<Store>, reading: ClipReading) -> bool {
+    if !reading.is_stable() {
+        return false;
+    }
+    let ClipReading {
+        clip: raw,
+        source: front,
+        ..
+    } = reading;
 
     // Prefer text; fall back to image data.
     if let Some(text) = raw.text.filter(|t| !t.trim().is_empty()) {
         let rtf_b64 = raw
             .rtf
             .map(|r| base64::engine::general_purpose::STANDARD.encode(r));
-        let mut store = state.store.lock().unwrap();
+        let mut store = store_lock.lock().unwrap();
         let old_history = store.history.clone();
         let old_pinned = store.pinned.clone();
         let capture = store.capture(
@@ -109,7 +161,7 @@ fn capture_current(app: &AppHandle, front: macos::FrontApp) -> bool {
     let (w, h) = (decoded.width(), decoded.height());
     let label = format!("صورة {w}×{h}");
 
-    let mut store = state.store.lock().unwrap();
+    let mut store = store_lock.lock().unwrap();
     // Identical image already stored? Bump it without touching the disk.
     let dup = store
         .pinned
@@ -188,6 +240,44 @@ fn content_hash(bytes: &[u8]) -> String {
 mod tests {
     use super::*;
     use image::GenericImageView;
+
+    fn reading(before: isize, after: isize, text: &str) -> ClipReading {
+        ClipReading {
+            before,
+            after,
+            clip: macos::RawClip {
+                text: Some(text.into()),
+                ..Default::default()
+            },
+            source: macos::FrontApp::default(),
+        }
+    }
+
+    #[test]
+    fn a_pasteboard_that_changed_mid_read_is_not_stored() {
+        let dir = std::env::temp_dir().join(format!("raff-race-test-{}", uuid::Uuid::new_v4()));
+        let store = Mutex::new(Store::load(dir.clone()));
+
+        assert!(!capture_reading(&store, reading(41, 42, "كلمة مرور")));
+
+        assert!(store.lock().unwrap().history.is_empty());
+        assert!(!dir.join(crate::storage::HISTORY_FILE).exists());
+        assert_eq!(
+            std::fs::read_dir(dir.join(crate::storage::IMAGES_DIR))
+                .map(|d| d.count())
+                .unwrap_or(0),
+            0
+        );
+    }
+
+    #[test]
+    fn a_settled_pasteboard_is_still_stored() {
+        let dir = std::env::temp_dir().join(format!("raff-race-test-{}", uuid::Uuid::new_v4()));
+        let store = Mutex::new(Store::load(dir));
+
+        assert!(capture_reading(&store, reading(42, 42, "نصّ عادي")));
+        assert_eq!(store.lock().unwrap().history.len(), 1);
+    }
 
     #[test]
     fn retina_thumbnail_fits_without_cropping() {
