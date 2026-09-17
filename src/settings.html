@@ -230,10 +230,25 @@
             <h3 class="group-title">الاختصار</h3>
             <div class="settings-rows">
               <div class="row">
-                <button type="button" class="hotkey-badge" id="hotkey-chip" aria-labelledby="hotkey-label"></button>
+                <button
+                  type="button"
+                  class="hotkey-badge"
+                  id="hotkey-chip"
+                  aria-labelledby="hotkey-label"
+                  aria-describedby="hotkey-sub"
+                ></button>
                 <div class="row-label">
                   <span class="label-title" id="hotkey-label" dir="auto">اختصار لوحة المفاتيح لفتح رفّ</span>
-                  <span class="label-sub is-status" id="hotkey-sub" dir="auto"></span>
+                  <!-- A refusal has to be heard, not only painted. Same
+                       pattern as #settings-update-status below. -->
+                  <span
+                    class="label-sub is-status"
+                    id="hotkey-sub"
+                    role="status"
+                    aria-live="polite"
+                    aria-atomic="true"
+                    dir="auto"
+                  ></span>
                 </div>
               </div>
             </div>
