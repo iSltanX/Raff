@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 use base64::Engine;
 use tauri::{AppHandle, Emitter, Manager};
 
-use crate::storage::{detect_kind, ItemKind, Store};
+use crate::storage::{detect_kind, persist_capture, ItemKind, Store};
 use crate::{macos, tray, AppState};
 
 const POLL_MS: u64 = 350;
@@ -31,6 +31,7 @@ const THUMB_MAX_H: u32 = 80;
 
 pub fn start(app: AppHandle) {
     macos::start_activation_watch();
+    start_signal_flusher(app.clone());
     std::thread::spawn(move || {
         let mut last = macos::change_count();
         let outcome = supervise(|| {
@@ -45,6 +46,25 @@ pub fn start(app: AppHandle) {
             // looking: the settings row needs the window opened first.
             tray::note_quiet_state(Some("الالتقاط متوقف".into()));
             let _ = app.emit("raff://changed", ());
+        }
+    });
+}
+
+/// How long coalesced learning counters wait for the user to pause. Long
+/// enough that a run of pastes costs one write instead of one per paste, short
+/// enough that quitting rarely drops any.
+const SIGNAL_FLUSH_MS: u64 = 2_000;
+
+/// Writes the learning counters that `paste` only marked, once they settle.
+fn start_signal_flusher(app: AppHandle) {
+    std::thread::spawn(move || loop {
+        std::thread::sleep(Duration::from_millis(SIGNAL_FLUSH_MS));
+        let writes = crate::lock_store(&app.state::<AppState>().store).stage_signal_flush();
+        // Written with the store lock released, like every other layer write.
+        for write in writes {
+            if let Err(err) = write.commit() {
+                eprintln!("raff: {err}");
+            }
         }
     });
 }
@@ -182,10 +202,7 @@ fn capture_reading(store_lock: &Mutex<Store>, reading: ClipReading) -> bool {
         let rtf_b64 = raw
             .rtf
             .map(|r| base64::engine::general_purpose::STANDARD.encode(r));
-        let mut store = crate::lock_store(store_lock);
-        let old_history = store.history.clone();
-        let old_pinned = store.pinned.clone();
-        let capture = store.capture(
+        let capture = crate::lock_store(store_lock).capture(
             detect_kind(&text),
             text,
             raw.html,
@@ -195,10 +212,9 @@ fn capture_reading(store_lock: &Mutex<Store>, reading: ClipReading) -> bool {
             None,
             (front.name, front.bundle_id),
         );
-        let Ok(_outcome) = store.persist_capture(capture, old_history, old_pinned) else {
-            return false;
-        };
-        return true;
+        // The guard is gone by now: `persist_capture` writes the layer with the
+        // store lock free, so opening the panel does not wait on this write.
+        return persist_capture(store_lock, capture).is_ok();
     }
 
     let Some((png, decoded)) = decode_capture(raw.png, raw.tiff) else {
@@ -209,49 +225,47 @@ fn capture_reading(store_lock: &Mutex<Store>, reading: ClipReading) -> bool {
     let (w, h) = (decoded.width(), decoded.height());
     let label = format!("صورة {w}×{h}");
 
-    let mut store = crate::lock_store(store_lock);
-    // Identical image already stored? Bump it without touching the disk.
-    let dup = store
-        .pinned
-        .iter()
-        .chain(store.history.iter())
-        .any(|i| i.kind == ItemKind::Image && i.hash.as_deref() == Some(hash.as_str()));
+    let (images_dir, image_file, thumb_file, capture) = {
+        let mut store = crate::lock_store(store_lock);
+        // Identical image already stored? Bump it without touching the disk.
+        let dup = store
+            .pinned
+            .iter()
+            .chain(store.history.iter())
+            .any(|i| i.kind == ItemKind::Image && i.hash.as_deref() == Some(hash.as_str()));
 
-    let (image_file, thumb_file) = if dup {
-        (None, None)
-    } else {
         let dir = store.images_dir();
-        let id_base = uuid::Uuid::new_v4().to_string();
-        let image_file = format!("{id_base}.png");
-        let thumb_name = format!("{id_base}.thumb.png");
-        if std::fs::write(dir.join(&image_file), &png).is_err() {
-            return false;
-        }
-        let thumb_file = write_thumbnail(&dir, thumb_name, &decoded);
-        (Some(image_file), thumb_file)
+        let (image_file, thumb_file) = if dup {
+            (None, None)
+        } else {
+            let id_base = uuid::Uuid::new_v4().to_string();
+            let image_file = format!("{id_base}.png");
+            let thumb_name = format!("{id_base}.thumb.png");
+            if std::fs::write(dir.join(&image_file), &png).is_err() {
+                return false;
+            }
+            let thumb_file = write_thumbnail(&dir, thumb_name, &decoded);
+            (Some(image_file), thumb_file)
+        };
+
+        let capture = store.capture(
+            ItemKind::Image,
+            label,
+            None,
+            None,
+            image_file.clone(),
+            thumb_file.clone(),
+            Some(hash),
+            (front.name, front.bundle_id),
+        );
+        (dir, image_file, thumb_file, capture)
     };
 
-    let old_history = store.history.clone();
-    let old_pinned = store.pinned.clone();
-    let created_files = [image_file.clone(), thumb_file.clone()];
-    let capture = store.capture(
-        ItemKind::Image,
-        label,
-        None,
-        None,
-        image_file,
-        thumb_file,
-        Some(hash),
-        (front.name, front.bundle_id),
-    );
-    if store
-        .persist_capture(capture, old_history, old_pinned)
-        .is_err()
-    {
-        // These files were created for this failed capture and are not
-        // referenced by the restored metadata snapshot.
-        for file in created_files.into_iter().flatten() {
-            let _ = std::fs::remove_file(store.images_dir().join(file));
+    if persist_capture(store_lock, capture).is_err() {
+        // These files were created for this failed capture and nothing in the
+        // restored model refers to them.
+        for file in [image_file, thumb_file].into_iter().flatten() {
+            let _ = std::fs::remove_file(images_dir.join(file));
         }
         return false;
     }

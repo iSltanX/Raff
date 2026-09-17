@@ -182,11 +182,9 @@ fn bump_signals(app: &AppHandle, id: &str, bump: impl Fn(&mut crate::storage::Cl
     if !found {
         return;
     }
-    if pinned_touched {
-        store.save_pinned();
-    } else {
-        store.save_history();
-    }
+    // Not written here: a counter bump is not worth rewriting a layer. The
+    // flusher in `monitor` writes it once the user pauses.
+    store.mark_signals_dirty(pinned_touched);
     drop(store);
     let _ = app.emit("raff://changed", ());
 }

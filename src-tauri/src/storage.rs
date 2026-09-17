@@ -106,6 +106,19 @@ impl Default for Settings {
     }
 }
 
+/// The most the recent layer may weigh. The count limit is a resource cap; the
+/// budget is what turns the worst case into a number — 1000 rows each carrying
+/// the largest payload `read_clip` still admits is about a gigabyte otherwise.
+pub const MAX_HISTORY_BYTES: usize = 64 * 1024 * 1024;
+
+/// Rough stored weight of a row. Only the payloads matter at this scale; the
+/// fixed fields are noise beside a 256 KB rich representation.
+fn weight(item: &ClipItem) -> usize {
+    item.text.len()
+        + item.html.as_deref().map_or(0, str::len)
+        + item.rtf.as_deref().map_or(0, str::len)
+}
+
 #[derive(PartialEq, Eq, Debug)]
 pub(crate) enum CaptureOutcome {
     /// Existing item bumped/moved — no new row.
@@ -119,6 +132,26 @@ pub(crate) struct CaptureResult {
     outcome: CaptureOutcome,
     dropped: Vec<ClipItem>,
     layer: Option<DeletedLayer>,
+    undo: CaptureUndo,
+}
+
+/// Exactly what it takes to put `capture` back, and nothing more.
+///
+/// This replaces the copy of both layers that used to be taken before every
+/// capture "just in case the write fails" — two full clones on every copy the
+/// user made, paid at the allowed limit of 1000 rows, to guard a path that
+/// almost never runs.
+#[derive(Debug)]
+pub(crate) enum CaptureUndo {
+    /// Nothing was touched.
+    Nothing,
+    /// A new row went to the head of history; `CaptureResult::dropped` holds
+    /// whatever fell off the end.
+    Added,
+    /// The pinned row at `index` was overwritten; here it is as it was.
+    PinnedBumped { index: usize, previous: Box<ClipItem> },
+    /// The history row at `index` was moved to the head and overwritten.
+    HistoryBumped { index: usize, previous: Box<ClipItem> },
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
@@ -168,6 +201,15 @@ pub struct Store {
     pub unreadable_layer: bool,
     pending_delete: Option<PendingDelete>,
     pending_pin: Option<PendingPin>,
+    /// Layers whose learning counters moved and have not been written yet.
+    dirty_signals: DirtySignals,
+}
+
+/// Which layers are carrying unwritten learning-counter bumps.
+#[derive(Default, Clone, Copy)]
+pub struct DirtySignals {
+    history: bool,
+    pinned: bool,
 }
 
 /// Last user-chosen panel origin in physical desktop coordinates. Kept outside
@@ -327,18 +369,116 @@ fn load_json<T: serde::de::DeserializeOwned + Default>(path: &Path) -> T {
 }
 
 fn try_save_json<T: Serialize>(path: &Path, value: &T) -> Result<(), String> {
-    let tmp = path.with_extension("json.tmp");
-    let bytes = serde_json::to_vec_pretty(value)
+    stage_json(path, value)?.commit()
+}
+
+/// Serializes `value` for `path` and takes the ticket that orders its write.
+///
+/// Compact, not pretty: nothing but the machine reads these files, and at the
+/// allowed limit the indentation was a second copy of the layer to build,
+/// write and read back on every capture.
+///
+/// Every caller holds the store lock at this point, so tickets come out in the
+/// same order as the states they describe — which is what lets a write that
+/// happens after the lock was released still be placed correctly.
+fn stage_json<T: Serialize>(path: &Path, value: &T) -> Result<LayerWrite, String> {
+    let bytes = serde_json::to_vec(value)
         .map_err(|err| format!("تعذّر تجهيز {} للحفظ: {err}", path.display()))?;
+    Ok(LayerWrite {
+        path: path.to_path_buf(),
+        bytes,
+        ticket: next_write_ticket(),
+    })
+}
+
+fn next_write_ticket() -> u64 {
+    static TICKETS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    TICKETS.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1
+}
+
+fn write_layer_bytes(path: &Path, bytes: &[u8]) -> Result<(), String> {
+    let tmp = path.with_extension("json.tmp");
     fs::write(&tmp, bytes)
         .and_then(|_| fs::rename(&tmp, path))
         .map_err(|err| format!("تعذّر حفظ {}: {err}", path.display()))
+}
+
+/// The newest serialization of each layer that has reached the disk.
+///
+/// Bytes are prepared under the store lock and written after it is released,
+/// so two captures can be in flight at once. The ticket each carries lets the
+/// writer refuse to lay an older layer over a newer one.
+fn write_gate() -> &'static std::sync::Mutex<std::collections::HashMap<PathBuf, u64>> {
+    static GATE: std::sync::OnceLock<
+        std::sync::Mutex<std::collections::HashMap<PathBuf, u64>>,
+    > = std::sync::OnceLock::new();
+    GATE.get_or_init(Default::default)
+}
+
+/// One layer, serialized and waiting to be written with the store lock released.
+pub(crate) struct LayerWrite {
+    path: PathBuf,
+    bytes: Vec<u8>,
+    ticket: u64,
+}
+
+impl LayerWrite {
+    pub(crate) fn commit(self) -> Result<(), String> {
+        let mut gate = write_gate()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if gate
+            .get(&self.path)
+            .is_some_and(|latest| *latest > self.ticket)
+        {
+            // A later state of this same layer is already on disk, and it
+            // contains everything ours did. Writing now would undo it.
+            return Ok(());
+        }
+        let result = write_layer_bytes(&self.path, &self.bytes);
+        if result.is_ok() {
+            gate.insert(self.path, self.ticket);
+        }
+        result
+    }
 }
 
 fn save_json<T: Serialize>(path: &Path, value: &T) {
     if let Err(err) = try_save_json(path, value) {
         eprintln!("raff: {err}");
     }
+}
+
+/// Applies a capture and persists its layer with the store lock released.
+///
+/// The model is mutated and the bytes prepared under the lock; the write, the
+/// expensive part, happens with the lock free, and a failure is undone from
+/// the capture's own undo record rather than from a copy of the whole layer.
+pub(crate) fn persist_capture(
+    store: &std::sync::Mutex<Store>,
+    result: CaptureResult,
+) -> Result<CaptureOutcome, String> {
+    let write = match crate::lock_store(store).stage_capture(&result) {
+        Ok(write) => write,
+        Err(err) => return Err(err),
+    };
+    let CaptureResult {
+        outcome,
+        dropped,
+        undo,
+        ..
+    } = result;
+
+    if let Err(err) = write.commit() {
+        crate::lock_store(store).rollback_capture(undo, dropped);
+        return Err(err);
+    }
+    // Only now are these rows certainly gone from the layer on disk.
+    let guard = crate::lock_store(store);
+    for item in &dropped {
+        guard.delete_files(item);
+    }
+    Ok(outcome)
 }
 
 impl Store {
@@ -359,6 +499,7 @@ impl Store {
             unreadable_layer: !(history_metadata_loaded && pinned_metadata_loaded),
             pending_delete,
             pending_pin,
+            dirty_signals: DirtySignals::default(),
         };
 
         store.resolve_interrupted_pin();
@@ -523,6 +664,7 @@ impl Store {
                 outcome: CaptureOutcome::Failed,
                 dropped: Vec::new(),
                 layer: None,
+                undo: CaptureUndo::Nothing,
             };
         }
         // Keep recency a strict total order even when several pasteboard
@@ -537,11 +679,13 @@ impl Store {
             .map_or_else(now_ms, |latest| now_ms().max(latest.saturating_add(1)));
         let learning = self.settings.learning_enabled;
 
-        if let Some(p) = self
+        if let Some((index, p)) = self
             .pinned
             .iter_mut()
-            .find(|i| Self::same_content(i, kind, &text, hash.as_deref()))
+            .enumerate()
+            .find(|(_, i)| Self::same_content(i, kind, &text, hash.as_deref()))
         {
+            let previous = Box::new(p.clone());
             p.text = text;
             p.html = html;
             p.rtf = rtf;
@@ -563,6 +707,7 @@ impl Store {
                 outcome: CaptureOutcome::Deduped,
                 dropped: Vec::new(),
                 layer: Some(DeletedLayer::Pinned),
+                undo: CaptureUndo::PinnedBumped { index, previous },
             };
         }
 
@@ -572,6 +717,7 @@ impl Store {
             .position(|i| Self::same_content(i, kind, &text, hash.as_deref()))
         {
             let mut item = self.history.remove(pos);
+            let previous = Box::new(item.clone());
             if learning {
                 item.copy_count += 1;
             }
@@ -594,6 +740,10 @@ impl Store {
                 outcome: CaptureOutcome::Deduped,
                 dropped: Vec::new(),
                 layer: Some(DeletedLayer::History),
+                undo: CaptureUndo::HistoryBumped {
+                    index: pos,
+                    previous,
+                },
             };
         }
 
@@ -616,46 +766,112 @@ impl Store {
             last_used_at: now,
         };
         self.history.insert(0, item);
-        let limit = self.settings.history_limit.max(1);
-        let dropped = if self.history.len() > limit {
-            self.history.split_off(limit)
-        } else {
-            Vec::new()
-        };
         CaptureResult {
             outcome: CaptureOutcome::Added,
-            dropped,
+            dropped: self.trim_history_to_limits(),
             layer: Some(DeletedLayer::History),
+            undo: CaptureUndo::Added,
         }
     }
 
-    pub(crate) fn persist_capture(
-        &mut self,
-        result: CaptureResult,
-        old_history: Vec<ClipItem>,
-        old_pinned: Vec<ClipItem>,
-    ) -> Result<CaptureOutcome, String> {
+    /// Drops the oldest rows until the layer is inside both limits, and hands
+    /// them back so their image files are removed only once the write commits.
+    ///
+    /// A single row heavier than the whole budget is kept: it already cleared
+    /// the per-item cap in `read_clip`, and dropping it the instant it arrived
+    /// would look exactly like capture quietly not working.
+    fn trim_history_to_limits(&mut self) -> Vec<ClipItem> {
+        let limit = self.settings.history_limit.max(1);
+        let mut keep = self.history.len().min(limit);
+        let mut total = 0usize;
+        for (index, item) in self.history.iter().take(keep).enumerate() {
+            total = total.saturating_add(weight(item));
+            if total > MAX_HISTORY_BYTES && index > 0 {
+                keep = index;
+                break;
+            }
+        }
+        self.history.split_off(keep)
+    }
+
+    /// Serializes the layer a capture touched, without writing it.
+    ///
+    /// The bytes leave with a ticket so the caller can write them after the
+    /// store lock is released — the write is tens of megabytes at the allowed
+    /// limit, and the main thread takes this same lock every time the panel is
+    /// opened or dragged.
+    fn stage_capture(&mut self, result: &CaptureResult) -> Result<LayerWrite, String> {
         if result.outcome == CaptureOutcome::Failed {
-            self.history = old_history;
-            self.pinned = old_pinned;
             return Err("تعذّر إكمال معاملة التثبيت السابقة".into());
         }
-        let writes = match result.layer {
-            Some(DeletedLayer::History) => {
-                try_save_json(&self.dir.join(HISTORY_FILE), &self.history)
-            }
-            Some(DeletedLayer::Pinned) => try_save_json(&self.dir.join(PINNED_FILE), &self.pinned),
-            None => Err("تعذّر تحديد طبقة الالتقاط".into()),
+        let path = match result.layer {
+            Some(DeletedLayer::History) => self.dir.join(HISTORY_FILE),
+            Some(DeletedLayer::Pinned) => self.dir.join(PINNED_FILE),
+            None => return Err("تعذّر تحديد طبقة الالتقاط".into()),
         };
-        if let Err(err) = writes {
-            self.history = old_history;
-            self.pinned = old_pinned;
-            return Err(err);
+        match result.layer {
+            Some(DeletedLayer::Pinned) => stage_json(&path, &self.pinned),
+            _ => stage_json(&path, &self.history),
         }
-        for item in &result.dropped {
-            self.delete_files(item);
+    }
+
+    /// Records that a learning counter moved, without writing the layer.
+    ///
+    /// These counters are bumped on every paste and every copy made through
+    /// رفّ, and each bump used to rewrite its layer whole — tens of megabytes
+    /// at the allowed limit, to move one number by one. They are coalesced and
+    /// written once the user pauses instead. Losing a second or two of them to
+    /// a quit is acceptable: they are silent ranking signals, not content.
+    pub fn mark_signals_dirty(&mut self, pinned: bool) {
+        if pinned {
+            self.dirty_signals.pinned = true;
+        } else {
+            self.dirty_signals.history = true;
         }
-        Ok(result.outcome)
+    }
+
+    /// Serializes any layer carrying coalesced counter bumps, without writing.
+    pub(crate) fn stage_signal_flush(&mut self) -> Vec<LayerWrite> {
+        let dirty = std::mem::take(&mut self.dirty_signals);
+        let mut writes = Vec::new();
+        if dirty.history {
+            match stage_json(&self.dir.join(HISTORY_FILE), &self.history) {
+                Ok(write) => writes.push(write),
+                Err(err) => eprintln!("raff: {err}"),
+            }
+        }
+        if dirty.pinned {
+            match stage_json(&self.dir.join(PINNED_FILE), &self.pinned) {
+                Ok(write) => writes.push(write),
+                Err(err) => eprintln!("raff: {err}"),
+            }
+        }
+        writes
+    }
+
+    /// Puts back exactly what `capture` changed, from its undo record.
+    fn rollback_capture(&mut self, undo: CaptureUndo, dropped: Vec<ClipItem>) {
+        match undo {
+            CaptureUndo::Nothing => {}
+            CaptureUndo::Added => {
+                if !self.history.is_empty() {
+                    self.history.remove(0);
+                }
+                self.history.extend(dropped);
+            }
+            CaptureUndo::PinnedBumped { index, previous } => {
+                if let Some(slot) = self.pinned.get_mut(index) {
+                    *slot = *previous;
+                }
+            }
+            CaptureUndo::HistoryBumped { index, previous } => {
+                if !self.history.is_empty() {
+                    self.history.remove(0);
+                }
+                let index = index.min(self.history.len());
+                self.history.insert(index, *previous);
+            }
+        }
     }
 
     fn delete_files(&self, item: &ClipItem) {
@@ -1634,8 +1850,6 @@ mod tests {
 
         // One good capture rewrites history.json — the guard now has nothing
         // left to notice, because both layers parse from here on.
-        let old_history = store.history.clone();
-        let old_pinned = store.pinned.clone();
         let capture = store.capture(
             ItemKind::Text,
             "نصّ".into(),
@@ -1646,9 +1860,8 @@ mod tests {
             None,
             ("Notes".into(), "com.apple.Notes".into()),
         );
-        store
-            .persist_capture(capture, old_history, old_pinned)
-            .unwrap();
+        let store = std::sync::Mutex::new(store);
+        persist_capture(&store, capture).unwrap();
         drop(store);
 
         let store = Store::load(dir.clone());
@@ -1656,6 +1869,135 @@ mod tests {
         assert!(
             images.join("a.png").exists(),
             "the only metadata naming this image is the recovery copy"
+        );
+    }
+
+    #[test]
+    fn a_failed_capture_write_restores_the_model_from_its_undo_record() {
+        // 1000 is the highest limit `validate_settings` allows, and the size
+        // the old path cloned twice on every single copy the user made.
+        let dir = std::env::temp_dir().join(format!("raff-test-{}", uuid::Uuid::new_v4()));
+        let mut s = Store::load(dir.clone());
+        s.settings.history_limit = 1000;
+        for n in 0..1000 {
+            capture_text(&mut s, &format!("item {n}"));
+        }
+        let before_len = s.history.len();
+        let before_head = s.history[0].id.clone();
+        let before_tail = s.history[before_len - 1].id.clone();
+
+        // The temporary file every layer write goes through cannot be created,
+        // so the write fails while `history.json` itself stays readable.
+        fs::create_dir(dir.join("history.json.tmp")).unwrap();
+
+        let store = std::sync::Mutex::new(s);
+        let capture = crate::lock_store(&store).capture(
+            ItemKind::Text,
+            "one more".into(),
+            None,
+            None,
+            None,
+            None,
+            None,
+            ("Test".into(), "com.test".into()),
+        );
+
+        assert!(persist_capture(&store, capture).is_err());
+
+        let s = crate::lock_store(&store);
+        assert_eq!(s.history.len(), before_len, "the row it pushed off came back");
+        assert_eq!(s.history[0].id, before_head, "the new row is gone");
+        assert_eq!(
+            s.history[before_len - 1].id,
+            before_tail,
+            "and the tail is the one that was there"
+        );
+    }
+
+    #[test]
+    fn the_size_budget_trims_a_history_that_is_still_under_the_count_limit() {
+        let mut s = store();
+        s.settings.history_limit = 1000;
+        // Rows of 2 MB: well inside the per-item cap, and a count limit of
+        // 1000 of them is what makes "1000 items" an unbounded promise.
+        let bulk = "a".repeat(2 * 1024 * 1024);
+        let rows = 2 + MAX_HISTORY_BYTES / bulk.len();
+        for n in 0..rows {
+            capture_text(&mut s, &format!("{n} {bulk}"));
+        }
+
+        assert!(
+            s.history.len() < rows,
+            "the count limit alone would have kept every row"
+        );
+        assert!(
+            s.history.iter().map(weight).sum::<usize>() <= MAX_HISTORY_BYTES,
+            "the layer stays inside its byte budget"
+        );
+        assert_eq!(
+            s.history[0].text.split(' ').next(),
+            Some((rows - 1).to_string().as_str()),
+            "trimming drops the oldest, never the newest"
+        );
+    }
+
+    #[test]
+    fn a_learning_bump_waits_for_the_flush_instead_of_rewriting_the_layer() {
+        let mut s = store();
+        capture_text(&mut s, "counted");
+        let id = s.history[0].id.clone();
+        s.save_history();
+        let on_disk = fs::read(s.dir.join(HISTORY_FILE)).unwrap();
+
+        // Exactly what `bump_signals` does for a paste.
+        s.find_mut(&id).unwrap().paste_count += 1;
+        s.mark_signals_dirty(false);
+
+        assert_eq!(
+            fs::read(s.dir.join(HISTORY_FILE)).unwrap(),
+            on_disk,
+            "moving a counter by one must not rewrite the whole layer"
+        );
+
+        for write in s.stage_signal_flush() {
+            write.commit().unwrap();
+        }
+        assert_ne!(
+            fs::read(s.dir.join(HISTORY_FILE)).unwrap(),
+            on_disk,
+            "the pause is when it is written"
+        );
+        assert!(s.stage_signal_flush().is_empty(), "and only once");
+    }
+
+    #[test]
+    fn a_stale_layer_write_never_lands_on_top_of_a_newer_one() {
+        let mut s = store();
+        capture_text(&mut s, "first");
+        let stale = stage_json(&s.dir.join(HISTORY_FILE), &s.history).unwrap();
+
+        capture_text(&mut s, "second");
+        let fresh = stage_json(&s.dir.join(HISTORY_FILE), &s.history).unwrap();
+
+        // The newer serialization wins the race to the disk; the older one
+        // then arrives holding a layer that no longer exists.
+        fresh.commit().unwrap();
+        stale.commit().unwrap();
+
+        let written: Vec<ClipItem> =
+            serde_json::from_slice(&fs::read(s.dir.join(HISTORY_FILE)).unwrap()).unwrap();
+        assert_eq!(written.len(), 2, "the older write was refused, not applied");
+    }
+
+    #[test]
+    fn a_single_row_larger_than_the_budget_is_still_kept() {
+        let mut s = store();
+        capture_text(&mut s, &"a".repeat(MAX_HISTORY_BYTES + 1));
+
+        assert_eq!(
+            s.history.len(),
+            1,
+            "a row that already passed the per-item cap must not vanish on arrival"
         );
     }
 
@@ -1675,8 +2017,9 @@ mod tests {
             Some("hash".into()),
             ("Test".into(), "com.test".into()),
         );
-        let old_history = Vec::new();
-        s.persist_capture(capture, old_history, Vec::new()).unwrap();
+        let s = std::sync::Mutex::new(s);
+        persist_capture(&s, capture).unwrap();
+        let s = s.into_inner().unwrap();
         drop(s);
 
         let reloaded = Store::load(dir.clone());
