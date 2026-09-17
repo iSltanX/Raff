@@ -10,6 +10,7 @@
 //! Target/action is the documented AppKit path and behaves the same on every
 //! supported macOS release.
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::OnceLock;
 
 use objc2::rc::Retained;
@@ -153,12 +154,40 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
 /// disabled menu item does, without adding a glyph, a colour or a badge.
 const MUTED_ALPHA: f64 = 0.45;
 
-/// Quietly reflects a degraded state in the menu bar, or clears it with `None`.
+/// What the icon has to say about itself, worst first. Capture being dead
+/// outranks a missing permission: one means nothing is saved at all, the other
+/// only that the last step is manual.
+static CAPTURE_STOPPED: AtomicBool = AtomicBool::new(false);
+static PERMISSION_MISSING: AtomicBool = AtomicBool::new(false);
+
+/// The capture loop gave up and will not come back this session.
+pub fn note_capture_stopped() {
+    if !CAPTURE_STOPPED.swap(true, Ordering::SeqCst) {
+        apply_quiet_state();
+    }
+}
+
+/// The current Accessibility answer. Cheap to call repeatedly: it touches the
+/// menu bar only when the answer actually changed.
+pub fn note_permission(trusted: bool) {
+    if PERMISSION_MISSING.swap(!trusted, Ordering::SeqCst) == trusted {
+        apply_quiet_state();
+    }
+}
+
+/// Quietly reflects the worst standing condition in the menu bar.
 ///
 /// The icon is the only surface a menu-bar app always has. A capture that died
 /// or a permission that was never granted is otherwise invisible until the
 /// user opens Settings and thinks to look — which is exactly what nobody does.
-pub fn note_quiet_state(reason: Option<String>) {
+fn apply_quiet_state() {
+    let reason = if CAPTURE_STOPPED.load(Ordering::SeqCst) {
+        Some("الالتقاط متوقف".to_string())
+    } else if PERMISSION_MISSING.load(Ordering::SeqCst) {
+        Some("اللصق التلقائي معطّل".to_string())
+    } else {
+        None
+    };
     crate::macos::dispatch_to_main(move || {
         let Some(mtm) = MainThreadMarker::new() else {
             return;

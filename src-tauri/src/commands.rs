@@ -88,7 +88,7 @@ pub fn get_settings(app: AppHandle, state: State<AppState>) -> SettingsPayload {
     let store = crate::lock_store(&state.store);
     SettingsPayload {
         settings: store.settings.clone(),
-        ax_trusted: macos::ax_trusted(),
+        ax_trusted: ax_trusted_noted(),
         version: app.package_info().version.to_string(),
         capture_alive: state.capture_alive.load(std::sync::atomic::Ordering::SeqCst),
     }
@@ -104,7 +104,7 @@ pub fn get_state(app: AppHandle, state: State<AppState>) -> StatePayload {
         pinned: pinned.into_iter().map(ItemDto::from).collect(),
         history: store.history.iter().map(ItemDto::from).collect(),
         settings: store.settings.clone(),
-        ax_trusted: macos::ax_trusted(),
+        ax_trusted: ax_trusted_noted(),
         version: app.package_info().version.to_string(),
         unreadable_layer: store.unreadable_layer,
         capture_alive: state.capture_alive.load(std::sync::atomic::Ordering::SeqCst),
@@ -353,7 +353,18 @@ pub fn hide_panel(app: AppHandle) {
 
 #[tauri::command]
 pub fn ax_status() -> bool {
-    macos::ax_trusted()
+    ax_trusted_noted()
+}
+
+/// Reads the Accessibility answer and lets the menu-bar icon reflect it.
+///
+/// Raff does not watch the permission live, so the icon is only ever as fresh
+/// as the last time something asked — which is every state read, every paste
+/// attempt, and launch.
+fn ax_trusted_noted() -> bool {
+    let trusted = macos::ax_trusted();
+    crate::tray::note_permission(trusted);
+    trusted
 }
 
 #[tauri::command]

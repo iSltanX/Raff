@@ -128,12 +128,33 @@ async function load() {
   // `captureEnabled` above is the request; this is the outcome. They agree
   // until the capture loop gives up, and that gap is the whole point of the row.
   el('capture-status').hidden = state.captureAlive !== false;
+  renderAccessibility(state.axTrusted === true);
   setChecked('concealed-toggle', settings.respectConcealed);
   setChecked('learning-toggle', settings.learningEnabled);
   el('history-limit').value = String(settings.historyLimit);
   renderAppearance();
   renderExcluded();
 }
+
+/** The permission is a state worth showing either way: granted is the answer
+ *  to "is auto-paste going to work?", and missing is the answer to "why did it
+ *  stop?". Only the action disappears once there is nothing left to do. */
+function renderAccessibility(trusted) {
+  const row = el('accessibility-status');
+  const action = el('accessibility-action');
+  el('accessibility-sub').textContent = trusted
+    ? 'ممنوح. يلصق رفّ نيابةً عنك مباشرة.'
+    : 'اللصق التلقائي معطّل. يُنسخ العنصر إلى الحافظة لتلصقه بنفسك.';
+  action.hidden = trusted;
+  row.hidden = false;
+}
+
+el('accessibility-action').addEventListener('click', async () => {
+  // Asking first is what makes macOS list رفّ in the pane at all; opening the
+  // pane is what the user still has to do by hand.
+  await api.requestAccessibility().catch(() => {});
+  await api.openAccessibilitySettings().catch(() => {});
+});
 
 function setSettingsInteractive(ready) {
   tablist.toggleAttribute('inert', !ready);

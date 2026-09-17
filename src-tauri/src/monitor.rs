@@ -44,7 +44,7 @@ pub fn start(app: AppHandle) {
             state.capture_alive.store(false, Ordering::SeqCst);
             // Say it where the user is looking, not only where they might go
             // looking: the settings row needs the window opened first.
-            tray::note_quiet_state(Some("الالتقاط متوقف".into()));
+            tray::note_capture_stopped();
             let _ = app.emit("raff://changed", ());
         }
     });

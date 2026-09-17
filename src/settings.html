@@ -240,6 +240,35 @@
           </div>
 
           <div class="settings-group">
+            <h3 class="group-title">اللصق التلقائي</h3>
+            <div class="settings-rows">
+              <!-- The permission was reachable only from a first-run window
+                   shown once, and from a toast after a paste had already
+                   failed. This is the standing answer to "why did ⌘V stop?". -->
+              <div
+                class="row"
+                id="accessibility-status"
+                role="status"
+                aria-live="polite"
+                aria-atomic="true"
+                hidden
+              >
+                <button
+                  type="button"
+                  class="push-btn"
+                  id="accessibility-action"
+                  aria-describedby="accessibility-label"
+                  hidden
+                >منح الإذن…</button>
+                <div class="row-label">
+                  <span class="label-title" id="accessibility-label" dir="auto">إذن تسهيل الوصول</span>
+                  <span class="label-sub" id="accessibility-sub" dir="auto"></span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="settings-group">
             <h3 class="group-title">الاستثناءات</h3>
             <div class="settings-rows">
               <div class="row">

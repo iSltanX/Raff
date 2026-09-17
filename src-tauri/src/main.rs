@@ -145,6 +145,9 @@ fn main() {
             panel::init(&handle)?;
             startup_trace::mark("panel_init_done");
             tray::create(&handle)?;
+            // So the icon is truthful from the first frame, not from whenever
+            // something first happens to ask.
+            tray::note_permission(macos::ax_trusted());
             startup_trace::mark("tray_created_ICON_NOW_VISIBLE");
             if let Err(err) = commands::register_hotkey(&handle, &hotkey) {
                 eprintln!("raff: hotkey registration failed: {err}");
