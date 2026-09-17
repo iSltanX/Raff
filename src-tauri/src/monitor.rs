@@ -227,14 +227,24 @@ fn capture_reading(store_lock: &Mutex<Store>, reading: ClipReading) -> bool {
 
     let (images_dir, image_file, thumb_file, capture) = {
         let mut store = crate::lock_store(store_lock);
-        // Identical image already stored? Bump it without touching the disk.
+        let dir = store.images_dir();
+        // Identical image already stored, *and* its file is still there? Then
+        // bump it without touching the disk. Asking the metadata alone let a
+        // row whose file had vanished swallow the re-copy as a duplicate, so
+        // no replacement was ever written and the row stayed broken for good —
+        // while copying it back out failed with «العنصر غير موجود».
         let dup = store
             .pinned
             .iter()
             .chain(store.history.iter())
-            .any(|i| i.kind == ItemKind::Image && i.hash.as_deref() == Some(hash.as_str()));
+            .any(|i| {
+                i.kind == ItemKind::Image
+                    && i.hash.as_deref() == Some(hash.as_str())
+                    && i.image_file
+                        .as_ref()
+                        .is_some_and(|file| dir.join(file).exists())
+            });
 
-        let dir = store.images_dir();
         let (image_file, thumb_file) = if dup {
             (None, None)
         } else {
@@ -432,6 +442,35 @@ mod tests {
             },
             source: macos::FrontApp::default(),
         }
+    }
+
+    #[test]
+    fn recopying_an_image_whose_file_vanished_writes_it_again() {
+        let dir = std::env::temp_dir().join(format!("raff-heal-test-{}", uuid::Uuid::new_v4()));
+        let store = Mutex::new(Store::load(dir.clone()));
+        let png = encode_png(&image::DynamicImage::new_rgba8(12, 9)).unwrap();
+
+        assert!(capture_reading(&store, image_reading(png.clone())));
+        let images = dir.join(crate::storage::IMAGES_DIR);
+        let stored = {
+            let guard = store.lock().unwrap();
+            guard.history[0].image_file.clone().unwrap()
+        };
+
+        // The file goes away underneath the row — a botched sync, a manual
+        // clean-up. The metadata still names it.
+        std::fs::remove_file(images.join(&stored)).unwrap();
+
+        // Copying the very same image again is the user's only lever.
+        assert!(capture_reading(&store, image_reading(png)));
+
+        let guard = store.lock().unwrap();
+        assert_eq!(guard.history.len(), 1, "it is still one row, not a duplicate");
+        let healed = guard.history[0].image_file.clone().unwrap();
+        assert!(
+            images.join(&healed).exists(),
+            "the row points at a file that is actually there again"
+        );
     }
 
     #[test]
