@@ -706,8 +706,34 @@ showLearningBtn.addEventListener('click', async () => {
   showLearningBtn.setAttribute('aria-expanded', String(!view.hidden));
   showLearningBtn.textContent = view.hidden ? 'عرض' : 'إخفاء';
   showLearningBtn.setAttribute('aria-label', view.hidden ? 'عرض ما تعلّمه رفّ' : 'إخفاء ما تعلّمه رفّ');
-  if (!view.hidden) await renderLearning();
+  if (!view.hidden) await showLearning();
 });
+
+/**
+ * Draws the summary, or says why it could not be drawn.
+ *
+ * This is the one path that used to `await` the summary with nothing around
+ * it: a refusal left a rejected promise and a blank box. Every other Settings
+ * path already answers for its own failure, and so does this one now.
+ */
+async function showLearning() {
+  try {
+    await renderLearning();
+  } catch (err) {
+    console.error('raff: learning summary failed', err);
+    const view = el('learning-view');
+    const message = document.createElement('div');
+    message.className = 'learning-empty';
+    message.textContent = 'تعذّر عرض ما تعلّمه رفّ.';
+    const retry = document.createElement('button');
+    retry.type = 'button';
+    retry.className = 'inline-retry';
+    retry.id = 'retry-learning';
+    retry.textContent = 'إعادة المحاولة';
+    retry.addEventListener('click', () => void showLearning());
+    view.replaceChildren(message, retry);
+  }
+}
 
 async function renderLearning() {
   const view = el('learning-view');
