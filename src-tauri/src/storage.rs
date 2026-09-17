@@ -253,6 +253,48 @@ pub fn detect_kind(text: &str) -> ItemKind {
     }
 }
 
+/// Image filenames named by a set-aside `*.json.corrupt` copy.
+///
+/// Such a copy exists precisely because it did not parse, so it is read
+/// leniently: every `"imageFile"` / `"thumbFile"` value that can still be
+/// recovered from the text counts. Keeping one file too many costs disk;
+/// keeping one too few destroys the images the copy exists to point at.
+fn referenced_by_recovery_copies(dir: &Path) -> std::collections::HashSet<String> {
+    const KEYS: [&str; 2] = ["\"imageFile\"", "\"thumbFile\""];
+    let mut found = std::collections::HashSet::new();
+    let Ok(entries) = fs::read_dir(dir) else {
+        return found;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().and_then(|e| e.to_str()) != Some("corrupt") {
+            continue;
+        }
+        let Ok(text) = fs::read_to_string(&path) else {
+            continue;
+        };
+        for key in KEYS {
+            let mut rest = text.as_str();
+            while let Some(at) = rest.find(key) {
+                rest = &rest[at + key.len()..];
+                if let Some(name) = json_string_value(rest) {
+                    found.insert(name);
+                }
+            }
+        }
+    }
+    found
+}
+
+/// The string literal a `"key"` is assigned, when the text right after the key
+/// is `: "…"`. Stored filenames are generated ids, so no escape handling.
+fn json_string_value(after_key: &str) -> Option<String> {
+    let rest = after_key.trim_start().strip_prefix(':')?.trim_start();
+    let rest = rest.strip_prefix('"')?;
+    let end = rest.find('"')?;
+    Some(rest[..end].to_string())
+}
+
 fn load_json_with_status<T: serde::de::DeserializeOwned + Default>(path: &Path) -> (T, bool) {
     if !path.exists() {
         return (T::default(), true);
@@ -336,7 +378,11 @@ impl Store {
     }
 
     fn cleanup_orphan_images(&self) {
-        let mut referenced = std::collections::HashSet::new();
+        // A recovery copy outlives the boot that created it: the next good
+        // capture rewrites the live layer, so from then on both layers parse
+        // and the guard in `load` no longer fires. The copy is then the only
+        // metadata naming its images, and must count as a reference.
+        let mut referenced = referenced_by_recovery_copies(&self.dir);
         for item in self.pinned.iter().chain(self.history.iter()) {
             referenced.extend(item.image_file.iter().cloned());
             referenced.extend(item.thumb_file.iter().cloned());
@@ -1562,6 +1608,49 @@ mod tests {
         assert!(
             images.join("apparently-orphan.png").exists(),
             "GC must skip the whole image directory when references are incomplete"
+        );
+    }
+
+    #[test]
+    fn a_recovery_copy_keeps_its_images_on_the_boot_after_the_one_that_healed_history() {
+        let dir = std::env::temp_dir().join(format!("raff-test-{}", uuid::Uuid::new_v4()));
+        let images = dir.join(IMAGES_DIR);
+        fs::create_dir_all(&images).unwrap();
+        fs::write(images.join("a.png"), b"a").unwrap();
+        fs::write(
+            dir.join(HISTORY_FILE),
+            r#"[{"type":"image","imageFile":"a.png","thumbFile":"a.thumb.png""#,
+        )
+        .unwrap();
+
+        // First boot sets the recovery copy aside and skips collection.
+        let mut store = Store::load(dir.clone());
+        assert!(dir.join("history.json.corrupt").exists());
+
+        // One good capture rewrites history.json — the guard now has nothing
+        // left to notice, because both layers parse from here on.
+        let old_history = store.history.clone();
+        let old_pinned = store.pinned.clone();
+        let capture = store.capture(
+            ItemKind::Text,
+            "نصّ".into(),
+            None,
+            None,
+            None,
+            None,
+            None,
+            ("Notes".into(), "com.apple.Notes".into()),
+        );
+        store
+            .persist_capture(capture, old_history, old_pinned)
+            .unwrap();
+        drop(store);
+
+        let store = Store::load(dir.clone());
+        assert_eq!(store.history.len(), 1, "the healed layer reads fine now");
+        assert!(
+            images.join("a.png").exists(),
+            "the only metadata naming this image is the recovery copy"
         );
     }
 
