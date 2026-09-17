@@ -89,6 +89,7 @@ fn main() {
             commands::update_settings,
             commands::get_image,
             commands::hide_panel,
+            commands::show_panel,
             commands::open_settings,
             commands::open_about,
             commands::open_repository,

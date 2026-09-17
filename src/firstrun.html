@@ -37,6 +37,35 @@
       <button class="btn big" id="later">لاحقًا</button>
     </div>
 
+    <!-- The monitor is already running by the time this window appears, and
+         capture defaults to on. Saying so, and offering the other answer, is
+         the difference between a default and a decision. Deliberately not
+         tied to the permission above: manual paste works without it. -->
+    <section class="capture-consent" id="capture-consent" aria-labelledby="capture-consent-title">
+      <h2 class="consent-title" id="capture-consent-title">يلتقط رفّ ما تنسخه الآن</h2>
+      <p class="body-text">
+        كل ما تنسخه يُحفظ على جهازك وحده. يمكنك إيقاف الالتقاط الآن وتشغيله
+        لاحقًا من الإعدادات متى شئت.
+      </p>
+      <div class="actions">
+        <button class="btn btn-primary" id="capture-accept">ابدأ الالتقاط</button>
+        <button class="btn" id="capture-decline">أبقِه متوقفًا</button>
+      </div>
+    </section>
+
+    <!-- Separate from the permission block on purpose: رفّ has no Dock icon
+         and no ⌘Tab entry, so how to open it is its own thing to learn, not a
+         consequence of granting anything. -->
+    <section class="completion" id="completion" role="status" aria-live="polite" aria-atomic="true" hidden>
+      <h2 class="consent-title">رفّ جاهز</h2>
+      <p class="body-text" id="completion-text">
+        افتحه في أي وقت بـ <kbd>⇧⌘V</kbd>، أو من أيقونته في شريط القوائم أعلى الشاشة.
+      </p>
+      <div class="actions">
+        <button class="btn btn-primary" id="open-raff">افتح رفّ الآن</button>
+      </div>
+    </section>
+
     <div
       class="permission-status"
       id="permission-status"

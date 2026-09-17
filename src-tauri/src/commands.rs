@@ -369,6 +369,16 @@ fn image_data_url(store: &Store, id: &str) -> Option<String> {
     ))
 }
 
+/// Opens the shelf, for the first-run window's "open رفّ now".
+///
+/// رفّ is an accessory app: no Dock icon, no ⌘Tab entry. Once the first-run
+/// window closes, the hotkey and the menu-bar icon are the only two ways in,
+/// so the window that teaches them offers the first use itself.
+#[tauri::command]
+pub fn show_panel(app: AppHandle) {
+    panel::show(&app);
+}
+
 #[tauri::command]
 pub fn hide_panel(app: AppHandle) {
     panel::hide(&app);

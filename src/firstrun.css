@@ -116,3 +116,45 @@ body {
 .permission-status.is-error {
   color: var(--danger);
 }
+
+/* The capture question and the "how to open رفّ" note are their own blocks —
+   separated from the permission above by a rule, because neither is a
+   consequence of granting it. */
+.capture-consent,
+.completion {
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
+
+.consent-title {
+  margin: 0 0 6px;
+  font-size: var(--text-body);
+  font-weight: 600;
+  text-align: center;
+}
+
+.capture-consent .body-text,
+.completion .body-text {
+  margin-bottom: 0;
+  font-size: var(--text-small);
+}
+
+.capture-consent .actions,
+.completion .actions {
+  margin-top: 14px;
+}
+
+.completion .actions {
+  grid-template-columns: 1fr;
+}
+
+.completion kbd {
+  padding: 1px 5px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-sunken);
+  font-family: inherit;
+  font-size: var(--text-small);
+  font-weight: 600;
+  color: var(--ink);
+}

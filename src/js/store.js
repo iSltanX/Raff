@@ -31,6 +31,7 @@ export const api = {
   updateSettings: (settings) => invoke('update_settings', { settings }),
   getImage: (id) => invoke('get_image', { id }),
   hidePanel: () => invoke('hide_panel'),
+  showPanel: () => invoke('show_panel'),
   openSettings: () => invoke('open_settings'),
   openAbout: () => invoke('open_about'),
   openRepository: () => invoke('open_repository'),
