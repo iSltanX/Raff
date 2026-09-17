@@ -132,6 +132,7 @@ async function load() {
   setChecked('concealed-toggle', settings.respectConcealed);
   setChecked('learning-toggle', settings.learningEnabled);
   el('history-limit').value = String(settings.historyLimit);
+  el('retention').value = String(settings.retentionDays ?? 0);
   renderAppearance();
   renderExcluded();
 }
@@ -330,6 +331,7 @@ el('learning-toggle').addEventListener('click', () =>
   save((current) => ({ learningEnabled: !current.learningEnabled }))
 );
 el('history-limit').addEventListener('change', (e) => save({ historyLimit: Number(e.target.value) }));
+el('retention').addEventListener('change', (e) => save({ retentionDays: Number(e.target.value) }));
 
 // ─── المظهر — Segments-Container (2:8018) ─────────────────────────────────
 // Three tabs over two settings: «تلقائي» is followSystem, the other two are an

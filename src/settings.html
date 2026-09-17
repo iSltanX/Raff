@@ -130,6 +130,24 @@
                   <span class="label-sub" dir="auto">تُحذف الأقدم تلقائيًا، وتبقى العناصر المثبّتة.</span>
                 </div>
               </div>
+
+              <!-- The count answers "how many"; this answers "how long what I
+                   copied lives on my disk" — and only the second is a promise
+                   a user can hold رفّ to. The two limits coexist. -->
+              <div class="row">
+                <div class="select-wrap">
+                  <select class="select" id="retention" aria-labelledby="retention-label">
+                    <option value="0">بلا حدّ زمني</option>
+                    <option value="7">أسبوع</option>
+                    <option value="30">شهر</option>
+                    <option value="90">ثلاثة أشهر</option>
+                  </select>
+                </div>
+                <div class="row-label">
+                  <span class="label-title" id="retention-label" dir="auto">مدة الاحتفاظ</span>
+                  <span class="label-sub" dir="auto">يُحذف غير المثبّت بعد هذه المدة، ولو لم تفتح رفّ.</span>
+                </div>
+              </div>
             </div>
           </div>
 

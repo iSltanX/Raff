@@ -31,6 +31,7 @@ const THUMB_MAX_H: u32 = 80;
 pub fn start(app: AppHandle) {
     macos::start_activation_watch();
     start_signal_flusher(app.clone());
+    start_retention_sweeper(app.clone());
     std::thread::spawn(move || {
         let mut last = macos::change_count();
         let outcome = supervise(|| {
@@ -46,6 +47,23 @@ pub fn start(app: AppHandle) {
             tray::note_capture_stopped();
             let _ = app.emit("raff://changed", ());
         }
+    });
+}
+
+/// How often the retention policy is re-applied while Raff is running.
+///
+/// Hourly is enough for a promise measured in days, and it is the only cost a
+/// machine sitting idle pays: an age limit cannot ride on captures, because
+/// the case it exists for is a sensitive copy followed by nobody touching the
+/// clipboard for a fortnight.
+const RETENTION_SWEEP_MS: u64 = 60 * 60 * 1000;
+
+/// Re-applies the retention policy on a timer.
+fn start_retention_sweeper(app: AppHandle) {
+    std::thread::spawn(move || loop {
+        std::thread::sleep(Duration::from_millis(RETENTION_SWEEP_MS));
+        crate::lock_store(&app.state::<AppState>().store).trim_history();
+        let _ = app.emit("raff://changed", ());
     });
 }
 

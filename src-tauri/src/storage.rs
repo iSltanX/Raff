@@ -87,6 +87,15 @@ pub struct Settings {
     pub appearance: Appearance,
     /// Follow the macOS appearance (default on first launch).
     pub follow_system: bool,
+    /// Days an unpinned row is kept, or `0` to keep it until a count or size
+    /// limit pushes it out.
+    ///
+    /// The count answers «كم أحتفظ»; this answers «كم يعيش ما نسختُه على
+    /// قرصي», and for a privacy tool only the second is a promise the user can
+    /// hold Raff to — «٥٠٠ عنصر» is two days for one person and three months
+    /// for another. `0` is what every existing install migrates to, which is
+    /// exactly today's behaviour.
+    pub retention_days: u32,
 }
 
 impl Default for Settings {
@@ -102,6 +111,7 @@ impl Default for Settings {
             first_run_shown: false,
             appearance: Appearance::Light,
             follow_system: true,
+            retention_days: 0,
         }
     }
 }
@@ -635,6 +645,8 @@ impl Store {
         // - item still on disk => delete never committed; preserve its files
         // - item absent on disk => deletion committed; clean up its files
         store.resolve_interrupted_delete();
+        // Before anything is shown: the age limit has no capture to ride on.
+        store.trim_history();
         // Before anything compares fingerprints, and written down so the next
         // launch finds nothing left to migrate.
         let images_dir = store.images_dir();
@@ -727,12 +739,7 @@ impl Store {
         let old_settings = self.settings.clone();
         let old_history = self.history.clone();
         self.settings = settings;
-        let limit = self.settings.history_limit.max(1);
-        let dropped = if self.history.len() > limit {
-            self.history.split_off(limit)
-        } else {
-            Vec::new()
-        };
+        let dropped = self.prune_history();
 
         let writes = try_save_json(&self.dir.join(SETTINGS_FILE), &self.settings)
             .and_then(|_| try_save_json(&self.dir.join(HISTORY_FILE), &self.history));
@@ -903,19 +910,24 @@ impl Store {
         self.history.insert(0, item);
         CaptureResult {
             outcome: CaptureOutcome::Added,
-            dropped: self.trim_history_to_limits(),
+            dropped: self.prune_history(),
             layer: Some(DeletedLayer::History),
             undo: CaptureUndo::Added,
         }
     }
 
-    /// Drops the oldest rows until the layer is inside both limits, and hands
-    /// them back so their image files are removed only once the write commits.
+    /// The one place the retention policy lives.
+    ///
+    /// Three limits answering three different questions: the count is a
+    /// resource cap, the byte budget is what makes the worst case a number,
+    /// and the age is the privacy promise. Pinned rows are outside all three,
+    /// on purpose. Dropped rows come back to the caller so their image files
+    /// are deleted only once the layer write has committed.
     ///
     /// A single row heavier than the whole budget is kept: it already cleared
     /// the per-item cap in `read_clip`, and dropping it the instant it arrived
     /// would look exactly like capture quietly not working.
-    fn trim_history_to_limits(&mut self) -> Vec<ClipItem> {
+    fn prune_history(&mut self) -> Vec<ClipItem> {
         let limit = self.settings.history_limit.max(1);
         let mut keep = self.history.len().min(limit);
         let mut total = 0usize;
@@ -926,7 +938,32 @@ impl Store {
                 break;
             }
         }
-        self.history.split_off(keep)
+        let mut dropped = self.history.split_off(keep);
+
+        if let Some(oldest_allowed) = self.oldest_allowed_ms() {
+            // Partitioned rather than truncated: recency order is maintained,
+            // but the promise must not depend on it holding.
+            let mut kept = Vec::with_capacity(self.history.len());
+            for item in self.history.drain(..) {
+                if item.created_at >= oldest_allowed {
+                    kept.push(item);
+                } else {
+                    dropped.push(item);
+                }
+            }
+            self.history = kept;
+        }
+        dropped
+    }
+
+    /// The oldest `created_at` still covered, or `None` when the user keeps
+    /// things until a count or size limit says otherwise.
+    fn oldest_allowed_ms(&self) -> Option<u64> {
+        let days = u64::from(self.settings.retention_days);
+        if days == 0 {
+            return None;
+        }
+        Some(now_ms().saturating_sub(days * 24 * 60 * 60 * 1000))
     }
 
     /// Serializes the layer a capture touched, without writing it.
@@ -1129,13 +1166,22 @@ impl Store {
         Ok(())
     }
 
-    /// Enforces the history cap (oldest items dropped, their image files
-    /// deleted). Public so a shrunk `history_limit` applies immediately.
+    /// Applies the retention policy now and writes the result.
+    ///
+    /// The entry point for every prune that is not a capture: a shrunk limit,
+    /// a shortened retention window, launch, and the hourly sweep. Time-based
+    /// retention cannot ride on captures the way the count could — a sensitive
+    /// copy followed by a fortnight away from the machine is precisely the
+    /// case the promise was made for, and precisely the case with no capture
+    /// to hang a prune on.
     pub fn trim_history(&mut self) {
-        while self.history.len() > self.settings.history_limit.max(1) {
-            if let Some(dropped) = self.history.pop() {
-                self.delete_files(&dropped);
-            }
+        let dropped = self.prune_history();
+        if dropped.is_empty() {
+            return;
+        }
+        self.save_history();
+        for item in &dropped {
+            self.delete_files(item);
         }
     }
 
@@ -1598,6 +1644,71 @@ mod tests {
         }
         assert_eq!(s.history.len(), 3);
         assert_eq!(s.history[0].text, "item 4");
+    }
+
+    #[test]
+    fn a_week_long_retention_sweeps_at_boot_with_no_capture_at_all() {
+        let dir = std::env::temp_dir().join(format!("raff-test-{}", uuid::Uuid::new_v4()));
+        let images = dir.join(IMAGES_DIR);
+        fs::create_dir_all(&images).unwrap();
+        fs::write(images.join("old.png"), b"old").unwrap();
+        fs::write(images.join("old.thumb.png"), b"old thumb").unwrap();
+
+        let day = 24 * 60 * 60 * 1000u64;
+        let now = now_ms();
+        let row = |id: &str, age_days: u64, image: &str| {
+            format!(
+                r#"{{"id":"{id}","type":"image","text":"صورة","imageFile":"{image}","thumbFile":"{image}.thumb.png","sourceAppBundleId":"com.test","sourceApp":"Test","createdAt":{},"isPinned":false,"copyCount":1,"pasteCount":0,"lastUsedAt":1}}"#,
+                now - age_days * day
+            )
+        };
+        fs::write(
+            dir.join(HISTORY_FILE),
+            format!("[{},{}]", row("nine-days", 9, "old"), row("two-days", 2, "kept")),
+        )
+        .unwrap();
+        fs::write(
+            dir.join(PINNED_FILE),
+            format!(
+                r#"[{{"id":"pinned","type":"text","text":"مثبّت","sourceAppBundleId":"com.test","sourceApp":"Test","createdAt":{},"isPinned":true,"pinnedOrder":0,"copyCount":1,"pasteCount":0,"lastUsedAt":1}}]"#,
+                now - 30 * day
+            ),
+        )
+        .unwrap();
+        fs::write(
+            dir.join(SETTINGS_FILE),
+            r#"{"hotkey":"shift+super+v","retentionDays":7}"#,
+        )
+        .unwrap();
+
+        // Nothing is captured: `load` alone has to enforce the promise, or a
+        // fortnight away from the machine keeps the very item it was made for.
+        let store = Store::load(dir.clone());
+
+        assert_eq!(
+            store.history.iter().map(|i| i.id.as_str()).collect::<Vec<_>>(),
+            vec!["two-days"],
+            "past the window goes, inside it stays"
+        );
+        assert!(!images.join("old.png").exists(), "and its image goes with it");
+        assert!(!images.join("old.thumb.png").exists());
+        assert_eq!(store.pinned.len(), 1, "a pinned item is outside the policy");
+
+        // Written down, not just applied in memory.
+        let reloaded = Store::load(dir);
+        assert_eq!(reloaded.history.len(), 1);
+    }
+
+    #[test]
+    fn no_retention_set_keeps_everything_the_count_allows() {
+        let mut s = store();
+        s.settings.retention_days = 0;
+        capture_text(&mut s, "قديم");
+        s.history[0].created_at = now_ms() - 400 * 24 * 60 * 60 * 1000;
+
+        s.trim_history();
+
+        assert_eq!(s.history.len(), 1, "0 means the age limit is not in play");
     }
 
     #[test]

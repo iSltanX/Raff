@@ -350,6 +350,9 @@ fn validate_settings(settings: &Settings) -> Result<(), String> {
     if !matches!(settings.history_limit, 200 | 500 | 1000) {
         return Err("حد السجل غير صالح".into());
     }
+    if !matches!(settings.retention_days, 0 | 7 | 30 | 90) {
+        return Err("مدة الاحتفاظ غير صالحة".into());
+    }
     if settings.hotkey.is_empty() || settings.hotkey.len() > 128 {
         return Err("اختصار لوحة المفاتيح غير صالح".into());
     }
