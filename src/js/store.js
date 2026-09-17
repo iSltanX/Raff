@@ -22,6 +22,7 @@ export const api = {
   pasteItem: (id, plain = false) => invoke('paste_item', { id, plain }),
   copyItem: (id) => invoke('copy_item', { id }),
   togglePin: (id, isPinned) => invoke('toggle_pin', { id, isPinned }),
+  reorderPinned: (ids) => invoke('reorder_pinned', { ids }),
   deleteItem: (id) => invoke('delete_item', { id }),
   undoDelete: (token) => invoke('undo_delete', { token }),
   commitDelete: (token) => invoke('commit_delete', { token }),

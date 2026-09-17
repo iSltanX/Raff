@@ -18,6 +18,8 @@ import {
   CHECK,
   ALERT,
   IMAGE,
+  MOVE_UP,
+  MOVE_DOWN,
   contentTypeIcon,
   createIcon,
 } from './icons.js';
@@ -351,6 +353,18 @@ function buildRow(item, index) {
   });
   actions.append(pinBtn, deleteBtn);
 
+  // Only where the pinned items stand as a group they arranged. In the default
+  // list they are marked in place inside one timeline, and a timeline is not
+  // something to rearrange.
+  if (item.isPinned && filter === 'pinned') {
+    const shelf = pinnedShelfIds();
+    const at = shelf.indexOf(item.id);
+    actions.prepend(
+      moveButton(item.id, -1, MOVE_UP, 'move-up', 'نقل لأعلى', at <= 0),
+      moveButton(item.id, 1, MOVE_DOWN, 'move-down', 'نقل لأسفل', at < 0 || at >= shelf.length - 1)
+    );
+  }
+
   /* Choosing a row IS the product's primary action, and it is one action:
      the item goes to the clipboard, gets pasted into whatever app was in
      front before رفّ opened, and STAYS on the clipboard so ⌘V repeats it.
@@ -385,6 +399,66 @@ function buildRow(item, index) {
 }
 
 /** The designed type filters, backed by the item's own kind + pin flag. */
+/** The pinned shelf in the order the user arranged it — the whole shelf, not
+ *  whatever a search has narrowed the view to, because that is what the
+ *  backend checks the reorder against. */
+function pinnedShelfIds() {
+  return [...state.pinned]
+    .sort((a, b) => pinnedRank(a) - pinnedRank(b))
+    .map((item) => item.id);
+}
+
+const pinnedRank = (item) => item.pinnedOrder ?? Number.MAX_SAFE_INTEGER;
+
+function moveButton(id, delta, icon, className, label, disabled) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = `row-action ${className}`;
+  button.title = label;
+  button.setAttribute('aria-label', label);
+  button.disabled = disabled;
+  button.replaceChildren(createIcon(icon));
+  button.addEventListener('click', (e) => {
+    e.stopPropagation();
+    movePinned(id, delta);
+  });
+  return button;
+}
+
+/**
+ * Moves one pinned row and persists the whole resulting order.
+ *
+ * The backend takes the complete shelf and refuses anything that is not
+ * exactly it, so the swap happens in the full arrangement rather than in the
+ * rows currently on screen — a narrowed search must not be able to send a
+ * shorter shelf.
+ */
+function movePinned(id, delta) {
+  const ids = pinnedShelfIds();
+  const from = ids.indexOf(id);
+  const to = from + delta;
+  if (from < 0 || to < 0 || to >= ids.length) return;
+  [ids[from], ids[to]] = [ids[to], ids[from]];
+
+  // Painted before the round trip, like every other row action here; the
+  // authoritative refresh below is what settles it.
+  ids.forEach((pinnedId, order) => {
+    const item = state.pinned.find((candidate) => candidate.id === pinnedId);
+    if (item) item.pinnedOrder = order;
+  });
+  render();
+
+  enqueueMutation(async () => {
+    try {
+      await api.reorderPinned(ids);
+      await refresh();
+    } catch (err) {
+      await refresh();
+      presentToast(errorMessage(err), { duration: PIN_TOAST_MS, kind: 'error' });
+    }
+  });
+}
+
 function matchesFilter(item) {
   switch (filter) {
     case 'text':
@@ -426,6 +500,10 @@ function renderList() {
   const all = [...state.pinned, ...state.history].sort((a, b) => b.createdAt - a.createdAt);
   const deepIds = deepMatches.query === query ? deepMatches.ids : null;
   visible = filterItems(all, query, deepIds).filter(matchesFilter);
+  if (filter === 'pinned') {
+    // The one view where the pinned items stand as a group: theirs to order.
+    visible = [...visible].sort((a, b) => pinnedRank(a) - pinnedRank(b));
+  }
 
   const selectionIsVisible = visible.some((item) => item.id === selectedId);
   if (query && !selectionIsVisible) {

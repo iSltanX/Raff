@@ -165,6 +165,11 @@ export function createFakeTauri(initialState, { failTimes = 0 } = {}) {
           }
           return Promise.resolve(null);
         }
+        if (cmd === 'reorder_pinned') {
+          const byId = new Map(state.pinned.map((item) => [item.id, item]));
+          state.pinned = args.ids.map((id, order) => ({ ...byId.get(id), pinnedOrder: order }));
+          return Promise.resolve(null);
+        }
         if (cmd === 'search_items') {
           return Promise.resolve([...searchResults]);
         }

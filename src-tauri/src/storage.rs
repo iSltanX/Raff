@@ -1185,6 +1185,49 @@ impl Store {
         }
     }
 
+    /// Rewrites the pinned shelf into exactly this order.
+    ///
+    /// `ids` has to be the pinned set exactly: same ids, none missing, none
+    /// extra, none repeated. A caller working from a stale view would
+    /// otherwise drop a row — or list one twice — while calling it a reorder,
+    /// and the shelf is the one layer nothing ever prunes for the user.
+    ///
+    /// The whole layer is copied for the rollback. That is fine here and not
+    /// in `capture`: pinning is a deliberate, rare act on a short list, not a
+    /// cost paid on every copy the user makes.
+    pub fn reorder_pinned_persisted(&mut self, ids: &[String]) -> Result<(), String> {
+        self.try_finish_pending_pin()?;
+
+        let mut seen = std::collections::HashSet::new();
+        let matches_shelf = ids.len() == self.pinned.len()
+            && ids.iter().all(|id| {
+                seen.insert(id.as_str()) && self.pinned.iter().any(|item| item.id == *id)
+            });
+        if !matches_shelf {
+            return Err("ترتيب المثبتات لا يطابق المحفوظ".into());
+        }
+
+        let previous = self.pinned.clone();
+        let mut reordered = Vec::with_capacity(ids.len());
+        for (order, id) in ids.iter().enumerate() {
+            let position = self
+                .pinned
+                .iter()
+                .position(|item| item.id == *id)
+                .expect("checked above");
+            let mut item = self.pinned.remove(position);
+            item.pinned_order = Some(order as u32);
+            reordered.push(item);
+        }
+        self.pinned = reordered;
+
+        if let Err(err) = try_save_json(&self.dir.join(PINNED_FILE), &self.pinned) {
+            self.pinned = previous;
+            return Err(err);
+        }
+        Ok(())
+    }
+
     /// Pin moves the item from the recent layer to the pinned shelf (plan §2:
     /// two layers). Unpin returns it to the history at its recency position.
     pub fn toggle_pin(&mut self, id: &str) -> bool {
@@ -1722,6 +1765,63 @@ mod tests {
         assert_eq!(s.history.len(), 2);
         assert_eq!(s.history[0].text, "item 4");
         assert_eq!(s.history[1].text, "item 3");
+    }
+
+    fn pin_two(s: &mut Store) -> (String, String) {
+        capture_text(s, "\u{0623}\u{0648}\u{0644}");
+        let first = s.history[0].id.clone();
+        capture_text(s, "\u{062b}\u{0627}\u{0646}");
+        let second = s.history[0].id.clone();
+        assert!(s.toggle_pin(&first));
+        assert!(s.toggle_pin(&second));
+        s.save_pinned();
+        (first, second)
+    }
+
+    fn pinned_ids_in_order(s: &Store) -> Vec<String> {
+        let mut pinned: Vec<&ClipItem> = s.pinned.iter().collect();
+        pinned.sort_by_key(|item| item.pinned_order.unwrap_or(u32::MAX));
+        pinned.iter().map(|item| item.id.clone()).collect()
+    }
+
+    #[test]
+    fn a_reordered_pinned_shelf_is_still_in_that_order_after_a_restart() {
+        let dir = std::env::temp_dir().join(format!("raff-test-{}", uuid::Uuid::new_v4()));
+        let mut s = Store::load(dir.clone());
+        let (first, second) = pin_two(&mut s);
+        assert_eq!(pinned_ids_in_order(&s), vec![first.clone(), second.clone()]);
+
+        s.reorder_pinned_persisted(&[second.clone(), first.clone()])
+            .unwrap();
+        assert_eq!(pinned_ids_in_order(&s), vec![second.clone(), first.clone()]);
+        drop(s);
+
+        let reloaded = Store::load(dir);
+        assert_eq!(
+            pinned_ids_in_order(&reloaded),
+            vec![second, first],
+            "the arrangement is the user's, so it outlives the process"
+        );
+    }
+
+    #[test]
+    fn a_set_that_is_not_the_pinned_shelf_is_refused_and_changes_nothing() {
+        let mut s = store();
+        let (first, second) = pin_two(&mut s);
+        let before = pinned_ids_in_order(&s);
+
+        for wrong in [
+            vec![first.clone()],                                  // one short
+            vec![first.clone(), second.clone(), first.clone()],   // one too many
+            vec![first.clone(), first.clone()],                   // right length, repeated
+            vec![first.clone(), "\u{063a}\u{0631}\u{064a}\u{0628}".to_string()], // a stranger
+        ] {
+            assert!(
+                s.reorder_pinned_persisted(&wrong).is_err(),
+                "{wrong:?} is not the pinned shelf"
+            );
+            assert_eq!(pinned_ids_in_order(&s), before, "and nothing moved");
+        }
     }
 
     #[test]

@@ -169,6 +169,24 @@ pub fn copy_item(app: AppHandle, id: String) -> Result<(), String> {
     }
 }
 
+/// Rewrites the pinned shelf into the order the panel shows.
+///
+/// `pinned_order` was written on every pin and read by nothing, so the shelf
+/// could only be rearranged by unpinning and pinning again in sequence.
+#[tauri::command]
+pub fn reorder_pinned(
+    app: AppHandle,
+    state: State<AppState>,
+    ids: Vec<String>,
+) -> Result<(), String> {
+    {
+        let mut store = crate::lock_store(&state.store);
+        store.reorder_pinned_persisted(&ids).map_err(save_failed)?;
+    }
+    notify(&app);
+    Ok(())
+}
+
 #[tauri::command]
 pub fn toggle_pin(
     app: AppHandle,

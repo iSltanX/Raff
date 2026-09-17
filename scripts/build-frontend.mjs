@@ -55,6 +55,8 @@ const productionFiles = Object.freeze([
   'assets/icons/keyboard.svg',
   'assets/icons/learning.svg',
   'assets/icons/link.svg',
+  'assets/icons/move-down.svg',
+  'assets/icons/move-up.svg',
   'assets/icons/pin-off.svg',
   'assets/icons/pin.svg',
   'assets/icons/privacy.svg',
