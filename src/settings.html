@@ -130,6 +130,24 @@
                   <span class="label-sub" dir="auto">تُحذف الأقدم تلقائيًا، وتبقى العناصر المثبّتة.</span>
                 </div>
               </div>
+
+              <!-- The count answers "how many"; this answers "how long what I
+                   copied lives on my disk" — and only the second is a promise
+                   a user can hold رفّ to. The two limits coexist. -->
+              <div class="row">
+                <div class="select-wrap">
+                  <select class="select" id="retention" aria-labelledby="retention-label">
+                    <option value="0">بلا حدّ زمني</option>
+                    <option value="7">أسبوع</option>
+                    <option value="30">شهر</option>
+                    <option value="90">ثلاثة أشهر</option>
+                  </select>
+                </div>
+                <div class="row-label">
+                  <span class="label-title" id="retention-label" dir="auto">مدة الاحتفاظ</span>
+                  <span class="label-sub" dir="auto">يُحذف غير المثبّت بعد هذه المدة، ولو لم تفتح رفّ.</span>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -184,6 +202,22 @@
                   <span class="label-sub" dir="auto">عند الإيقاف، يتوقف رفّ عن حفظ أي نسخة جديدة.</span>
                 </div>
               </div>
+
+              <!-- Shown only when capture is down. The switch above says what
+                   was asked for; this says what is actually happening. -->
+              <div
+                class="row"
+                id="capture-status"
+                role="status"
+                aria-live="polite"
+                aria-atomic="true"
+                hidden
+              >
+                <div class="row-label">
+                  <span class="label-title" dir="auto">الالتقاط توقّف</span>
+                  <span class="label-sub" dir="auto">أعد تشغيل رفّ ليعود الالتقاط. ما حُفظ سابقًا في مكانه.</span>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -214,10 +248,54 @@
             <h3 class="group-title">الاختصار</h3>
             <div class="settings-rows">
               <div class="row">
-                <button type="button" class="hotkey-badge" id="hotkey-chip" aria-labelledby="hotkey-label"></button>
+                <button
+                  type="button"
+                  class="hotkey-badge"
+                  id="hotkey-chip"
+                  aria-labelledby="hotkey-label"
+                  aria-describedby="hotkey-sub"
+                ></button>
                 <div class="row-label">
                   <span class="label-title" id="hotkey-label" dir="auto">اختصار لوحة المفاتيح لفتح رفّ</span>
-                  <span class="label-sub is-status" id="hotkey-sub" dir="auto"></span>
+                  <!-- A refusal has to be heard, not only painted. Same
+                       pattern as #settings-update-status below. -->
+                  <span
+                    class="label-sub is-status"
+                    id="hotkey-sub"
+                    role="status"
+                    aria-live="polite"
+                    aria-atomic="true"
+                    dir="auto"
+                  ></span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="settings-group">
+            <h3 class="group-title">اللصق التلقائي</h3>
+            <div class="settings-rows">
+              <!-- The permission was reachable only from a first-run window
+                   shown once, and from a toast after a paste had already
+                   failed. This is the standing answer to "why did ⌘V stop?". -->
+              <div
+                class="row"
+                id="accessibility-status"
+                role="status"
+                aria-live="polite"
+                aria-atomic="true"
+                hidden
+              >
+                <button
+                  type="button"
+                  class="push-btn"
+                  id="accessibility-action"
+                  aria-describedby="accessibility-label"
+                  hidden
+                >منح الإذن…</button>
+                <div class="row-label">
+                  <span class="label-title" id="accessibility-label" dir="auto">إذن تسهيل الوصول</span>
+                  <span class="label-sub" id="accessibility-sub" dir="auto"></span>
                 </div>
               </div>
             </div>
@@ -251,7 +329,7 @@
                 >إدارة…</button>
                 <div class="row-label">
                   <span class="label-title" id="excluded-label" dir="auto">التطبيقات المستبعَدة</span>
-                  <span class="label-sub" dir="auto">لا تُحفظ أي نسخة واردة منها.</span>
+                  <span class="label-sub" dir="auto">لا يُحفظ ما يُنسخ منها وهي التطبيق الأمامي.</span>
                 </div>
               </div>
 
@@ -274,6 +352,36 @@
                   </div>
                   <button type="button" class="push-btn" id="add-excluded">إضافة</button>
                 </div>
+
+                <!-- The picker above only knows apps that are open right now
+                     and visible in the Dock. Menu-bar apps and closed ones are
+                     a whole category it cannot reach, and often the category
+                     worth excluding. -->
+                <div class="excluded-add excluded-add-manual">
+                  <input
+                    type="text"
+                    class="text-input is-latin"
+                    id="excluded-bundle"
+                    dir="ltr"
+                    spellcheck="false"
+                    autocomplete="off"
+                    placeholder="com.apple.Notes"
+                    aria-label="معرّف حزمة تطبيق"
+                    aria-describedby="excluded-manual-hint"
+                  />
+                  <button type="button" class="push-btn" id="add-excluded-manual">إضافة</button>
+                </div>
+                <p class="excluded-hint" id="excluded-manual-hint" dir="auto">
+                  لتطبيق مغلق الآن، أو يعمل في شريط القوائم: اكتب معرّف حزمته.
+                </p>
+                <div
+                  class="inline-error"
+                  id="excluded-manual-error"
+                  role="alert"
+                  aria-live="assertive"
+                  aria-atomic="true"
+                  hidden
+                ><span id="excluded-manual-error-text"></span></div>
               </div>
             </div>
           </div>

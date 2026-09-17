@@ -18,6 +18,8 @@ import {
   CHECK,
   ALERT,
   IMAGE,
+  MOVE_UP,
+  MOVE_DOWN,
   contentTypeIcon,
   createIcon,
 } from './icons.js';
@@ -80,6 +82,18 @@ const TOAST_EXIT_MS = 120;
 //   'error'   — data could not be fetched, or rendering threw
 // Only 'ready' + zero items is the natural «الرفّ فارغ» empty shelf.
 let phase = 'loading';
+
+// The webview is never destroyed — Rust orders the NSPanel in and out, and a
+// concealed panel is still laid out on screen at alpha 0. So «hidden» means
+// nobody can see it, not that its JavaScript stopped: every capture used to
+// rebuild a thousand rows for an audience of no one.
+let isShown = false;
+
+/** Hides the panel and records it, so incoming events stop costing a rebuild. */
+function hidePanel() {
+  isShown = false;
+  return api.hidePanel();
+}
 
 // ─── Rendering ────────────────────────────────────────────────────────────
 
@@ -339,6 +353,18 @@ function buildRow(item, index) {
   });
   actions.append(pinBtn, deleteBtn);
 
+  // Only where the pinned items stand as a group they arranged. In the default
+  // list they are marked in place inside one timeline, and a timeline is not
+  // something to rearrange.
+  if (item.isPinned && filter === 'pinned') {
+    const shelf = pinnedShelfIds();
+    const at = shelf.indexOf(item.id);
+    actions.prepend(
+      moveButton(item.id, -1, MOVE_UP, 'move-up', 'نقل لأعلى', at <= 0),
+      moveButton(item.id, 1, MOVE_DOWN, 'move-down', 'نقل لأسفل', at < 0 || at >= shelf.length - 1)
+    );
+  }
+
   /* Choosing a row IS the product's primary action, and it is one action:
      the item goes to the clipboard, gets pasted into whatever app was in
      front before رفّ opened, and STAYS on the clipboard so ⌘V repeats it.
@@ -373,6 +399,66 @@ function buildRow(item, index) {
 }
 
 /** The designed type filters, backed by the item's own kind + pin flag. */
+/** The pinned shelf in the order the user arranged it — the whole shelf, not
+ *  whatever a search has narrowed the view to, because that is what the
+ *  backend checks the reorder against. */
+function pinnedShelfIds() {
+  return [...state.pinned]
+    .sort((a, b) => pinnedRank(a) - pinnedRank(b))
+    .map((item) => item.id);
+}
+
+const pinnedRank = (item) => item.pinnedOrder ?? Number.MAX_SAFE_INTEGER;
+
+function moveButton(id, delta, icon, className, label, disabled) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = `row-action ${className}`;
+  button.title = label;
+  button.setAttribute('aria-label', label);
+  button.disabled = disabled;
+  button.replaceChildren(createIcon(icon));
+  button.addEventListener('click', (e) => {
+    e.stopPropagation();
+    movePinned(id, delta);
+  });
+  return button;
+}
+
+/**
+ * Moves one pinned row and persists the whole resulting order.
+ *
+ * The backend takes the complete shelf and refuses anything that is not
+ * exactly it, so the swap happens in the full arrangement rather than in the
+ * rows currently on screen — a narrowed search must not be able to send a
+ * shorter shelf.
+ */
+function movePinned(id, delta) {
+  const ids = pinnedShelfIds();
+  const from = ids.indexOf(id);
+  const to = from + delta;
+  if (from < 0 || to < 0 || to >= ids.length) return;
+  [ids[from], ids[to]] = [ids[to], ids[from]];
+
+  // Painted before the round trip, like every other row action here; the
+  // authoritative refresh below is what settles it.
+  ids.forEach((pinnedId, order) => {
+    const item = state.pinned.find((candidate) => candidate.id === pinnedId);
+    if (item) item.pinnedOrder = order;
+  });
+  render();
+
+  enqueueMutation(async () => {
+    try {
+      await api.reorderPinned(ids);
+      await refresh();
+    } catch (err) {
+      await refresh();
+      presentToast(errorMessage(err), { duration: PIN_TOAST_MS, kind: 'error' });
+    }
+  });
+}
+
 function matchesFilter(item) {
   switch (filter) {
     case 'text':
@@ -412,7 +498,12 @@ function renderList() {
   // «08» shows one chronological list with pinned items marked in place —
   // there are no section headers. The مثبّت segment is how you isolate them.
   const all = [...state.pinned, ...state.history].sort((a, b) => b.createdAt - a.createdAt);
-  visible = filterItems(all, query).filter(matchesFilter);
+  const deepIds = deepMatches.query === query ? deepMatches.ids : null;
+  visible = filterItems(all, query, deepIds).filter(matchesFilter);
+  if (filter === 'pinned') {
+    // The one view where the pinned items stand as a group: theirs to order.
+    visible = [...visible].sort((a, b) => pinnedRank(a) - pinnedRank(b));
+  }
 
   const selectionIsVisible = visible.some((item) => item.id === selectedId);
   if (query && !selectionIsVisible) {
@@ -434,6 +525,18 @@ function renderList() {
       // Search-empty is text-only in «07 — Patterns & States»; the shelf
       // illustration belongs exclusively to a genuinely empty collection.
       listEl.append(stateView(null, 'لا نتائج', 'جرّب كلمة أخرى أو صنفًا مختلفًا', 'is-no-results'));
+    } else if (state.unreadableLayer) {
+      // The list is empty because a layer did not parse, not because nothing
+      // was ever saved. Saying «رفّك جاهز» here would report the user's clips
+      // as gone, which is the opposite of what happened.
+      listEl.append(
+        stateView(
+          null,
+          'تعذّرت قراءة سجلّك',
+          'محتواك لم يُفقد، واحتفظ رفّ بنسخة منه جانبًا. ما تنسخه من الآن يُحفظ كالمعتاد.',
+          'is-unreadable'
+        )
+      );
     } else {
       // Genuinely nothing saved yet — never shown for a failed fetch.
       // Copy is «08» COMPONENT 69:397 "State=Empty" verbatim; v4.0 had drifted
@@ -865,9 +968,28 @@ function togglePinItem(id, { restoreFocus = false } = {}) {
       if (current) current.item.isPinned = previous;
       render();
       if (restoreFocus) focusRowAction(id, '.pin-btn');
-      deliverFeedback(String(err), { duration: PIN_TOAST_MS, kind: 'error' });
+      deliverFeedback(errorMessage(err), { duration: PIN_TOAST_MS, kind: 'error' });
     }
   });
+}
+
+// What the backend can say, and what رفّ says about it. Anything else gets
+// the last line: a sentence the user can act on beats a string they cannot.
+const ERROR_MESSAGES = {
+  'raff/not-found': 'لم يعد هذا العنصر موجودًا.',
+  'raff/save-failed': 'تعذّر حفظ التغيير. حاول مرة أخرى.',
+  'raff/paste-failed': 'تعذّر اللصق. المحتوى على الحافظة، الصقه بـ ⌘V.',
+};
+
+/**
+ * Turns a backend failure into something worth reading.
+ *
+ * The raw string could be anything the process produced — a local path, an OS
+ * error, a message in English — rendered verbatim in an Arabic interface. The
+ * backend names a kind; the wording lives here.
+ */
+function errorMessage(err) {
+  return ERROR_MESSAGES[String(err)] ?? 'تعذّر إتمام العملية. حاول مرة أخرى.';
 }
 
 function deleteItem(id, { restoreFocus = false } = {}) {
@@ -902,7 +1024,7 @@ function deleteItem(id, { restoreFocus = false } = {}) {
       restoreLocalItem(snapshot);
       selectedId = id;
       render();
-      presentToast(String(err), { duration: PIN_TOAST_MS, kind: 'error' });
+      presentToast(errorMessage(err), { duration: PIN_TOAST_MS, kind: 'error' });
     }
   });
 }
@@ -934,7 +1056,7 @@ function undoLastDelete() {
       optimisticRestores.delete(pending.snapshot.item.id);
       removeLocalItem(pending.snapshot.item.id);
       render();
-      presentToast(String(err), { duration: PIN_TOAST_MS, kind: 'error' });
+      presentToast(errorMessage(err), { duration: PIN_TOAST_MS, kind: 'error' });
     }
   });
 }
@@ -979,7 +1101,7 @@ function paste(id, plain) {
         showToast('نُسخ إلى الحافظة — الصقه بـ ⌘V');
       }
     })
-    .catch((err) => showToast(String(err), PIN_TOAST_MS, 'error'));
+    .catch((err) => showToast(errorMessage(err), PIN_TOAST_MS, 'error'));
 }
 
 function moveSelection(delta) {
@@ -991,8 +1113,65 @@ function moveSelection(delta) {
         ? visible.length - 1
         : 0
       : Math.min(visible.length - 1, Math.max(0, index + delta));
-  selectedId = visible[next].id;
-  render();
+  setSelection(visible[next].id);
+}
+
+/**
+ * Moves the selection by touching the two rows that change.
+ *
+ * `renderList` is deliberately not involved: rebuilding every row to move a
+ * highlight one line is what made arrow keys lag on a full shelf. The three
+ * things that must stay in step with the selection — the announced row, the
+ * shortcut bar and the scroll position — are synced explicitly instead.
+ */
+function setSelection(id) {
+  if (selectedId === id) return;
+  selectedId = id;
+  const previous = listEl.querySelector('.row.selected[role="row"]');
+  if (previous) {
+    previous.classList.remove('selected');
+    previous.setAttribute('aria-selected', 'false');
+  }
+  const next = [...listEl.querySelectorAll('.row[role="row"]')].find(
+    (row) => row.dataset.id === id
+  );
+  if (next) {
+    next.classList.add('selected');
+    next.setAttribute('aria-selected', 'true');
+  }
+  syncActiveOption();
+  syncShortcutBar();
+  scrollSelectedIntoView();
+}
+
+// Rows whose match lives past `PREVIEW_MAX_CHARS`, for the query that found
+// them. Kept beside the query so an answer that arrives after the user has
+// typed on can never widen the wrong result.
+let deepMatches = { query: '', ids: null };
+let deepSearchToken = 0;
+
+/**
+ * Asks Rust about the text the panel was never sent.
+ *
+ * The local filter has already painted; this only widens what it found. A
+ * superseded answer is dropped rather than rendered, and a failure leaves the
+ * local result standing — searching less is a far better failure than an
+ * empty shelf.
+ */
+async function askForDeepMatches(forQuery) {
+  const token = ++deepSearchToken;
+  if (!forQuery.trim()) {
+    deepMatches = { query: '', ids: null };
+    return;
+  }
+  try {
+    const ids = await api.searchItems(forQuery);
+    if (token !== deepSearchToken) return;
+    deepMatches = { query: forQuery, ids: new Set(ids) };
+    render();
+  } catch (err) {
+    diag('search:deep-failed', err);
+  }
 }
 
 function setFilter(next) {
@@ -1160,7 +1339,7 @@ panelHeaderEl.addEventListener('mousedown', (event) => {
 });
 
 settingsBtn.addEventListener('click', () => api.openSettings());
-closeBtn.addEventListener('click', () => api.hidePanel());
+closeBtn.addEventListener('click', () => hidePanel());
 searchClearEl.addEventListener('click', () => {
   query = '';
   selectedId = null;
@@ -1283,7 +1462,7 @@ window.addEventListener('keydown', (e) => {
         searchEl.value = '';
         render();
       } else {
-        api.hidePanel();
+        hidePanel();
       }
     }
     return;
@@ -1318,7 +1497,7 @@ window.addEventListener('keydown', (e) => {
         searchEl.value = '';
         render();
       } else {
-        api.hidePanel();
+        hidePanel();
       }
       return;
   }
@@ -1339,7 +1518,7 @@ window.addEventListener('keydown', (e) => {
       api
         .copyItem(selectedId)
         .then(() => showToast('نُسخ إلى الحافظة'))
-        .catch((err) => showToast(String(err), PIN_TOAST_MS, 'error'));
+        .catch((err) => showToast(errorMessage(err), PIN_TOAST_MS, 'error'));
     }
     return;
   }
@@ -1359,6 +1538,7 @@ window.addEventListener('keydown', (e) => {
 searchEl.addEventListener('input', () => {
   query = searchEl.value;
   render();
+  void askForDeepMatches(query);
 });
 
 // A focused row action or filter owns Enter/arrow keys natively. Refresh the
@@ -1369,9 +1549,18 @@ window.addEventListener('focusout', () => queueMicrotask(syncShortcutBar));
 
 // ─── Events from Rust ─────────────────────────────────────────────────────
 
-on('raff://changed', () => refresh()).catch((err) => diag('listen:failed', err));
+on('raff://changed', () => {
+  if (!isShown) {
+    // The show path below refreshes before the panel appears, so a capture
+    // nobody can see costs nothing until it is worth something.
+    diag('changed:deferred-while-hidden');
+    return;
+  }
+  refresh();
+}).catch((err) => diag('listen:failed', err));
 on('panel://shown', async () => {
   diag('event:panel-shown');
+  isShown = true;
   query = '';
   searchEl.value = '';
   selectedId = null;
@@ -1389,6 +1578,9 @@ on('panel://shown', async () => {
 // reliable signal than a webview message), this still resyncs the list
 // through the same guarded refresh() path — without resetting the search.
 window.addEventListener('focus', () => {
+  // Native activation is the more reliable signal of the two; if the IPC event
+  // was ever missed, this is what puts the panel back on the refresh path.
+  isShown = true;
   searchEl.focus();
   forceRepaint();
   refresh();

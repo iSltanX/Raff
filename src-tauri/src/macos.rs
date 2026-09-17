@@ -4,10 +4,17 @@
 //! bindings. The unavoidable Accessibility C FFI boundaries carry local
 //! SAFETY arguments.
 
+use std::sync::{Mutex, OnceLock};
+use std::time::{Duration, Instant};
+
+use objc2::rc::Retained;
+use objc2::runtime::AnyObject;
+use objc2::{define_class, msg_send, sel, AnyThread};
 use objc2_app_kit::{
     NSApplicationActivationOptions, NSPasteboard, NSRunningApplication, NSWorkspace,
+    NSWorkspaceApplicationKey, NSWorkspaceDidActivateApplicationNotification,
 };
-use objc2_foundation::{MainThreadMarker, NSData, NSString};
+use objc2_foundation::{MainThreadMarker, NSData, NSNotification, NSObject, NSObjectProtocol, NSString};
 
 /// True when the caller is already on the AppKit main thread.
 ///
@@ -52,6 +59,18 @@ const TYPE_TIFF: &str = "public.tiff";
 
 /// Rich representations larger than this are not stored (keeps the JSON store lean).
 const MAX_RICH_BYTES: usize = 256 * 1024;
+/// Image payloads above this are not read into the process at all. An
+/// uncompressed TIFF of a 6K screen is ~81 MB, so a full-screen Retina capture
+/// still fits; the cap exists so the worst case has a number.
+const MAX_IMAGE_BYTES: usize = 96 * 1024 * 1024;
+/// Plain text longer than this is not captured. `history.json` is rewritten in
+/// full on every capture, so one oversized item is a tax on every capture after
+/// it — not just on the one that stored it.
+pub const MAX_TEXT_CHARS: usize = 100_000;
+/// A char is at most four UTF-8 bytes, so nothing inside `MAX_TEXT_CHARS` is
+/// ever rejected here. This only avoids materialising a string that could not
+/// pass the char cap anyway.
+const MAX_TEXT_BYTES: usize = MAX_TEXT_CHARS * 4;
 
 /// Raw pasteboard content, as captured. `rtf`/`html` are kept so a normal paste
 /// can restore formatting while "paste as plain text" writes only `text`.
@@ -87,24 +106,34 @@ pub fn has_concealed_type() -> bool {
 
 pub fn read_clip() -> RawClip {
     let pb = NSPasteboard::generalPasteboard();
-    let string_for = |t: &str| {
+    // Every representation is measured on the pasteboard's own object and only
+    // then copied, so an oversized payload never enters this process.
+    let capped_string_for = |t: &str, max: usize| {
         pb.stringForType(&NSString::from_str(t))
+            .filter(|s| s.len() <= max)
             .map(|s| s.to_string())
     };
-    let data_for = |t: &str| {
+    let capped_data_for = |t: &str, max: usize| {
         pb.dataForType(&NSString::from_str(t))
+            .filter(|d| {
+                let len = d.len();
+                len > 0 && len <= max
+            })
             .map(|d| d.to_vec())
-            .filter(|d| !d.is_empty())
     };
 
-    let text = string_for(TYPE_TEXT);
-    let html = string_for(TYPE_HTML).filter(|h| h.len() <= MAX_RICH_BYTES);
-    let rtf = data_for(TYPE_RTF).filter(|d| d.len() <= MAX_RICH_BYTES);
+    let text = capped_string_for(TYPE_TEXT, MAX_TEXT_BYTES)
+        .filter(|t| t.chars().count() <= MAX_TEXT_CHARS);
+    let html = capped_string_for(TYPE_HTML, MAX_RICH_BYTES);
+    let rtf = capped_data_for(TYPE_RTF, MAX_RICH_BYTES);
     // Only bother with image data when there is no text representation.
     let (png, tiff) = if text.as_deref().map(|t| !t.trim().is_empty()) == Some(true) {
         (None, None)
     } else {
-        (data_for(TYPE_PNG), data_for(TYPE_TIFF))
+        (
+            capped_data_for(TYPE_PNG, MAX_IMAGE_BYTES),
+            capped_data_for(TYPE_TIFF, MAX_IMAGE_BYTES),
+        )
     };
 
     RawClip {
@@ -158,6 +187,171 @@ pub fn frontmost_app() -> FrontApp {
                 .unwrap_or_default(),
         },
         None => FrontApp::default(),
+    }
+}
+
+/// One frontmost-app change, as NSWorkspace reported it: the app that took the
+/// front and the instant it did.
+#[derive(Clone, Debug)]
+pub struct Activation {
+    pub at: Instant,
+    pub app: FrontApp,
+}
+
+/// Activations older than this are dropped on the next write. The capture path
+/// never looks back further than one poll interval, so this is generous.
+const ACTIVATION_KEEP: Duration = Duration::from_secs(10);
+
+fn activation_log() -> &'static Mutex<Vec<Activation>> {
+    static LOG: OnceLock<Mutex<Vec<Activation>>> = OnceLock::new();
+    LOG.get_or_init(|| Mutex::new(Vec::new()))
+}
+
+/// Records `app` as owning the front from now on, oldest entry first.
+pub fn note_activation(app: FrontApp) {
+    let now = Instant::now();
+    let mut log = activation_log()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let cutoff = now.checked_sub(ACTIVATION_KEEP).unwrap_or(now);
+    // Keep the newest activation at or before the cutoff: it is the one still
+    // in force, and dropping it would lose the answer for older windows.
+    let keep_from = log
+        .iter()
+        .rposition(|a| a.at <= cutoff)
+        .unwrap_or(0);
+    log.drain(..keep_from);
+    log.push(Activation { at: now, app });
+}
+
+/// Snapshot of the activation log, oldest first.
+pub fn activation_snapshot() -> Vec<Activation> {
+    activation_log()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .clone()
+}
+
+/// True when any app that held the front during `[at - window, at]` is excluded.
+///
+/// An activation at `t` means that app owned the front from `t` until the next
+/// one, so the window covers the activation in force when it opened plus every
+/// activation inside it — not only the newest, which is all `frontmost_app()`
+/// can answer, and which is exactly what the copy-then-switch race defeats.
+pub fn window_has_excluded(
+    log: &[Activation],
+    excluded: &[String],
+    at: Instant,
+    window: Duration,
+) -> bool {
+    let is_excluded = |a: &Activation| excluded.iter().any(|e| *e == a.app.bundle_id);
+    front_when_window_opened(log, at, window).is_some_and(is_excluded)
+        || log
+            .iter()
+            .filter(|a| a.at > window_start(at, window) && a.at <= at)
+            .any(is_excluded)
+}
+
+/// The app that held the front when the window opened — the best available
+/// guess at who owned a copy detected at `at`. `None` when the log does not
+/// reach that far back.
+pub fn front_at(log: &[Activation], at: Instant, window: Duration) -> Option<FrontApp> {
+    front_when_window_opened(log, at, window).map(|a| a.app.clone())
+}
+
+fn window_start(at: Instant, window: Duration) -> Instant {
+    at.checked_sub(window).unwrap_or(at)
+}
+
+/// The newest activation at or before the window opened — the one still in
+/// force when it did. `None` when the log does not reach that far back.
+fn front_when_window_opened(
+    log: &[Activation],
+    at: Instant,
+    window: Duration,
+) -> Option<&Activation> {
+    let start = window_start(at, window);
+    log.iter().rev().find(|a| a.at <= start)
+}
+
+define_class!(
+    // SAFETY:
+    // - The superclass NSObject has no subclassing requirements.
+    // - `ActivationObserver` does not implement `Drop`.
+    #[unsafe(super(NSObject))]
+    #[name = "RaffActivationObserver"]
+    struct ActivationObserver;
+
+    impl ActivationObserver {
+        #[unsafe(method(raffAppDidActivate:))]
+        fn raff_app_did_activate(&self, notification: &NSNotification) {
+            note_activation(activated_app(notification));
+        }
+    }
+
+    unsafe impl NSObjectProtocol for ActivationObserver {}
+);
+
+/// The app named by a `NSWorkspaceDidActivateApplication` notification, falling
+/// back to whoever is frontmost if the payload is not the expected shape.
+fn activated_app(notification: &NSNotification) -> FrontApp {
+    notification
+        .userInfo()
+        .and_then(|info| {
+            // SAFETY: `NSWorkspaceApplicationKey` is an AppKit string constant,
+            // valid for the lifetime of the process.
+            let key: &NSString = unsafe { NSWorkspaceApplicationKey };
+            let key: &AnyObject = key.as_ref();
+            info.objectForKey(key)
+        })
+        .and_then(|value| value.downcast::<NSRunningApplication>().ok())
+        .map(|app| FrontApp {
+            pid: app.processIdentifier(),
+            name: app
+                .localizedName()
+                .map(|s| s.to_string())
+                .unwrap_or_default(),
+            bundle_id: app
+                .bundleIdentifier()
+                .map(|s| s.to_string())
+                .unwrap_or_default(),
+        })
+        .unwrap_or_else(frontmost_app)
+}
+
+/// Starts recording app activations, so a capture can ask who held the front
+/// during the window a copy happened in rather than who holds it now.
+///
+/// Registration and delivery are main-thread work, so it hops there; calling
+/// this more than once would register a second observer, so `start` is the only
+/// caller.
+pub fn start_activation_watch() {
+    dispatch_to_main(|| {
+        note_activation(frontmost_app());
+        let observer = ActivationObserver::new();
+        let center = NSWorkspace::sharedWorkspace().notificationCenter();
+        // SAFETY: the observer responds to `raffAppDidActivate:` with the
+        // (self, NSNotification *) signature AppKit posts, the name is an
+        // AppKit constant, and the observer is leaked below so it outlives the
+        // registration — NSNotificationCenter holds it unowned.
+        unsafe {
+            center.addObserver_selector_name_object(
+                observer.as_ref(),
+                sel!(raffAppDidActivate:),
+                Some(NSWorkspaceDidActivateApplicationNotification),
+                None,
+            );
+        }
+        // One observer for the process lifetime; it is never removed, and the
+        // notification center would dangle if it were dropped here.
+        std::mem::forget(observer);
+    });
+}
+
+impl ActivationObserver {
+    fn new() -> Retained<Self> {
+        let this = Self::alloc().set_ivars(());
+        unsafe { msg_send![super(this), init] }
     }
 }
 
@@ -300,5 +494,83 @@ pub fn ax_prompt() -> bool {
             CFBoolean::true_value().as_CFType(),
         )]);
         AXIsProcessTrustedWithOptions(options.as_concrete_TypeRef())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn act(at: Instant, bundle: &str) -> Activation {
+        Activation {
+            at,
+            app: FrontApp {
+                pid: 0,
+                name: bundle.into(),
+                bundle_id: bundle.into(),
+            },
+        }
+    }
+
+    fn ago(now: Instant, ms: u64) -> Instant {
+        now.checked_sub(Duration::from_millis(ms)).unwrap()
+    }
+
+    const WINDOW: Duration = Duration::from_millis(350);
+
+    #[test]
+    fn an_excluded_app_inside_the_window_is_caught_even_when_it_is_not_the_last_one() {
+        let now = Instant::now();
+        // Copied from the password manager, then ⌘-Tabbed away before the
+        // poll noticed — the case that defeats asking who is frontmost now.
+        let log = vec![
+            act(ago(now, 4_000), "com.apple.Safari"),
+            act(ago(now, 300), "com.agilebits.onepassword7"),
+            act(ago(now, 40), "com.apple.Terminal"),
+        ];
+        let excluded = vec!["com.agilebits.onepassword7".to_string()];
+
+        assert_ne!(log.last().unwrap().app.bundle_id, excluded[0]);
+        assert!(window_has_excluded(&log, &excluded, now, WINDOW));
+    }
+
+    #[test]
+    fn an_excluded_app_that_held_the_front_all_along_is_caught() {
+        let now = Instant::now();
+        let log = vec![act(ago(now, 9_000), "com.apple.Notes")];
+        let excluded = vec!["com.apple.Notes".to_string()];
+
+        assert!(window_has_excluded(&log, &excluded, now, WINDOW));
+    }
+
+    #[test]
+    fn an_excluded_app_left_before_the_window_opened_is_not_caught() {
+        let now = Instant::now();
+        let log = vec![
+            act(ago(now, 9_000), "com.apple.Notes"),
+            act(ago(now, 2_000), "com.apple.Terminal"),
+        ];
+        let excluded = vec!["com.apple.Notes".to_string()];
+
+        assert!(!window_has_excluded(&log, &excluded, now, WINDOW));
+    }
+
+    #[test]
+    fn the_source_is_who_held_the_front_when_the_window_opened() {
+        let now = Instant::now();
+        let log = vec![
+            act(ago(now, 4_000), "com.apple.Safari"),
+            act(ago(now, 40), "com.apple.Terminal"),
+        ];
+
+        assert_eq!(
+            front_at(&log, now, WINDOW).map(|a| a.bundle_id),
+            Some("com.apple.Safari".to_string())
+        );
+    }
+
+    #[test]
+    fn an_empty_log_attributes_nothing() {
+        assert!(front_at(&[], Instant::now(), WINDOW).is_none());
     }
 }

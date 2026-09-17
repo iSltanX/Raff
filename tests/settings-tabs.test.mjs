@@ -40,6 +40,7 @@ function createFakeTauri() {
       invoke(cmd, args) {
         calls.push({ cmd, args: structuredClone(args) });
         switch (cmd) {
+          case 'get_settings':
           case 'get_state':
             return Promise.resolve({
               pinned: [],

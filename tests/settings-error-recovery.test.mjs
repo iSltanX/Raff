@@ -43,7 +43,7 @@ function fakeBackend() {
     core: {
       invoke(command, args) {
         calls.push(command);
-        if (command === 'get_state') {
+        if (command === 'get_state' || command === 'get_settings') {
           if (getStateFailures > 0) {
             getStateFailures -= 1;
             return Promise.reject(new Error('state unavailable'));

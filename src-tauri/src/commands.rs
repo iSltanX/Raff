@@ -11,6 +11,26 @@ use crate::{macos, panel, paste, AppState};
 
 const PREVIEW_MAX_CHARS: usize = 1000;
 
+/// Stable, detail-free error codes the panel turns into Arabic.
+///
+/// A storage failure carries an `io::Error` and the path it happened on.
+/// Handing that string to a toast put a local path — and the shape of the
+/// user's disk — into an Arabic interface, and made the wording of every
+/// message a backend concern. The backend names the kind; the panel owns the
+/// words.
+pub mod err {
+    pub const NOT_FOUND: &str = "raff/not-found";
+    pub const SAVE_FAILED: &str = "raff/save-failed";
+    pub const PASTE_FAILED: &str = "raff/paste-failed";
+}
+
+/// Keeps the detail where it is useful — the process log — and hands the
+/// interface a kind.
+fn save_failed(detail: String) -> String {
+    eprintln!("raff: {detail}");
+    err::SAVE_FAILED.to_string()
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ItemDto {
@@ -60,21 +80,78 @@ pub struct StatePayload {
     pub settings: Settings,
     pub ax_trusted: bool,
     pub version: String,
+    /// True when a stored layer could not be read on this launch. An empty
+    /// list then means something very different, and the panel says so.
+    pub unreadable_layer: bool,
+    /// False once the capture loop has given up. Distinct from
+    /// `settings.capture_enabled`, which only says what the user asked for.
+    pub capture_alive: bool,
+}
+
+/// What the Settings window actually needs: the preferences and the two states
+/// it shows, and none of the shelf.
+///
+/// `get_state` carries up to 1000 rows of up to 1000 characters each, and the
+/// Settings window used to refetch every one of them on every capture — to
+/// keep five switches in sync.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SettingsPayload {
+    pub settings: Settings,
+    pub ax_trusted: bool,
+    pub version: String,
+    pub capture_alive: bool,
+}
+
+#[tauri::command]
+pub fn get_settings(app: AppHandle, state: State<AppState>) -> SettingsPayload {
+    let store = crate::lock_store(&state.store);
+    SettingsPayload {
+        settings: store.settings.clone(),
+        ax_trusted: ax_trusted_noted(),
+        version: app.package_info().version.to_string(),
+        capture_alive: state.capture_alive.load(std::sync::atomic::Ordering::SeqCst),
+    }
 }
 
 #[tauri::command]
 pub fn get_state(app: AppHandle, state: State<AppState>) -> StatePayload {
     crate::startup_trace::mark("FRONTEND_CALLED_get_state");
-    let store = state.store.lock().unwrap();
+    let store = crate::lock_store(&state.store);
     let mut pinned: Vec<&crate::storage::ClipItem> = store.pinned.iter().collect();
     pinned.sort_by_key(|i| i.pinned_order.unwrap_or(u32::MAX));
     StatePayload {
         pinned: pinned.into_iter().map(ItemDto::from).collect(),
         history: store.history.iter().map(ItemDto::from).collect(),
         settings: store.settings.clone(),
-        ax_trusted: macos::ax_trusted(),
+        ax_trusted: ax_trusted_noted(),
         version: app.package_info().version.to_string(),
+        unreadable_layer: store.unreadable_layer,
+        capture_alive: state.capture_alive.load(std::sync::atomic::Ordering::SeqCst),
     }
+}
+
+/// Ids of the rows whose **full** text matches — everything the panel cannot
+/// see, because what it holds is cut at `PREVIEW_MAX_CHARS`.
+///
+/// Ids and not rows: the panel already has the rows, and shipping the whole
+/// text back so it could search it would undo the very cap this exists to work
+/// around. The scan is linear over the shelf; the byte budget on the layer is
+/// what keeps that bounded.
+#[tauri::command]
+pub fn search_items(state: State<AppState>, query: String) -> Vec<String> {
+    let needle = crate::storage::normalize_for_search(query.trim());
+    if needle.is_empty() {
+        return Vec::new();
+    }
+    let store = crate::lock_store(&state.store);
+    store
+        .pinned
+        .iter()
+        .chain(store.history.iter())
+        .filter(|item| crate::storage::normalize_for_search(&item.text).contains(&needle))
+        .map(|item| item.id.clone())
+        .collect()
 }
 
 #[tauri::command]
@@ -88,8 +165,26 @@ pub fn copy_item(app: AppHandle, id: String) -> Result<(), String> {
         paste::bump_copy_signals(&app, &id);
         Ok(())
     } else {
-        Err("العنصر غير موجود".into())
+        Err(err::NOT_FOUND.into())
     }
+}
+
+/// Rewrites the pinned shelf into the order the panel shows.
+///
+/// `pinned_order` was written on every pin and read by nothing, so the shelf
+/// could only be rearranged by unpinning and pinning again in sequence.
+#[tauri::command]
+pub fn reorder_pinned(
+    app: AppHandle,
+    state: State<AppState>,
+    ids: Vec<String>,
+) -> Result<(), String> {
+    {
+        let mut store = crate::lock_store(&state.store);
+        store.reorder_pinned_persisted(&ids).map_err(save_failed)?;
+    }
+    notify(&app);
+    Ok(())
 }
 
 #[tauri::command]
@@ -100,8 +195,8 @@ pub fn toggle_pin(
     is_pinned: bool,
 ) -> Result<bool, String> {
     let is_pinned = {
-        let mut store = state.store.lock().unwrap();
-        store.set_pin_persisted(&id, is_pinned)?
+        let mut store = crate::lock_store(&state.store);
+        store.set_pin_persisted(&id, is_pinned).map_err(save_failed)?
     };
     notify(&app);
     Ok(is_pinned)
@@ -120,8 +215,8 @@ pub fn delete_item(
     id: String,
 ) -> Result<DeleteReceiptDto, String> {
     let token = {
-        let mut store = state.store.lock().unwrap();
-        store.delete_reversible(&id)?
+        let mut store = crate::lock_store(&state.store);
+        store.delete_reversible(&id).map_err(save_failed)?
     };
     notify(&app);
     Ok(DeleteReceiptDto { token })
@@ -130,8 +225,8 @@ pub fn delete_item(
 #[tauri::command]
 pub fn undo_delete(app: AppHandle, state: State<AppState>, token: String) -> Result<(), String> {
     {
-        let mut store = state.store.lock().unwrap();
-        store.undo_delete(&token)?;
+        let mut store = crate::lock_store(&state.store);
+        store.undo_delete(&token).map_err(save_failed)?;
     }
     notify(&app);
     Ok(())
@@ -139,14 +234,14 @@ pub fn undo_delete(app: AppHandle, state: State<AppState>, token: String) -> Res
 
 #[tauri::command]
 pub fn commit_delete(state: State<AppState>, token: String) -> Result<(), String> {
-    let mut store = state.store.lock().unwrap();
-    store.commit_delete(&token)
+    let mut store = crate::lock_store(&state.store);
+    store.commit_delete(&token).map_err(save_failed)
 }
 
 #[tauri::command]
 pub fn clear_history(app: AppHandle, state: State<AppState>) -> Result<(), String> {
     {
-        let mut store = state.store.lock().unwrap();
+        let mut store = crate::lock_store(&state.store);
         store.clear_history_persisted()?;
     }
     notify(&app);
@@ -156,7 +251,7 @@ pub fn clear_history(app: AppHandle, state: State<AppState>) -> Result<(), Strin
 #[tauri::command]
 pub fn clear_learning(app: AppHandle, state: State<AppState>) -> Result<(), String> {
     {
-        let mut store = state.store.lock().unwrap();
+        let mut store = crate::lock_store(&state.store);
         store.clear_learning_persisted()?;
     }
     notify(&app);
@@ -178,7 +273,7 @@ pub struct LearnDto {
 /// learned. Returns the most-used items with their raw signals.
 #[tauri::command]
 pub fn learning_summary(state: State<AppState>) -> Vec<LearnDto> {
-    let store = state.store.lock().unwrap();
+    let store = crate::lock_store(&state.store);
     let mut items: Vec<&crate::storage::ClipItem> = store
         .pinned
         .iter()
@@ -207,7 +302,7 @@ pub fn update_settings(
 ) -> Result<(), String> {
     validate_settings(&settings)?;
     let old = {
-        let store = state.store.lock().unwrap();
+        let store = crate::lock_store(&state.store);
         store.settings.clone()
     };
 
@@ -273,6 +368,9 @@ fn validate_settings(settings: &Settings) -> Result<(), String> {
     if !matches!(settings.history_limit, 200 | 500 | 1000) {
         return Err("حد السجل غير صالح".into());
     }
+    if !matches!(settings.retention_days, 0 | 7 | 30 | 90) {
+        return Err("مدة الاحتفاظ غير صالحة".into());
+    }
     if settings.hotkey.is_empty() || settings.hotkey.len() > 128 {
         return Err("اختصار لوحة المفاتيح غير صالح".into());
     }
@@ -291,7 +389,7 @@ fn validate_settings(settings: &Settings) -> Result<(), String> {
 
 #[tauri::command]
 pub fn get_image(state: State<AppState>, id: String) -> Option<String> {
-    let store = state.store.lock().unwrap();
+    let store = crate::lock_store(&state.store);
     image_data_url(&store, &id)
 }
 
@@ -312,6 +410,16 @@ fn image_data_url(store: &Store, id: &str) -> Option<String> {
     ))
 }
 
+/// Opens the shelf, for the first-run window's "open رفّ now".
+///
+/// رفّ is an accessory app: no Dock icon, no ⌘Tab entry. Once the first-run
+/// window closes, the hotkey and the menu-bar icon are the only two ways in,
+/// so the window that teaches them offers the first use itself.
+#[tauri::command]
+pub fn show_panel(app: AppHandle) {
+    panel::show(&app);
+}
+
 #[tauri::command]
 pub fn hide_panel(app: AppHandle) {
     panel::hide(&app);
@@ -319,7 +427,18 @@ pub fn hide_panel(app: AppHandle) {
 
 #[tauri::command]
 pub fn ax_status() -> bool {
-    macos::ax_trusted()
+    ax_trusted_noted()
+}
+
+/// Reads the Accessibility answer and lets the menu-bar icon reflect it.
+///
+/// Raff does not watch the permission live, so the icon is only ever as fresh
+/// as the last time something asked — which is every state read, every paste
+/// attempt, and launch.
+fn ax_trusted_noted() -> bool {
+    let trusted = macos::ax_trusted();
+    crate::tray::note_permission(trusted);
+    trusted
 }
 
 #[tauri::command]
@@ -335,7 +454,7 @@ pub fn open_accessibility_settings() {
 #[tauri::command]
 pub fn firstrun_done(app: AppHandle, state: State<AppState>) -> Result<(), String> {
     {
-        let mut store = state.store.lock().unwrap();
+        let mut store = crate::lock_store(&state.store);
         store.mark_first_run_shown_persisted()?;
     }
     if let Some(w) = app.get_webview_window("firstrun") {
@@ -388,7 +507,7 @@ fn sync_appearance(app: &AppHandle) {
     let _ = app.run_on_main_thread(move || {
         let theme = {
             let state = handle.state::<AppState>();
-            let store = state.store.lock().unwrap();
+            let store = crate::lock_store(&state.store);
             theme_for(&store.settings)
         };
         handle.set_theme(theme);
@@ -562,6 +681,97 @@ pub fn open_update_window(app: &AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_storage_failure_crosses_ipc_as_a_kind_not_as_its_detail() {
+        // Exactly the shape `try_save_json` produces.
+        let detail = "\u{062a}\u{0639}\u{0630}\u{0631} \u{062d}\u{0641}\u{0638} /Users/someone/Library/Application Support/com.raff.app/history.json: No space left on device";
+
+        let crossed = save_failed(detail.to_string());
+
+        assert_eq!(crossed, err::SAVE_FAILED);
+        assert!(!crossed.contains("/Users/"), "no path survives");
+        assert!(!crossed.contains("history"), "and no file name either");
+    }
+
+    /// The store-side half of `search_items`: everything except taking the lock.
+    fn ids_matching(store: &Store, query: &str) -> Vec<String> {
+        let needle = crate::storage::normalize_for_search(query.trim());
+        if needle.is_empty() {
+            return Vec::new();
+        }
+        store
+            .pinned
+            .iter()
+            .chain(store.history.iter())
+            .filter(|item| crate::storage::normalize_for_search(&item.text).contains(&needle))
+            .map(|item| item.id.clone())
+            .collect()
+    }
+
+    #[test]
+    fn search_reaches_past_the_preview_the_panel_can_see() {
+        let mut store = Store::load(
+            std::env::temp_dir().join(format!("raff-search-test-{}", uuid::Uuid::new_v4())),
+        );
+        // The distinctive word sits at character 2500 — well past the cut.
+        let mut text = "\u{0645} ".repeat(1_250);
+        text.push_str("\u{0634}\u{0641}\u{0631}\u{0629}\u{0627}\u{0644}\u{062e}\u{0632}\u{0646}\u{0629}");
+        text.push_str(&"\u{0645} ".repeat(250));
+        assert!(text.chars().count() > 3_000);
+        store.capture(
+            ItemKind::Text,
+            text.clone(),
+            None,
+            None,
+            None,
+            None,
+            None,
+            ("Notes".into(), "com.apple.Notes".into()),
+        );
+        let id = store.history[0].id.clone();
+
+        assert_eq!(
+            ids_matching(&store, "\u{0634}\u{0641}\u{0631}\u{0629}\u{0627}\u{0644}\u{062e}\u{0632}\u{0646}\u{0629}"),
+            vec![id],
+            "the shelf is searched, not the preview"
+        );
+
+        // ...and the row the panel is handed is still cut where it was.
+        let dto = ItemDto::from(&store.history[0]);
+        assert_eq!(
+            dto.text.chars().count(),
+            PREVIEW_MAX_CHARS + 1,
+            "the preview did not grow: 1000 characters plus the ellipsis"
+        );
+        assert!(dto.text.ends_with('\u{2026}'));
+    }
+
+    #[test]
+    fn search_folds_spelling_the_same_way_the_panel_does() {
+        let mut store = Store::load(
+            std::env::temp_dir().join(format!("raff-search-test-{}", uuid::Uuid::new_v4())),
+        );
+        store.capture(
+            ItemKind::Text,
+            "\u{0623}\u{0643}\u{062a}\u{0628}".into(), // أكتب
+            None,
+            None,
+            None,
+            None,
+            None,
+            ("Notes".into(), "com.apple.Notes".into()),
+        );
+
+        assert_eq!(
+            ids_matching(&store, "\u{0627}\u{0643}\u{062a}\u{0628}").len(), // اكتب
+            1,
+            "a query written with bare alef still finds it"
+        );
+        assert!(
+            ids_matching(&store, "\u{0645}\u{062f}\u{0631}\u{0633}\u{0647}").is_empty()
+        );
+    }
 
     fn image_store(original: &[u8], thumb: Option<(&str, &[u8])>) -> (Store, String) {
         let root = std::env::temp_dir().join(format!("raff-image-test-{}", uuid::Uuid::new_v4()));

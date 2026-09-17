@@ -87,6 +87,15 @@ pub struct Settings {
     pub appearance: Appearance,
     /// Follow the macOS appearance (default on first launch).
     pub follow_system: bool,
+    /// Days an unpinned row is kept, or `0` to keep it until a count or size
+    /// limit pushes it out.
+    ///
+    /// The count answers «كم أحتفظ»; this answers «كم يعيش ما نسختُه على
+    /// قرصي», and for a privacy tool only the second is a promise the user can
+    /// hold Raff to — «٥٠٠ عنصر» is two days for one person and three months
+    /// for another. `0` is what every existing install migrates to, which is
+    /// exactly today's behaviour.
+    pub retention_days: u32,
 }
 
 impl Default for Settings {
@@ -102,8 +111,22 @@ impl Default for Settings {
             first_run_shown: false,
             appearance: Appearance::Light,
             follow_system: true,
+            retention_days: 0,
         }
     }
+}
+
+/// The most the recent layer may weigh. The count limit is a resource cap; the
+/// budget is what turns the worst case into a number — 1000 rows each carrying
+/// the largest payload `read_clip` still admits is about a gigabyte otherwise.
+pub const MAX_HISTORY_BYTES: usize = 64 * 1024 * 1024;
+
+/// Rough stored weight of a row. Only the payloads matter at this scale; the
+/// fixed fields are noise beside a 256 KB rich representation.
+fn weight(item: &ClipItem) -> usize {
+    item.text.len()
+        + item.html.as_deref().map_or(0, str::len)
+        + item.rtf.as_deref().map_or(0, str::len)
 }
 
 #[derive(PartialEq, Eq, Debug)]
@@ -119,6 +142,26 @@ pub(crate) struct CaptureResult {
     outcome: CaptureOutcome,
     dropped: Vec<ClipItem>,
     layer: Option<DeletedLayer>,
+    undo: CaptureUndo,
+}
+
+/// Exactly what it takes to put `capture` back, and nothing more.
+///
+/// This replaces the copy of both layers that used to be taken before every
+/// capture "just in case the write fails" — two full clones on every copy the
+/// user made, paid at the allowed limit of 1000 rows, to guard a path that
+/// almost never runs.
+#[derive(Debug)]
+pub(crate) enum CaptureUndo {
+    /// Nothing was touched.
+    Nothing,
+    /// A new row went to the head of history; `CaptureResult::dropped` holds
+    /// whatever fell off the end.
+    Added,
+    /// The pinned row at `index` was overwritten; here it is as it was.
+    PinnedBumped { index: usize, previous: Box<ClipItem> },
+    /// The history row at `index` was moved to the head and overwritten.
+    HistoryBumped { index: usize, previous: Box<ClipItem> },
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
@@ -162,8 +205,21 @@ pub struct Store {
     pub history: Vec<ClipItem>,
     pub pinned: Vec<ClipItem>,
     pub settings: Settings,
+    /// A layer could not be parsed on this launch and was copied aside. The
+    /// panel needs this to tell "nothing is saved" apart from "your content is
+    /// there, it just was not read" — two states an empty list looks identical in.
+    pub unreadable_layer: bool,
     pending_delete: Option<PendingDelete>,
     pending_pin: Option<PendingPin>,
+    /// Layers whose learning counters moved and have not been written yet.
+    dirty_signals: DirtySignals,
+}
+
+/// Which layers are carrying unwritten learning-counter bumps.
+#[derive(Default, Clone, Copy)]
+pub struct DirtySignals {
+    history: bool,
+    pinned: bool,
 }
 
 /// Last user-chosen panel origin in physical desktop coordinates. Kept outside
@@ -183,6 +239,134 @@ pub fn now_ms() -> u64 {
         .unwrap_or(0)
 }
 
+/// Version prefix on a stored image fingerprint.
+///
+/// The value is written into `history.json` and used as an identity key, so
+/// the algorithm behind it has to be one this project owns. `DefaultHasher`
+/// documents its algorithm as unspecified and free to change between Rust
+/// releases: after a toolchain upgrade every stored fingerprint would quietly
+/// stop matching, and re-copying a saved image would silently make a second
+/// row and a second file. The prefix is what lets a value written by the old
+/// one be recognised and replaced.
+const HASH_PREFIX: &str = "f1:";
+
+/// FNV-1a, 64-bit — short enough to write down here and fixed forever.
+///
+/// The job is dropping duplicates of images the user copied twice, not
+/// resisting an adversary who gets to choose the bytes.
+pub fn content_hash(bytes: &[u8]) -> String {
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for byte in bytes {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    format!("{HASH_PREFIX}{hash:016x}")
+}
+
+/// Replaces fingerprints written by the old, undefined algorithm.
+///
+/// Every image whose file survives is re-fingerprinted from that file, so no
+/// duplicate is ever accepted as the price of the change. One whose file is
+/// gone loses its fingerprint instead of keeping an unverifiable value: `None`
+/// falls back to comparing text, where a stale hash would match nothing and
+/// block the row from ever healing.
+fn migrate_image_hashes(items: &mut [ClipItem], images_dir: &Path) -> bool {
+    let mut changed = false;
+    for item in items.iter_mut() {
+        if item.kind != ItemKind::Image {
+            continue;
+        }
+        match item.hash.as_deref() {
+            Some(hash) if !hash.starts_with(HASH_PREFIX) => {
+                item.hash = item
+                    .image_file
+                    .as_ref()
+                    .and_then(|file| fs::read(images_dir.join(file)).ok())
+                    .map(|bytes| content_hash(&bytes));
+                changed = true;
+            }
+            _ => {}
+        }
+    }
+    changed
+}
+
+/// Folds text for searching, exactly as `normalizeArabic` in `logic.js` does.
+///
+/// The two must agree: the panel filters what it can see with the JavaScript
+/// one and asks this one about everything it cannot, and a query that means
+/// two different things on the two sides would show and hide the same row.
+pub fn normalize_for_search(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for ch in text.chars() {
+        match ch {
+            // Arabic-Indic digits fold to Western, so either spelling finds both.
+            '\u{0660}'..='\u{0669}' => {
+                out.push(char::from(b'0' + (ch as u32 - 0x0660) as u8));
+            }
+            // Tashkeel and the superscript alef carry no search meaning...
+            '\u{064B}'..='\u{065F}' | '\u{0670}' => {}
+            '\u{0640}' => {}                       // ...nor does tatweel
+            '\u{0623}' | '\u{0625}' | '\u{0622}' => out.push('\u{0627}'),
+            '\u{0649}' => out.push('\u{064A}'),
+            _ => out.extend(ch.to_lowercase()),
+        }
+    }
+    out
+}
+
+/// Schemes the «روابط» filter recognises.
+///
+/// An explicit list, not "anything with a colon": `C:\\Users`, `12:30` and
+/// `note: see below` are not links, and a filter that claimed they were would
+/// be worse than one that missed a few.
+const LINK_SCHEMES: [&str; 4] = ["http://", "https://", "mailto:", "tel:"];
+
+/// Whether a single whitespace-free token is a link.
+///
+/// Deliberately conservative about the bare-domain case: a host has to have a
+/// plausible last label, or every `file.txt` and `3.5` in the shelf would file
+/// itself under «روابط».
+fn is_link(token: &str) -> bool {
+    if let Some(scheme) = LINK_SCHEMES
+        .iter()
+        .find(|scheme| token.starts_with(**scheme))
+    {
+        // A scheme on its own addresses nothing.
+        return token.len() > scheme.len();
+    }
+    let rest = token.strip_prefix("www.").unwrap_or(token);
+    let host = rest.split(['/', '?', '#']).next().unwrap_or(rest);
+    let labels: Vec<&str> = host.split('.').collect();
+    if labels.len() < 2 || labels.iter().any(|label| label.is_empty()) {
+        return false;
+    }
+    // A path, query or fragment after the host is its own evidence, and it is
+    // what `example.co.uk/guide` has and `report.pdf` does not — so the ending
+    // does not have to be recognised for those.
+    if host.len() < rest.len() {
+        return true;
+    }
+    let tld = labels[labels.len() - 1].to_ascii_lowercase();
+    // "Two or more letters" is not a test: `file.txt`, `notes.md` and
+    // `report.pdf` all pass it, and filing those under «روابط» would be worse
+    // than missing a domain. A short list of the endings this shelf actually
+    // sees is the conservative call — an unknown one stays text, which is the
+    // harmless direction, and `www.` or a scheme still recognises it.
+    KNOWN_TLDS.contains(&tld.as_str())
+        && labels[..labels.len() - 1]
+            .iter()
+            .all(|label| label.chars().all(|c| c.is_alphanumeric() || c == '-'))
+}
+
+/// Endings recognised in a bare domain, with no `www.` and no scheme to go on.
+const KNOWN_TLDS: [&str; 30] = [
+    // generic
+    "com", "net", "org", "edu", "gov", "int", "mil", "info", "io", "dev", "app", "ai", "co", "me",
+    "xyz", "online", "site", // Arabic-speaking region
+    "sa", "ae", "eg", "qa", "kw", "bh", "om", "jo", "ma", "tn", "dz", "iq", "ps",
+];
+
 /// Heuristic content typing (plan §4: simple, not smart).
 pub fn detect_kind(text: &str) -> ItemKind {
     let t = text.trim();
@@ -190,9 +374,7 @@ pub fn detect_kind(text: &str) -> ItemKind {
         return ItemKind::Text;
     }
     let single_token = !t.contains(char::is_whitespace);
-    if single_token
-        && (t.starts_with("http://") || t.starts_with("https://") || t.starts_with("www."))
-    {
+    if single_token && is_link(t) {
         return ItemKind::Link;
     }
 
@@ -253,6 +435,48 @@ pub fn detect_kind(text: &str) -> ItemKind {
     }
 }
 
+/// Image filenames named by a set-aside `*.json.corrupt` copy.
+///
+/// Such a copy exists precisely because it did not parse, so it is read
+/// leniently: every `"imageFile"` / `"thumbFile"` value that can still be
+/// recovered from the text counts. Keeping one file too many costs disk;
+/// keeping one too few destroys the images the copy exists to point at.
+fn referenced_by_recovery_copies(dir: &Path) -> std::collections::HashSet<String> {
+    const KEYS: [&str; 2] = ["\"imageFile\"", "\"thumbFile\""];
+    let mut found = std::collections::HashSet::new();
+    let Ok(entries) = fs::read_dir(dir) else {
+        return found;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().and_then(|e| e.to_str()) != Some("corrupt") {
+            continue;
+        }
+        let Ok(text) = fs::read_to_string(&path) else {
+            continue;
+        };
+        for key in KEYS {
+            let mut rest = text.as_str();
+            while let Some(at) = rest.find(key) {
+                rest = &rest[at + key.len()..];
+                if let Some(name) = json_string_value(rest) {
+                    found.insert(name);
+                }
+            }
+        }
+    }
+    found
+}
+
+/// The string literal a `"key"` is assigned, when the text right after the key
+/// is `: "…"`. Stored filenames are generated ids, so no escape handling.
+fn json_string_value(after_key: &str) -> Option<String> {
+    let rest = after_key.trim_start().strip_prefix(':')?.trim_start();
+    let rest = rest.strip_prefix('"')?;
+    let end = rest.find('"')?;
+    Some(rest[..end].to_string())
+}
+
 fn load_json_with_status<T: serde::de::DeserializeOwned + Default>(path: &Path) -> (T, bool) {
     if !path.exists() {
         return (T::default(), true);
@@ -281,18 +505,116 @@ fn load_json<T: serde::de::DeserializeOwned + Default>(path: &Path) -> T {
 }
 
 fn try_save_json<T: Serialize>(path: &Path, value: &T) -> Result<(), String> {
-    let tmp = path.with_extension("json.tmp");
-    let bytes = serde_json::to_vec_pretty(value)
+    stage_json(path, value)?.commit()
+}
+
+/// Serializes `value` for `path` and takes the ticket that orders its write.
+///
+/// Compact, not pretty: nothing but the machine reads these files, and at the
+/// allowed limit the indentation was a second copy of the layer to build,
+/// write and read back on every capture.
+///
+/// Every caller holds the store lock at this point, so tickets come out in the
+/// same order as the states they describe — which is what lets a write that
+/// happens after the lock was released still be placed correctly.
+fn stage_json<T: Serialize>(path: &Path, value: &T) -> Result<LayerWrite, String> {
+    let bytes = serde_json::to_vec(value)
         .map_err(|err| format!("تعذّر تجهيز {} للحفظ: {err}", path.display()))?;
+    Ok(LayerWrite {
+        path: path.to_path_buf(),
+        bytes,
+        ticket: next_write_ticket(),
+    })
+}
+
+fn next_write_ticket() -> u64 {
+    static TICKETS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    TICKETS.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1
+}
+
+fn write_layer_bytes(path: &Path, bytes: &[u8]) -> Result<(), String> {
+    let tmp = path.with_extension("json.tmp");
     fs::write(&tmp, bytes)
         .and_then(|_| fs::rename(&tmp, path))
         .map_err(|err| format!("تعذّر حفظ {}: {err}", path.display()))
+}
+
+/// The newest serialization of each layer that has reached the disk.
+///
+/// Bytes are prepared under the store lock and written after it is released,
+/// so two captures can be in flight at once. The ticket each carries lets the
+/// writer refuse to lay an older layer over a newer one.
+fn write_gate() -> &'static std::sync::Mutex<std::collections::HashMap<PathBuf, u64>> {
+    static GATE: std::sync::OnceLock<
+        std::sync::Mutex<std::collections::HashMap<PathBuf, u64>>,
+    > = std::sync::OnceLock::new();
+    GATE.get_or_init(Default::default)
+}
+
+/// One layer, serialized and waiting to be written with the store lock released.
+pub(crate) struct LayerWrite {
+    path: PathBuf,
+    bytes: Vec<u8>,
+    ticket: u64,
+}
+
+impl LayerWrite {
+    pub(crate) fn commit(self) -> Result<(), String> {
+        let mut gate = write_gate()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if gate
+            .get(&self.path)
+            .is_some_and(|latest| *latest > self.ticket)
+        {
+            // A later state of this same layer is already on disk, and it
+            // contains everything ours did. Writing now would undo it.
+            return Ok(());
+        }
+        let result = write_layer_bytes(&self.path, &self.bytes);
+        if result.is_ok() {
+            gate.insert(self.path, self.ticket);
+        }
+        result
+    }
 }
 
 fn save_json<T: Serialize>(path: &Path, value: &T) {
     if let Err(err) = try_save_json(path, value) {
         eprintln!("raff: {err}");
     }
+}
+
+/// Applies a capture and persists its layer with the store lock released.
+///
+/// The model is mutated and the bytes prepared under the lock; the write, the
+/// expensive part, happens with the lock free, and a failure is undone from
+/// the capture's own undo record rather than from a copy of the whole layer.
+pub(crate) fn persist_capture(
+    store: &std::sync::Mutex<Store>,
+    result: CaptureResult,
+) -> Result<CaptureOutcome, String> {
+    let write = match crate::lock_store(store).stage_capture(&result) {
+        Ok(write) => write,
+        Err(err) => return Err(err),
+    };
+    let CaptureResult {
+        outcome,
+        dropped,
+        undo,
+        ..
+    } = result;
+
+    if let Err(err) = write.commit() {
+        crate::lock_store(store).rollback_capture(undo, dropped);
+        return Err(err);
+    }
+    // Only now are these rows certainly gone from the layer on disk.
+    let guard = crate::lock_store(store);
+    for item in &dropped {
+        guard.delete_files(item);
+    }
+    Ok(outcome)
 }
 
 impl Store {
@@ -310,8 +632,10 @@ impl Store {
             history,
             pinned,
             settings,
+            unreadable_layer: !(history_metadata_loaded && pinned_metadata_loaded),
             pending_delete,
             pending_pin,
+            dirty_signals: DirtySignals::default(),
         };
 
         store.resolve_interrupted_pin();
@@ -321,6 +645,17 @@ impl Store {
         // - item still on disk => delete never committed; preserve its files
         // - item absent on disk => deletion committed; clean up its files
         store.resolve_interrupted_delete();
+        // Before anything is shown: the age limit has no capture to ride on.
+        store.trim_history();
+        // Before anything compares fingerprints, and written down so the next
+        // launch finds nothing left to migrate.
+        let images_dir = store.images_dir();
+        if migrate_image_hashes(&mut store.history, &images_dir) {
+            store.save_history();
+        }
+        if migrate_image_hashes(&mut store.pinned, &images_dir) {
+            store.save_pinned();
+        }
         // An unreadable layer may still be the only metadata referencing image
         // files. Its recovery copy is useful only if those images survive too,
         // so orphan collection is safe exclusively when both live layers were
@@ -336,7 +671,11 @@ impl Store {
     }
 
     fn cleanup_orphan_images(&self) {
-        let mut referenced = std::collections::HashSet::new();
+        // A recovery copy outlives the boot that created it: the next good
+        // capture rewrites the live layer, so from then on both layers parse
+        // and the guard in `load` no longer fires. The copy is then the only
+        // metadata naming its images, and must count as a reference.
+        let mut referenced = referenced_by_recovery_copies(&self.dir);
         for item in self.pinned.iter().chain(self.history.iter()) {
             referenced.extend(item.image_file.iter().cloned());
             referenced.extend(item.thumb_file.iter().cloned());
@@ -400,12 +739,7 @@ impl Store {
         let old_settings = self.settings.clone();
         let old_history = self.history.clone();
         self.settings = settings;
-        let limit = self.settings.history_limit.max(1);
-        let dropped = if self.history.len() > limit {
-            self.history.split_off(limit)
-        } else {
-            Vec::new()
-        };
+        let dropped = self.prune_history();
 
         let writes = try_save_json(&self.dir.join(SETTINGS_FILE), &self.settings)
             .and_then(|_| try_save_json(&self.dir.join(HISTORY_FILE), &self.history));
@@ -472,6 +806,7 @@ impl Store {
                 outcome: CaptureOutcome::Failed,
                 dropped: Vec::new(),
                 layer: None,
+                undo: CaptureUndo::Nothing,
             };
         }
         // Keep recency a strict total order even when several pasteboard
@@ -486,11 +821,13 @@ impl Store {
             .map_or_else(now_ms, |latest| now_ms().max(latest.saturating_add(1)));
         let learning = self.settings.learning_enabled;
 
-        if let Some(p) = self
+        if let Some((index, p)) = self
             .pinned
             .iter_mut()
-            .find(|i| Self::same_content(i, kind, &text, hash.as_deref()))
+            .enumerate()
+            .find(|(_, i)| Self::same_content(i, kind, &text, hash.as_deref()))
         {
+            let previous = Box::new(p.clone());
             p.text = text;
             p.html = html;
             p.rtf = rtf;
@@ -512,6 +849,7 @@ impl Store {
                 outcome: CaptureOutcome::Deduped,
                 dropped: Vec::new(),
                 layer: Some(DeletedLayer::Pinned),
+                undo: CaptureUndo::PinnedBumped { index, previous },
             };
         }
 
@@ -521,6 +859,7 @@ impl Store {
             .position(|i| Self::same_content(i, kind, &text, hash.as_deref()))
         {
             let mut item = self.history.remove(pos);
+            let previous = Box::new(item.clone());
             if learning {
                 item.copy_count += 1;
             }
@@ -543,6 +882,10 @@ impl Store {
                 outcome: CaptureOutcome::Deduped,
                 dropped: Vec::new(),
                 layer: Some(DeletedLayer::History),
+                undo: CaptureUndo::HistoryBumped {
+                    index: pos,
+                    previous,
+                },
             };
         }
 
@@ -565,46 +908,142 @@ impl Store {
             last_used_at: now,
         };
         self.history.insert(0, item);
-        let limit = self.settings.history_limit.max(1);
-        let dropped = if self.history.len() > limit {
-            self.history.split_off(limit)
-        } else {
-            Vec::new()
-        };
         CaptureResult {
             outcome: CaptureOutcome::Added,
-            dropped,
+            dropped: self.prune_history(),
             layer: Some(DeletedLayer::History),
+            undo: CaptureUndo::Added,
         }
     }
 
-    pub(crate) fn persist_capture(
-        &mut self,
-        result: CaptureResult,
-        old_history: Vec<ClipItem>,
-        old_pinned: Vec<ClipItem>,
-    ) -> Result<CaptureOutcome, String> {
+    /// The one place the retention policy lives.
+    ///
+    /// Three limits answering three different questions: the count is a
+    /// resource cap, the byte budget is what makes the worst case a number,
+    /// and the age is the privacy promise. Pinned rows are outside all three,
+    /// on purpose. Dropped rows come back to the caller so their image files
+    /// are deleted only once the layer write has committed.
+    ///
+    /// A single row heavier than the whole budget is kept: it already cleared
+    /// the per-item cap in `read_clip`, and dropping it the instant it arrived
+    /// would look exactly like capture quietly not working.
+    fn prune_history(&mut self) -> Vec<ClipItem> {
+        let limit = self.settings.history_limit.max(1);
+        let mut keep = self.history.len().min(limit);
+        let mut total = 0usize;
+        for (index, item) in self.history.iter().take(keep).enumerate() {
+            total = total.saturating_add(weight(item));
+            if total > MAX_HISTORY_BYTES && index > 0 {
+                keep = index;
+                break;
+            }
+        }
+        let mut dropped = self.history.split_off(keep);
+
+        if let Some(oldest_allowed) = self.oldest_allowed_ms() {
+            // Partitioned rather than truncated: recency order is maintained,
+            // but the promise must not depend on it holding.
+            let mut kept = Vec::with_capacity(self.history.len());
+            for item in self.history.drain(..) {
+                if item.created_at >= oldest_allowed {
+                    kept.push(item);
+                } else {
+                    dropped.push(item);
+                }
+            }
+            self.history = kept;
+        }
+        dropped
+    }
+
+    /// The oldest `created_at` still covered, or `None` when the user keeps
+    /// things until a count or size limit says otherwise.
+    fn oldest_allowed_ms(&self) -> Option<u64> {
+        let days = u64::from(self.settings.retention_days);
+        if days == 0 {
+            return None;
+        }
+        Some(now_ms().saturating_sub(days * 24 * 60 * 60 * 1000))
+    }
+
+    /// Serializes the layer a capture touched, without writing it.
+    ///
+    /// The bytes leave with a ticket so the caller can write them after the
+    /// store lock is released — the write is tens of megabytes at the allowed
+    /// limit, and the main thread takes this same lock every time the panel is
+    /// opened or dragged.
+    fn stage_capture(&mut self, result: &CaptureResult) -> Result<LayerWrite, String> {
         if result.outcome == CaptureOutcome::Failed {
-            self.history = old_history;
-            self.pinned = old_pinned;
             return Err("تعذّر إكمال معاملة التثبيت السابقة".into());
         }
-        let writes = match result.layer {
-            Some(DeletedLayer::History) => {
-                try_save_json(&self.dir.join(HISTORY_FILE), &self.history)
-            }
-            Some(DeletedLayer::Pinned) => try_save_json(&self.dir.join(PINNED_FILE), &self.pinned),
-            None => Err("تعذّر تحديد طبقة الالتقاط".into()),
+        let path = match result.layer {
+            Some(DeletedLayer::History) => self.dir.join(HISTORY_FILE),
+            Some(DeletedLayer::Pinned) => self.dir.join(PINNED_FILE),
+            None => return Err("تعذّر تحديد طبقة الالتقاط".into()),
         };
-        if let Err(err) = writes {
-            self.history = old_history;
-            self.pinned = old_pinned;
-            return Err(err);
+        match result.layer {
+            Some(DeletedLayer::Pinned) => stage_json(&path, &self.pinned),
+            _ => stage_json(&path, &self.history),
         }
-        for item in &result.dropped {
-            self.delete_files(item);
+    }
+
+    /// Records that a learning counter moved, without writing the layer.
+    ///
+    /// These counters are bumped on every paste and every copy made through
+    /// رفّ, and each bump used to rewrite its layer whole — tens of megabytes
+    /// at the allowed limit, to move one number by one. They are coalesced and
+    /// written once the user pauses instead. Losing a second or two of them to
+    /// a quit is acceptable: they are silent ranking signals, not content.
+    pub fn mark_signals_dirty(&mut self, pinned: bool) {
+        if pinned {
+            self.dirty_signals.pinned = true;
+        } else {
+            self.dirty_signals.history = true;
         }
-        Ok(result.outcome)
+    }
+
+    /// Serializes any layer carrying coalesced counter bumps, without writing.
+    pub(crate) fn stage_signal_flush(&mut self) -> Vec<LayerWrite> {
+        let dirty = std::mem::take(&mut self.dirty_signals);
+        let mut writes = Vec::new();
+        if dirty.history {
+            match stage_json(&self.dir.join(HISTORY_FILE), &self.history) {
+                Ok(write) => writes.push(write),
+                Err(err) => eprintln!("raff: {err}"),
+            }
+        }
+        if dirty.pinned {
+            match stage_json(&self.dir.join(PINNED_FILE), &self.pinned) {
+                Ok(write) => writes.push(write),
+                Err(err) => eprintln!("raff: {err}"),
+            }
+        }
+        writes
+    }
+
+    /// Puts back exactly what `capture` changed, from its undo record.
+    fn rollback_capture(&mut self, undo: CaptureUndo, dropped: Vec<ClipItem>) {
+        match undo {
+            CaptureUndo::Nothing => {}
+            CaptureUndo::Added => {
+                if !self.history.is_empty() {
+                    self.history.remove(0);
+                }
+                self.history.extend(dropped);
+            }
+            CaptureUndo::PinnedBumped { index, previous } => {
+                if let Some(slot) = self.pinned.get_mut(index) {
+                    *slot = *previous;
+                }
+            }
+            CaptureUndo::HistoryBumped { index, previous } => {
+                if !self.history.is_empty() {
+                    self.history.remove(0);
+                }
+                let index = index.min(self.history.len());
+                self.history.insert(index, *previous);
+            }
+        }
     }
 
     fn delete_files(&self, item: &ClipItem) {
@@ -727,14 +1166,66 @@ impl Store {
         Ok(())
     }
 
-    /// Enforces the history cap (oldest items dropped, their image files
-    /// deleted). Public so a shrunk `history_limit` applies immediately.
+    /// Applies the retention policy now and writes the result.
+    ///
+    /// The entry point for every prune that is not a capture: a shrunk limit,
+    /// a shortened retention window, launch, and the hourly sweep. Time-based
+    /// retention cannot ride on captures the way the count could — a sensitive
+    /// copy followed by a fortnight away from the machine is precisely the
+    /// case the promise was made for, and precisely the case with no capture
+    /// to hang a prune on.
     pub fn trim_history(&mut self) {
-        while self.history.len() > self.settings.history_limit.max(1) {
-            if let Some(dropped) = self.history.pop() {
-                self.delete_files(&dropped);
-            }
+        let dropped = self.prune_history();
+        if dropped.is_empty() {
+            return;
         }
+        self.save_history();
+        for item in &dropped {
+            self.delete_files(item);
+        }
+    }
+
+    /// Rewrites the pinned shelf into exactly this order.
+    ///
+    /// `ids` has to be the pinned set exactly: same ids, none missing, none
+    /// extra, none repeated. A caller working from a stale view would
+    /// otherwise drop a row — or list one twice — while calling it a reorder,
+    /// and the shelf is the one layer nothing ever prunes for the user.
+    ///
+    /// The whole layer is copied for the rollback. That is fine here and not
+    /// in `capture`: pinning is a deliberate, rare act on a short list, not a
+    /// cost paid on every copy the user makes.
+    pub fn reorder_pinned_persisted(&mut self, ids: &[String]) -> Result<(), String> {
+        self.try_finish_pending_pin()?;
+
+        let mut seen = std::collections::HashSet::new();
+        let matches_shelf = ids.len() == self.pinned.len()
+            && ids.iter().all(|id| {
+                seen.insert(id.as_str()) && self.pinned.iter().any(|item| item.id == *id)
+            });
+        if !matches_shelf {
+            return Err("ترتيب المثبتات لا يطابق المحفوظ".into());
+        }
+
+        let previous = self.pinned.clone();
+        let mut reordered = Vec::with_capacity(ids.len());
+        for (order, id) in ids.iter().enumerate() {
+            let position = self
+                .pinned
+                .iter()
+                .position(|item| item.id == *id)
+                .expect("checked above");
+            let mut item = self.pinned.remove(position);
+            item.pinned_order = Some(order as u32);
+            reordered.push(item);
+        }
+        self.pinned = reordered;
+
+        if let Err(err) = try_save_json(&self.dir.join(PINNED_FILE), &self.pinned) {
+            self.pinned = previous;
+            return Err(err);
+        }
+        Ok(())
     }
 
     /// Pin moves the item from the recent layer to the pinned shelf (plan §2:
@@ -1199,6 +1690,71 @@ mod tests {
     }
 
     #[test]
+    fn a_week_long_retention_sweeps_at_boot_with_no_capture_at_all() {
+        let dir = std::env::temp_dir().join(format!("raff-test-{}", uuid::Uuid::new_v4()));
+        let images = dir.join(IMAGES_DIR);
+        fs::create_dir_all(&images).unwrap();
+        fs::write(images.join("old.png"), b"old").unwrap();
+        fs::write(images.join("old.thumb.png"), b"old thumb").unwrap();
+
+        let day = 24 * 60 * 60 * 1000u64;
+        let now = now_ms();
+        let row = |id: &str, age_days: u64, image: &str| {
+            format!(
+                r#"{{"id":"{id}","type":"image","text":"صورة","imageFile":"{image}","thumbFile":"{image}.thumb.png","sourceAppBundleId":"com.test","sourceApp":"Test","createdAt":{},"isPinned":false,"copyCount":1,"pasteCount":0,"lastUsedAt":1}}"#,
+                now - age_days * day
+            )
+        };
+        fs::write(
+            dir.join(HISTORY_FILE),
+            format!("[{},{}]", row("nine-days", 9, "old"), row("two-days", 2, "kept")),
+        )
+        .unwrap();
+        fs::write(
+            dir.join(PINNED_FILE),
+            format!(
+                r#"[{{"id":"pinned","type":"text","text":"مثبّت","sourceAppBundleId":"com.test","sourceApp":"Test","createdAt":{},"isPinned":true,"pinnedOrder":0,"copyCount":1,"pasteCount":0,"lastUsedAt":1}}]"#,
+                now - 30 * day
+            ),
+        )
+        .unwrap();
+        fs::write(
+            dir.join(SETTINGS_FILE),
+            r#"{"hotkey":"shift+super+v","retentionDays":7}"#,
+        )
+        .unwrap();
+
+        // Nothing is captured: `load` alone has to enforce the promise, or a
+        // fortnight away from the machine keeps the very item it was made for.
+        let store = Store::load(dir.clone());
+
+        assert_eq!(
+            store.history.iter().map(|i| i.id.as_str()).collect::<Vec<_>>(),
+            vec!["two-days"],
+            "past the window goes, inside it stays"
+        );
+        assert!(!images.join("old.png").exists(), "and its image goes with it");
+        assert!(!images.join("old.thumb.png").exists());
+        assert_eq!(store.pinned.len(), 1, "a pinned item is outside the policy");
+
+        // Written down, not just applied in memory.
+        let reloaded = Store::load(dir);
+        assert_eq!(reloaded.history.len(), 1);
+    }
+
+    #[test]
+    fn no_retention_set_keeps_everything_the_count_allows() {
+        let mut s = store();
+        s.settings.retention_days = 0;
+        capture_text(&mut s, "قديم");
+        s.history[0].created_at = now_ms() - 400 * 24 * 60 * 60 * 1000;
+
+        s.trim_history();
+
+        assert_eq!(s.history.len(), 1, "0 means the age limit is not in play");
+    }
+
+    #[test]
     fn shrinking_limit_trims_immediately() {
         let mut s = store();
         for i in 0..5 {
@@ -1209,6 +1765,63 @@ mod tests {
         assert_eq!(s.history.len(), 2);
         assert_eq!(s.history[0].text, "item 4");
         assert_eq!(s.history[1].text, "item 3");
+    }
+
+    fn pin_two(s: &mut Store) -> (String, String) {
+        capture_text(s, "\u{0623}\u{0648}\u{0644}");
+        let first = s.history[0].id.clone();
+        capture_text(s, "\u{062b}\u{0627}\u{0646}");
+        let second = s.history[0].id.clone();
+        assert!(s.toggle_pin(&first));
+        assert!(s.toggle_pin(&second));
+        s.save_pinned();
+        (first, second)
+    }
+
+    fn pinned_ids_in_order(s: &Store) -> Vec<String> {
+        let mut pinned: Vec<&ClipItem> = s.pinned.iter().collect();
+        pinned.sort_by_key(|item| item.pinned_order.unwrap_or(u32::MAX));
+        pinned.iter().map(|item| item.id.clone()).collect()
+    }
+
+    #[test]
+    fn a_reordered_pinned_shelf_is_still_in_that_order_after_a_restart() {
+        let dir = std::env::temp_dir().join(format!("raff-test-{}", uuid::Uuid::new_v4()));
+        let mut s = Store::load(dir.clone());
+        let (first, second) = pin_two(&mut s);
+        assert_eq!(pinned_ids_in_order(&s), vec![first.clone(), second.clone()]);
+
+        s.reorder_pinned_persisted(&[second.clone(), first.clone()])
+            .unwrap();
+        assert_eq!(pinned_ids_in_order(&s), vec![second.clone(), first.clone()]);
+        drop(s);
+
+        let reloaded = Store::load(dir);
+        assert_eq!(
+            pinned_ids_in_order(&reloaded),
+            vec![second, first],
+            "the arrangement is the user's, so it outlives the process"
+        );
+    }
+
+    #[test]
+    fn a_set_that_is_not_the_pinned_shelf_is_refused_and_changes_nothing() {
+        let mut s = store();
+        let (first, second) = pin_two(&mut s);
+        let before = pinned_ids_in_order(&s);
+
+        for wrong in [
+            vec![first.clone()],                                  // one short
+            vec![first.clone(), second.clone(), first.clone()],   // one too many
+            vec![first.clone(), first.clone()],                   // right length, repeated
+            vec![first.clone(), "\u{063a}\u{0631}\u{064a}\u{0628}".to_string()], // a stranger
+        ] {
+            assert!(
+                s.reorder_pinned_persisted(&wrong).is_err(),
+                "{wrong:?} is not the pinned shelf"
+            );
+            assert_eq!(pinned_ids_in_order(&s), before, "and nothing moved");
+        }
     }
 
     #[test]
@@ -1566,6 +2179,277 @@ mod tests {
     }
 
     #[test]
+    fn a_recovery_copy_keeps_its_images_on_the_boot_after_the_one_that_healed_history() {
+        let dir = std::env::temp_dir().join(format!("raff-test-{}", uuid::Uuid::new_v4()));
+        let images = dir.join(IMAGES_DIR);
+        fs::create_dir_all(&images).unwrap();
+        fs::write(images.join("a.png"), b"a").unwrap();
+        fs::write(
+            dir.join(HISTORY_FILE),
+            r#"[{"type":"image","imageFile":"a.png","thumbFile":"a.thumb.png""#,
+        )
+        .unwrap();
+
+        // First boot sets the recovery copy aside and skips collection.
+        let mut store = Store::load(dir.clone());
+        assert!(dir.join("history.json.corrupt").exists());
+
+        // One good capture rewrites history.json — the guard now has nothing
+        // left to notice, because both layers parse from here on.
+        let capture = store.capture(
+            ItemKind::Text,
+            "نصّ".into(),
+            None,
+            None,
+            None,
+            None,
+            None,
+            ("Notes".into(), "com.apple.Notes".into()),
+        );
+        let store = std::sync::Mutex::new(store);
+        persist_capture(&store, capture).unwrap();
+        drop(store);
+
+        let store = Store::load(dir.clone());
+        assert_eq!(store.history.len(), 1, "the healed layer reads fine now");
+        assert!(
+            images.join("a.png").exists(),
+            "the only metadata naming this image is the recovery copy"
+        );
+    }
+
+    #[test]
+    fn a_failed_capture_write_restores_the_model_from_its_undo_record() {
+        // 1000 is the highest limit `validate_settings` allows, and the size
+        // the old path cloned twice on every single copy the user made.
+        let dir = std::env::temp_dir().join(format!("raff-test-{}", uuid::Uuid::new_v4()));
+        let mut s = Store::load(dir.clone());
+        s.settings.history_limit = 1000;
+        for n in 0..1000 {
+            capture_text(&mut s, &format!("item {n}"));
+        }
+        let before_len = s.history.len();
+        let before_head = s.history[0].id.clone();
+        let before_tail = s.history[before_len - 1].id.clone();
+
+        // The temporary file every layer write goes through cannot be created,
+        // so the write fails while `history.json` itself stays readable.
+        fs::create_dir(dir.join("history.json.tmp")).unwrap();
+
+        let store = std::sync::Mutex::new(s);
+        let capture = crate::lock_store(&store).capture(
+            ItemKind::Text,
+            "one more".into(),
+            None,
+            None,
+            None,
+            None,
+            None,
+            ("Test".into(), "com.test".into()),
+        );
+
+        assert!(persist_capture(&store, capture).is_err());
+
+        let s = crate::lock_store(&store);
+        assert_eq!(s.history.len(), before_len, "the row it pushed off came back");
+        assert_eq!(s.history[0].id, before_head, "the new row is gone");
+        assert_eq!(
+            s.history[before_len - 1].id,
+            before_tail,
+            "and the tail is the one that was there"
+        );
+    }
+
+    #[test]
+    fn the_size_budget_trims_a_history_that_is_still_under_the_count_limit() {
+        let mut s = store();
+        s.settings.history_limit = 1000;
+        // Rows of 2 MB: well inside the per-item cap, and a count limit of
+        // 1000 of them is what makes "1000 items" an unbounded promise.
+        let bulk = "a".repeat(2 * 1024 * 1024);
+        let rows = 2 + MAX_HISTORY_BYTES / bulk.len();
+        for n in 0..rows {
+            capture_text(&mut s, &format!("{n} {bulk}"));
+        }
+
+        assert!(
+            s.history.len() < rows,
+            "the count limit alone would have kept every row"
+        );
+        assert!(
+            s.history.iter().map(weight).sum::<usize>() <= MAX_HISTORY_BYTES,
+            "the layer stays inside its byte budget"
+        );
+        assert_eq!(
+            s.history[0].text.split(' ').next(),
+            Some((rows - 1).to_string().as_str()),
+            "trimming drops the oldest, never the newest"
+        );
+    }
+
+    #[test]
+    fn the_fingerprint_is_this_project_s_own_and_is_written_down() {
+        // Literals, not values read back from whatever the standard library
+        // happens to hash with today. If this test has to be edited, every
+        // fingerprint already on disk has just stopped matching.
+        assert_eq!(content_hash(b""), "f1:cbf29ce484222325");
+        assert_eq!(content_hash(b"raff"), "f1:6dcf031fd20381b8");
+        assert_eq!(content_hash(&[0x89, b'P', b'N', b'G']), "f1:09935de427cea543");
+    }
+
+    #[test]
+    fn an_old_fingerprint_is_recomputed_from_its_file_at_boot() {
+        let dir = std::env::temp_dir().join(format!("raff-test-{}", uuid::Uuid::new_v4()));
+        let images = dir.join(IMAGES_DIR);
+        fs::create_dir_all(&images).unwrap();
+        fs::write(images.join("shot.png"), b"raff").unwrap();
+        // A row written before the fingerprint had a defined algorithm.
+        fs::write(
+            dir.join(HISTORY_FILE),
+            r#"[{"id":"1","type":"image","text":"صورة 2×2","imageFile":"shot.png","hash":"9f8e7d6c5b4a3210","sourceAppBundleId":"com.test","sourceApp":"Test","createdAt":1,"isPinned":false,"copyCount":1,"pasteCount":0,"lastUsedAt":1}]"#,
+        )
+        .unwrap();
+
+        let store = Store::load(dir.clone());
+
+        assert_eq!(
+            store.history[0].hash.as_deref(),
+            Some("f1:6dcf031fd20381b8"),
+            "recomputed from the file itself, not carried over or dropped"
+        );
+
+        // And it was written down, so the next boot has nothing left to do.
+        let reloaded = Store::load(dir);
+        assert_eq!(
+            reloaded.history[0].hash.as_deref(),
+            Some("f1:6dcf031fd20381b8")
+        );
+
+        // Which is the whole point: re-copying the same image still dedupes.
+        let mut store = reloaded;
+        let result = store.capture(
+            ItemKind::Image,
+            "صورة 2×2".into(),
+            None,
+            None,
+            Some("again.png".into()),
+            None,
+            Some(content_hash(b"raff")),
+            ("Test".into(), "com.test".into()),
+        );
+        assert_eq!(result.outcome, CaptureOutcome::Deduped);
+        assert_eq!(store.history.len(), 1);
+    }
+
+    #[test]
+    fn an_old_fingerprint_with_no_file_left_is_dropped_not_guessed() {
+        let dir = std::env::temp_dir().join(format!("raff-test-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(dir.join(IMAGES_DIR)).unwrap();
+        fs::write(
+            dir.join(HISTORY_FILE),
+            r#"[{"id":"1","type":"image","text":"صورة 2×2","imageFile":"gone.png","hash":"9f8e7d6c5b4a3210","sourceAppBundleId":"com.test","sourceApp":"Test","createdAt":1,"isPinned":false,"copyCount":1,"pasteCount":0,"lastUsedAt":1}]"#,
+        )
+        .unwrap();
+
+        let store = Store::load(dir);
+
+        assert_eq!(
+            store.history[0].hash, None,
+            "an unverifiable fingerprint is worse than none: it would match nothing and block everything"
+        );
+    }
+
+    #[test]
+    fn links_cover_the_schemes_and_bare_domains_people_actually_copy() {
+        for link in [
+            "https://example.com/a",
+            "http://example.com",
+            "www.example.com",
+            "mailto:a@b.com",
+            "tel:+966500000000",
+            "example.com",
+            "docs.example.co.uk/guide",
+        ] {
+            assert_eq!(detect_kind(link), ItemKind::Link, "{link}");
+        }
+    }
+
+    #[test]
+    fn prose_that_merely_contains_a_link_stays_text() {
+        for text in [
+            "\u{0627}\u{0641}\u{062a}\u{062d} https://example.com \u{0627}\u{0644}\u{0622}\u{0646}", // prose around a URL
+            "example",                 // a word, not a domain
+            "3.5",                     // a number
+            "file.txt",                // a filename, not a host
+            "\u{0645}\u{0644}\u{0641}.\u{0646}\u{0635}",  // ...in Arabic too
+            "a@b",                     // not an address, and no scheme
+            "mailto:",                 // a scheme with nothing after it
+        ] {
+            assert_ne!(detect_kind(text), ItemKind::Link, "{text}");
+        }
+    }
+
+    #[test]
+    fn a_learning_bump_waits_for_the_flush_instead_of_rewriting_the_layer() {
+        let mut s = store();
+        capture_text(&mut s, "counted");
+        let id = s.history[0].id.clone();
+        s.save_history();
+        let on_disk = fs::read(s.dir.join(HISTORY_FILE)).unwrap();
+
+        // Exactly what `bump_signals` does for a paste.
+        s.find_mut(&id).unwrap().paste_count += 1;
+        s.mark_signals_dirty(false);
+
+        assert_eq!(
+            fs::read(s.dir.join(HISTORY_FILE)).unwrap(),
+            on_disk,
+            "moving a counter by one must not rewrite the whole layer"
+        );
+
+        for write in s.stage_signal_flush() {
+            write.commit().unwrap();
+        }
+        assert_ne!(
+            fs::read(s.dir.join(HISTORY_FILE)).unwrap(),
+            on_disk,
+            "the pause is when it is written"
+        );
+        assert!(s.stage_signal_flush().is_empty(), "and only once");
+    }
+
+    #[test]
+    fn a_stale_layer_write_never_lands_on_top_of_a_newer_one() {
+        let mut s = store();
+        capture_text(&mut s, "first");
+        let stale = stage_json(&s.dir.join(HISTORY_FILE), &s.history).unwrap();
+
+        capture_text(&mut s, "second");
+        let fresh = stage_json(&s.dir.join(HISTORY_FILE), &s.history).unwrap();
+
+        // The newer serialization wins the race to the disk; the older one
+        // then arrives holding a layer that no longer exists.
+        fresh.commit().unwrap();
+        stale.commit().unwrap();
+
+        let written: Vec<ClipItem> =
+            serde_json::from_slice(&fs::read(s.dir.join(HISTORY_FILE)).unwrap()).unwrap();
+        assert_eq!(written.len(), 2, "the older write was refused, not applied");
+    }
+
+    #[test]
+    fn a_single_row_larger_than_the_budget_is_still_kept() {
+        let mut s = store();
+        capture_text(&mut s, &"a".repeat(MAX_HISTORY_BYTES + 1));
+
+        assert_eq!(
+            s.history.len(),
+            1,
+            "a row that already passed the per-item cap must not vanish on arrival"
+        );
+    }
+
+    #[test]
     fn startup_removes_only_unreferenced_image_files() {
         let dir = std::env::temp_dir().join(format!("raff-test-{}", uuid::Uuid::new_v4()));
         let mut s = Store::load(dir.clone());
@@ -1581,8 +2465,9 @@ mod tests {
             Some("hash".into()),
             ("Test".into(), "com.test".into()),
         );
-        let old_history = Vec::new();
-        s.persist_capture(capture, old_history, Vec::new()).unwrap();
+        let s = std::sync::Mutex::new(s);
+        persist_capture(&s, capture).unwrap();
+        let s = s.into_inner().unwrap();
         drop(s);
 
         let reloaded = Store::load(dir.clone());

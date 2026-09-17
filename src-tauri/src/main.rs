@@ -12,8 +12,9 @@ mod storage;
 mod tray;
 mod updater;
 
-use std::sync::atomic::AtomicI64;
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, AtomicI64};
+use std::sync::{Mutex, MutexGuard};
+use std::time::{Duration, Instant};
 
 use tauri::Manager;
 use tauri_plugin_autostart::MacosLauncher;
@@ -24,6 +25,81 @@ pub struct AppState {
     pub skip_change_count: AtomicI64,
     /// pid of the app that was frontmost when the panel opened (focus restore).
     pub previous_app: Mutex<Option<i32>>,
+    /// False once the capture loop has given up. `capture_enabled` is a
+    /// setting — what the user asked for — and cannot answer whether capture
+    /// is actually running, which is why a silent death used to look exactly
+    /// like a healthy app.
+    pub capture_alive: AtomicBool,
+    /// Capture held off on purpose.
+    pub pause: Mutex<Pause>,
+}
+
+/// Capture deliberately held off — the answer to «نسختُ سرًّا للتو» in the
+/// second it happens.
+///
+/// Not a setting: it must not survive a restart, and it must never look like
+/// the user turned capture off for good. Nothing about a change skipped this
+/// way is recorded anywhere — not its text, not its source, not its length.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum Pause {
+    #[default]
+    Off,
+    /// Skip the next clipboard change, then clear.
+    SkipNext,
+    /// Skip everything until this instant; `None` means until Raff restarts.
+    Until(Option<Instant>),
+}
+
+impl Pause {
+    /// Starts a pause of `minutes`, or until restart when `None`.
+    pub fn for_minutes(minutes: Option<u64>) -> Self {
+        Pause::Until(minutes.map(|m| Instant::now() + Duration::from_secs(m * 60)))
+    }
+
+    /// Whether the change being looked at must be skipped, advancing the
+    /// state: a one-shot skip is spent here, and an elapsed pause ends here.
+    pub fn consume(&mut self) -> bool {
+        match *self {
+            Pause::Off => false,
+            Pause::SkipNext => {
+                *self = Pause::Off;
+                true
+            }
+            Pause::Until(None) => true,
+            Pause::Until(Some(until)) => {
+                if Instant::now() < until {
+                    true
+                } else {
+                    *self = Pause::Off;
+                    false
+                }
+            }
+        }
+    }
+
+    pub fn is_active(&self) -> bool {
+        *self != Pause::Off
+    }
+}
+
+/// The store guard, recovering a poisoned lock instead of propagating the panic.
+///
+/// One panic anywhere that holds this lock would otherwise turn every later
+/// `lock().unwrap()` into a second panic — ending the capture thread for the
+/// rest of the session, with the menu-bar icon and the settings toggle both
+/// still saying everything is fine. The durable JSON files are the reference
+/// either way, so the model in memory stays usable and recovering is strictly
+/// better than spreading the failure.
+pub fn lock_pause(pause: &Mutex<Pause>) -> MutexGuard<'_, Pause> {
+    pause
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+pub fn lock_store(store: &Mutex<storage::Store>) -> MutexGuard<'_, storage::Store> {
+    store
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 fn main() {
@@ -56,9 +132,12 @@ fn main() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             commands::get_state,
+            commands::get_settings,
+            commands::search_items,
             commands::paste_item,
             commands::copy_item,
             commands::toggle_pin,
+            commands::reorder_pinned,
             commands::delete_item,
             commands::undo_delete,
             commands::commit_delete,
@@ -68,6 +147,7 @@ fn main() {
             commands::update_settings,
             commands::get_image,
             commands::hide_panel,
+            commands::show_panel,
             commands::open_settings,
             commands::open_about,
             commands::open_repository,
@@ -116,6 +196,8 @@ fn main() {
                 store: Mutex::new(store),
                 skip_change_count: AtomicI64::new(-1),
                 previous_app: Mutex::new(None),
+                capture_alive: AtomicBool::new(true),
+                pause: Mutex::new(Pause::default()),
             });
             app.manage(updater::UpdaterState::new());
             startup_trace::mark("state_managed");
@@ -124,6 +206,9 @@ fn main() {
             panel::init(&handle)?;
             startup_trace::mark("panel_init_done");
             tray::create(&handle)?;
+            // So the icon is truthful from the first frame, not from whenever
+            // something first happens to ask.
+            tray::note_permission(macos::ax_trusted());
             startup_trace::mark("tray_created_ICON_NOW_VISIBLE");
             if let Err(err) = commands::register_hotkey(&handle, &hotkey) {
                 eprintln!("raff: hotkey registration failed: {err}");
@@ -166,4 +251,61 @@ fn main() {
             startup_trace::mark("run_loop_READY__events_now_processed");
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn skip_next_spends_itself_on_exactly_one_change() {
+        let mut pause = Pause::SkipNext;
+        assert!(pause.consume(), "the copy the user is worried about");
+        assert!(!pause.consume(), "and the one after it is captured normally");
+        assert_eq!(pause, Pause::Off);
+    }
+
+    #[test]
+    fn a_pause_until_restart_never_lets_anything_through() {
+        let mut pause = Pause::Until(None);
+        for _ in 0..5 {
+            assert!(pause.consume());
+        }
+        assert!(pause.is_active());
+    }
+
+    #[test]
+    fn a_timed_pause_holds_until_it_elapses_and_then_clears_itself() {
+        let mut pause = Pause::for_minutes(Some(15));
+        assert!(pause.consume());
+
+        let mut elapsed = Pause::Until(Some(
+            Instant::now().checked_sub(Duration::from_secs(1)).unwrap(),
+        ));
+        assert!(!elapsed.consume(), "an elapsed pause stops skipping");
+        assert!(!elapsed.is_active(), "and stops calling itself a pause");
+    }
+
+    #[test]
+    fn a_poisoned_store_lock_still_yields_a_usable_guard() {
+        let store = Mutex::new(storage::Store::load(
+            std::env::temp_dir().join(format!("raff-poison-test-{}", uuid::Uuid::new_v4())),
+        ));
+
+        // Poison it exactly the way a panic in any command handler would.
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _guard = store.lock().unwrap();
+            panic!("a command handler panicked while holding the store");
+        }));
+        assert!(store.is_poisoned(), "the lock really is poisoned");
+        assert!(
+            store.lock().is_err(),
+            "so the old `lock().unwrap()` would have panicked here"
+        );
+
+        // The durable JSON files are the reference either way, so the model in
+        // memory stays usable and capture must not die with the panic.
+        let guard = lock_store(&store);
+        assert!(guard.history.is_empty());
+    }
 }

@@ -14,6 +14,11 @@ const laterBtn = document.getElementById('later');
 const permissionStatus = document.getElementById('permission-status');
 const permissionStatusText = document.getElementById('permission-status-text');
 const permissionRetry = document.getElementById('permission-retry');
+const captureConsent = document.getElementById('capture-consent');
+const captureAccept = document.getElementById('capture-accept');
+const captureDecline = document.getElementById('capture-decline');
+const completion = document.getElementById('completion');
+const openRaffBtn = document.getElementById('open-raff');
 
 const POLL_DELAY_MS = 1500;
 const MAX_CONSECUTIVE_FAILURES = 3;
@@ -113,6 +118,39 @@ async function checkGranted({ manual = false } = {}) {
     if (!permissionRetry.hidden) permissionRetry.disabled = false;
   }
 }
+
+/**
+ * Answers the capture question, then teaches the way back in.
+ *
+ * `enabled` is the default, so agreeing writes nothing: an unnecessary save
+ * could only fail, and a failed save on the welcome screen is a worse first
+ * minute than no save at all.
+ */
+async function answerCaptureConsent(enabled) {
+  captureAccept.disabled = true;
+  captureDecline.disabled = true;
+  if (!enabled) {
+    try {
+      const { settings } = await api.getSettings();
+      await api.updateSettings({ ...settings, captureEnabled: false });
+    } catch (err) {
+      console.error('raff: could not stop capture', err);
+      showPermissionStatus('تعذّر إيقاف الالتقاط. يمكنك إيقافه من الإعدادات.', {
+        error: true,
+      });
+    }
+  }
+  captureConsent.hidden = true;
+  completion.hidden = false;
+}
+
+captureAccept.addEventListener('click', () => void answerCaptureConsent(true));
+captureDecline.addEventListener('click', () => void answerCaptureConsent(false));
+
+openRaffBtn.addEventListener('click', async () => {
+  await api.showPanel().catch(() => {});
+  void finishFirstRun();
+});
 
 openSettingsBtn.addEventListener('click', async () => {
   openSettingsBtn.disabled = true;

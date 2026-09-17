@@ -1,0 +1,41 @@
+# بوابة الاختبارات على الفرع الرئيسي وطلبات الدمج.
+#
+# تدفّق الإصدار (release.yml) يشغّل الاختبارات نفسها، لكن مُشغِّله وسم vX.Y.Z
+# وحده — فدفعة تكسر اختبارًا لا تظهر حتى لحظة تجهيز إصدار. هذا التدفّق يكرّر
+# خطوتَي الاختبار فقط: لا بناء، ولا توقيع، ولا أسرار.
+
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    # macOS مطلوب: اختبارات الخلفية تبني الصندوق كاملًا بما فيه objc2-app-kit.
+    runs-on: macos-26
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+
+      - name: تثبيت الاعتماديات
+        run: npm ci
+
+      - name: اختبارات الواجهة
+        run: npm test
+
+      - name: اختبارات الخلفية
+        run: cargo test --manifest-path src-tauri/Cargo.toml

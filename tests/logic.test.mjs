@@ -27,6 +27,32 @@ test('normalizeArabic strips tashkeel and tatweel', () => {
   assert.equal(normalizeArabic('٫٬٭ٮٯ'), '٫٬٭ٮٯ');
 });
 
+test('normalizeArabic folds the alef forms and the dotless ya', () => {
+  // The two commonest spelling splits in written Arabic. Someone searching
+  // «اكتب» means «أكتب»; someone typing «على» means «علي» just as often.
+  assert.equal(normalizeArabic('أكتب'), 'اكتب');
+  assert.equal(normalizeArabic('إجابة'), 'اجابة');
+  assert.equal(normalizeArabic('آخر'), 'اخر');
+  assert.equal(normalizeArabic('على'), 'علي');
+
+  // Deliberately not folded: ة against ه costs more false matches than the
+  // spelling confusion it would forgive.
+  assert.notEqual(normalizeArabic('مدرسة'), normalizeArabic('مدرسه'));
+});
+
+test('search folding matches across alef and ya spellings both ways', () => {
+  const items = [
+    { text: 'أكتب خطابًا', sourceApp: 'Notes' },
+    { text: 'علي بن أبي طالب', sourceApp: 'Notes' },
+    { text: 'مدرسة', sourceApp: 'Notes' },
+  ];
+
+  assert.deepEqual(filterItems(items, 'اكتب').map((i) => i.text), ['أكتب خطابًا']);
+  assert.deepEqual(filterItems(items, 'على').map((i) => i.text), ['علي بن أبي طالب']);
+  assert.deepEqual(filterItems(items, 'علي').map((i) => i.text), ['علي بن أبي طالب']);
+  assert.deepEqual(filterItems(items, 'مدرسه'), []);
+});
+
 test('filterItems matches text and source app, diacritic-insensitive', () => {
   const items = [
     { text: 'أكتب خطابًا رسميًا', sourceApp: 'ChatGPT' },

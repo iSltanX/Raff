@@ -280,7 +280,7 @@ fn was_just_dismissed_by_resign(now_ms: u64, last_resign_hide_ms: u64) -> bool {
 fn restore_or_center(app: &AppHandle, window: &tauri::WebviewWindow) {
     let saved = {
         let state = app.state::<AppState>();
-        let placement = state.store.lock().unwrap().load_panel_placement();
+        let placement = crate::lock_store(&state.store).load_panel_placement();
         placement
     };
     let size = window
@@ -372,7 +372,7 @@ fn constrain_and_save(app: &AppHandle) {
     }
 
     let state = app.state::<AppState>();
-    let store = state.store.lock().unwrap();
+    let store = crate::lock_store(&state.store);
     store.save_panel_placement(PanelPlacement {
         x: corrected.x as f64,
         y: corrected.y as f64,

@@ -15,6 +15,8 @@ export const ALERT = asset('alert');
 export const IMAGE = asset('image');
 export const KEYBOARD = asset('keyboard');
 export const SHIELD = asset('shield');
+export const MOVE_UP = asset('move-up');
+export const MOVE_DOWN = asset('move-down');
 
 export const CONTENT_TYPE_ICONS = Object.freeze({
   text: Object.freeze({ asset: asset('text'), label: 'نص' }),

@@ -21,7 +21,7 @@ function mount(page, check) {
       invoke(cmd) {
         calls.push(cmd);
         if (cmd === 'check_for_update') return Promise.resolve(check);
-        if (cmd === 'get_state') {
+        if (cmd === 'get_state' || cmd === 'get_settings') {
           return Promise.resolve({ pinned: [], history: [], settings: {}, axTrusted: true, version: '5.0.0' });
         }
         return Promise.resolve(null);

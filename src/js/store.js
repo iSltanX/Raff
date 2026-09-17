@@ -15,9 +15,14 @@ const listen = window.__TAURI__ ? window.__TAURI__.event.listen : () => Promise.
 
 export const api = {
   getState: () => invoke('get_state'),
+  // The Settings window's own read: preferences and states, no shelf.
+  getSettings: () => invoke('get_settings'),
+  // Ids of rows matching beyond the preview the panel holds.
+  searchItems: (query) => invoke('search_items', { query }),
   pasteItem: (id, plain = false) => invoke('paste_item', { id, plain }),
   copyItem: (id) => invoke('copy_item', { id }),
   togglePin: (id, isPinned) => invoke('toggle_pin', { id, isPinned }),
+  reorderPinned: (ids) => invoke('reorder_pinned', { ids }),
   deleteItem: (id) => invoke('delete_item', { id }),
   undoDelete: (token) => invoke('undo_delete', { token }),
   commitDelete: (token) => invoke('commit_delete', { token }),
@@ -27,6 +32,7 @@ export const api = {
   updateSettings: (settings) => invoke('update_settings', { settings }),
   getImage: (id) => invoke('get_image', { id }),
   hidePanel: () => invoke('hide_panel'),
+  showPanel: () => invoke('show_panel'),
   openSettings: () => invoke('open_settings'),
   openAbout: () => invoke('open_about'),
   openRepository: () => invoke('open_repository'),

@@ -8,21 +8,40 @@ export function arabicDigits(value) {
 }
 
 /** Strips Arabic diacritics (tashkeel) and tatweel, folds Arabic-Indic digits
- *  to Western — forgiving search in both directions. */
+ *  to Western, and folds the two spellings people actually disagree about —
+ *  forgiving search in both directions.
+ *
+ *  This is the search normalizer and nothing else: stored and displayed text
+ *  keeps every letter the user copied.
+ *
+ *  The fold is deliberately two rules and stays two. Taa marbuta against haa
+ *  is the obvious next candidate and is left out on purpose: it buys a
+ *  handful of spelling slips and pays for them in false matches on every
+ *  feminine noun. */
 export function normalizeArabic(s) {
   return s
     .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660))
     .replace(/[ً-ٰٟ]/g, '') // tashkeel
     .replace(/ـ/g, '') // tatweel
+    .replace(/[أإآ]/g, 'ا') // alef forms
+    .replace(/ى/g, 'ي') // dotless ya
     .toLowerCase();
 }
 
-/** Instant filter over preview text and source app name. */
-export function filterItems(items, query) {
+/**
+ * Instant filter over preview text and source app name.
+ *
+ * `alsoMatchIds` carries the rows Rust matched in the part of the text this
+ * side never receives — the preview is cut at 1000 characters. It is a union,
+ * not a replacement: the local pass stays synchronous so typing never waits
+ * on IPC, and the deeper answer widens the result when it arrives.
+ */
+export function filterItems(items, query, alsoMatchIds = null) {
   const q = normalizeArabic(query.trim());
   if (!q) return items;
   return items.filter(
     (item) =>
+      alsoMatchIds?.has(item.id) ||
       normalizeArabic(item.text).includes(q) ||
       normalizeArabic(item.sourceApp || '').includes(q)
   );

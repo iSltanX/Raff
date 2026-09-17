@@ -34,7 +34,7 @@ function deferredSettingsBackend() {
   const tauri = {
     core: {
       invoke(command, args) {
-        if (command === 'get_state') {
+        if (command === 'get_state' || command === 'get_settings') {
           return Promise.resolve({
             pinned: [],
             history: [],

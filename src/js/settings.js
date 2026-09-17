@@ -113,7 +113,7 @@ el('settings-repo').addEventListener('click', () => api.openRepository().catch((
 // ─── Load / sync ──────────────────────────────────────────────────────────
 
 async function load() {
-  const state = await api.getState();
+  const state = await api.getSettings();
   settings = state.settings;
 
   const version = state?.version;
@@ -125,12 +125,37 @@ async function load() {
   hotkeySub.textContent = HOTKEY_HINT;
   setChecked('launch-toggle', settings.launchAtLogin);
   setChecked('capture-toggle', settings.captureEnabled);
+  // `captureEnabled` above is the request; this is the outcome. They agree
+  // until the capture loop gives up, and that gap is the whole point of the row.
+  el('capture-status').hidden = state.captureAlive !== false;
+  renderAccessibility(state.axTrusted === true);
   setChecked('concealed-toggle', settings.respectConcealed);
   setChecked('learning-toggle', settings.learningEnabled);
   el('history-limit').value = String(settings.historyLimit);
+  el('retention').value = String(settings.retentionDays ?? 0);
   renderAppearance();
   renderExcluded();
 }
+
+/** The permission is a state worth showing either way: granted is the answer
+ *  to "is auto-paste going to work?", and missing is the answer to "why did it
+ *  stop?". Only the action disappears once there is nothing left to do. */
+function renderAccessibility(trusted) {
+  const row = el('accessibility-status');
+  const action = el('accessibility-action');
+  el('accessibility-sub').textContent = trusted
+    ? 'ممنوح. يلصق رفّ نيابةً عنك مباشرة.'
+    : 'اللصق التلقائي معطّل. يُنسخ العنصر إلى الحافظة لتلصقه بنفسك.';
+  action.hidden = trusted;
+  row.hidden = false;
+}
+
+el('accessibility-action').addEventListener('click', async () => {
+  // Asking first is what makes macOS list رفّ in the pane at all; opening the
+  // pane is what the user still has to do by hand.
+  await api.requestAccessibility().catch(() => {});
+  await api.openAccessibilitySettings().catch(() => {});
+});
 
 function setSettingsInteractive(ready) {
   tablist.toggleAttribute('inert', !ready);
@@ -306,6 +331,7 @@ el('learning-toggle').addEventListener('click', () =>
   save((current) => ({ learningEnabled: !current.learningEnabled }))
 );
 el('history-limit').addEventListener('change', (e) => save({ historyLimit: Number(e.target.value) }));
+el('retention').addEventListener('change', (e) => save({ retentionDays: Number(e.target.value) }));
 
 // ─── المظهر — Segments-Container (2:8018) ─────────────────────────────────
 // Three tabs over two settings: «تلقائي» is followSystem, the other two are an
@@ -474,6 +500,41 @@ async function populateRunningApps() {
 
 retryRunningApps.addEventListener('click', () => {
   void populateRunningApps();
+});
+
+const manualBundle = el('excluded-bundle');
+const manualError = el('excluded-manual-error');
+const manualErrorText = el('excluded-manual-error-text');
+
+function showManualError(message) {
+  manualErrorText.textContent = message;
+  manualError.hidden = false;
+}
+
+manualBundle.addEventListener('input', () => {
+  manualError.hidden = true;
+});
+
+el('add-excluded-manual').addEventListener('click', async () => {
+  const bundleId = manualBundle.value.trim();
+  if (!bundleId || settings.excludedApps.includes(bundleId)) return;
+
+  const saved = await save((current) => ({
+    excludedApps: current.excludedApps.includes(bundleId)
+      ? current.excludedApps
+      : [...current.excludedApps, bundleId],
+  }));
+
+  if (!saved) {
+    // `validate_settings` refused it, and `load()` has already put the list
+    // back the way it was. Said in Raff's own words rather than passing the
+    // backend's string through.
+    showManualError('معرّف الحزمة غير صالح. اكتبه بلا مسافات، مثل com.apple.Notes');
+    return;
+  }
+  manualBundle.value = '';
+  manualError.hidden = true;
+  await populateRunningApps();
 });
 
 addExcludedBtn.addEventListener('click', async () => {
@@ -647,8 +708,34 @@ showLearningBtn.addEventListener('click', async () => {
   showLearningBtn.setAttribute('aria-expanded', String(!view.hidden));
   showLearningBtn.textContent = view.hidden ? 'عرض' : 'إخفاء';
   showLearningBtn.setAttribute('aria-label', view.hidden ? 'عرض ما تعلّمه رفّ' : 'إخفاء ما تعلّمه رفّ');
-  if (!view.hidden) await renderLearning();
+  if (!view.hidden) await showLearning();
 });
+
+/**
+ * Draws the summary, or says why it could not be drawn.
+ *
+ * This is the one path that used to `await` the summary with nothing around
+ * it: a refusal left a rejected promise and a blank box. Every other Settings
+ * path already answers for its own failure, and so does this one now.
+ */
+async function showLearning() {
+  try {
+    await renderLearning();
+  } catch (err) {
+    console.error('raff: learning summary failed', err);
+    const view = el('learning-view');
+    const message = document.createElement('div');
+    message.className = 'learning-empty';
+    message.textContent = 'تعذّر عرض ما تعلّمه رفّ.';
+    const retry = document.createElement('button');
+    retry.type = 'button';
+    retry.className = 'inline-retry';
+    retry.id = 'retry-learning';
+    retry.textContent = 'إعادة المحاولة';
+    retry.addEventListener('click', () => void showLearning());
+    view.replaceChildren(message, retry);
+  }
+}
 
 async function renderLearning() {
   const view = el('learning-view');
