@@ -17,6 +17,11 @@ const POLL_MS: u64 = 350;
 /// noticed at `T` happened somewhere in `(T - POLL_MS, T]`, so that is exactly
 /// the span whose frontmost apps have to clear the exclusion list.
 const SOURCE_WINDOW: Duration = Duration::from_millis(POLL_MS);
+/// Images declaring more pixels than this are refused before anything is
+/// allocated for them. A full-screen Retina capture on a 6K display is ~20
+/// megapixels, so this leaves a wide margin above any real screenshot while
+/// stopping a crafted header from asking for gigabytes.
+const MAX_IMAGE_PIXELS: u64 = 80_000_000;
 /// The panel displays image previews at 64×40 logical pixels. Store at 2x
 /// for Retina screens while preserving the source aspect ratio; `thumbnail`
 /// fits inside this box and never crops.
@@ -143,21 +148,11 @@ fn capture_reading(store_lock: &Mutex<Store>, reading: ClipReading) -> bool {
         return true;
     }
 
-    let png = raw.png.or_else(|| {
-        raw.tiff.and_then(|tiff| {
-            image::load_from_memory_with_format(&tiff, image::ImageFormat::Tiff)
-                .ok()
-                .and_then(|img| encode_png(&img))
-        })
-    });
-    let Some(png) = png else {
+    let Some((png, decoded)) = decode_capture(raw.png, raw.tiff) else {
         return false;
     };
 
     let hash = content_hash(&png);
-    let Ok(decoded) = image::load_from_memory_with_format(&png, image::ImageFormat::Png) else {
-        return false;
-    };
     let (w, h) = (decoded.width(), decoded.height());
     let label = format!("صورة {w}×{h}");
 
@@ -210,6 +205,44 @@ fn capture_reading(store_lock: &Mutex<Store>, reading: ClipReading) -> bool {
     true
 }
 
+/// The PNG bytes to store and the decoded image they came from.
+///
+/// PNG is preferred; a TIFF-only clipboard is decoded once and re-encoded, and
+/// that same decode is handed back rather than decoding the PNG we just wrote —
+/// the old path decoded the pixels twice for every TIFF capture.
+fn decode_capture(
+    png: Option<Vec<u8>>,
+    tiff: Option<Vec<u8>>,
+) -> Option<(Vec<u8>, image::DynamicImage)> {
+    if let Some(png) = png {
+        if !fits_pixel_budget(&png, image::ImageFormat::Png) {
+            return None;
+        }
+        let decoded = image::load_from_memory_with_format(&png, image::ImageFormat::Png).ok()?;
+        return Some((png, decoded));
+    }
+
+    let tiff = tiff?;
+    if !fits_pixel_budget(&tiff, image::ImageFormat::Tiff) {
+        return None;
+    }
+    let decoded = image::load_from_memory_with_format(&tiff, image::ImageFormat::Tiff).ok()?;
+    let png = encode_png(&decoded)?;
+    Some((png, decoded))
+}
+
+/// Whether the dimensions an image *declares* stay inside the budget.
+///
+/// This reads the header only. A buffer is sized from those declared
+/// dimensions during decoding, so the answer has to come before the decoder is
+/// handed the bytes — afterwards the allocation has already been attempted.
+/// Bytes whose header cannot be read at all do not pass either.
+fn fits_pixel_budget(bytes: &[u8], format: image::ImageFormat) -> bool {
+    image::ImageReader::with_format(std::io::Cursor::new(bytes), format)
+        .into_dimensions()
+        .is_ok_and(|(w, h)| u64::from(w) * u64::from(h) <= MAX_IMAGE_PIXELS)
+}
+
 fn encode_png(img: &image::DynamicImage) -> Option<Vec<u8>> {
     let mut out = std::io::Cursor::new(Vec::new());
     img.write_to(&mut out, image::ImageFormat::Png).ok()?;
@@ -251,6 +284,78 @@ mod tests {
             },
             source: macos::FrontApp::default(),
         }
+    }
+
+    /// A PNG whose IHDR declares `w`×`h`. Only the header is well-formed —
+    /// that is the whole point: nothing must ever decode it.
+    fn png_header_declaring(w: u32, h: u32) -> Vec<u8> {
+        fn crc32(bytes: &[u8]) -> u32 {
+            let mut crc = 0xffff_ffffu32;
+            for byte in bytes {
+                crc ^= *byte as u32;
+                for _ in 0..8 {
+                    crc = if crc & 1 != 0 {
+                        (crc >> 1) ^ 0xedb8_8320
+                    } else {
+                        crc >> 1
+                    };
+                }
+            }
+            !crc
+        }
+
+        let mut ihdr = b"IHDR".to_vec();
+        ihdr.extend_from_slice(&w.to_be_bytes());
+        ihdr.extend_from_slice(&h.to_be_bytes());
+        ihdr.extend_from_slice(&[8, 2, 0, 0, 0]); // 8-bit truecolour, no interlace
+
+        let mut out = vec![0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a];
+        out.extend_from_slice(&13u32.to_be_bytes());
+        out.extend_from_slice(&ihdr);
+        out.extend_from_slice(&crc32(&ihdr).to_be_bytes());
+        // An empty IDAT: the header reader stops at the first one, so this is
+        // the shortest well-formed file that still declares w×h — and it is
+        // exactly the shape of the payload that lies about its size.
+        out.extend_from_slice(&0u32.to_be_bytes());
+        out.extend_from_slice(b"IDAT");
+        out.extend_from_slice(&crc32(b"IDAT").to_be_bytes());
+        out
+    }
+
+    fn image_reading(png: Vec<u8>) -> ClipReading {
+        ClipReading {
+            before: 7,
+            after: 7,
+            clip: macos::RawClip {
+                png: Some(png),
+                ..Default::default()
+            },
+            source: macos::FrontApp::default(),
+        }
+    }
+
+    #[test]
+    fn the_pixel_budget_is_decided_from_the_header_alone() {
+        let side = (MAX_IMAGE_PIXELS as f64).sqrt() as u32 + 1_000;
+        let oversized = png_header_declaring(side, side);
+        let ordinary = png_header_declaring(1_600, 1_000);
+
+        // Neither of these carries one byte of pixel data — they differ only
+        // in what the header claims. Accepting the second and refusing the
+        // first is what proves the decision is taken from the header, before
+        // any buffer is sized to the declared dimensions.
+        assert!(!fits_pixel_budget(&oversized, image::ImageFormat::Png));
+        assert!(fits_pixel_budget(&ordinary, image::ImageFormat::Png));
+    }
+
+    #[test]
+    fn an_image_within_the_pixel_budget_is_still_captured() {
+        let dir = std::env::temp_dir().join(format!("raff-pixels-test-{}", uuid::Uuid::new_v4()));
+        let store = Mutex::new(Store::load(dir.clone()));
+        let png = encode_png(&image::DynamicImage::new_rgba8(8, 8)).unwrap();
+
+        assert!(capture_reading(&store, image_reading(png)));
+        assert_eq!(store.lock().unwrap().history.len(), 1);
     }
 
     #[test]

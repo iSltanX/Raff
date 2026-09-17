@@ -59,6 +59,18 @@ const TYPE_TIFF: &str = "public.tiff";
 
 /// Rich representations larger than this are not stored (keeps the JSON store lean).
 const MAX_RICH_BYTES: usize = 256 * 1024;
+/// Image payloads above this are not read into the process at all. An
+/// uncompressed TIFF of a 6K screen is ~81 MB, so a full-screen Retina capture
+/// still fits; the cap exists so the worst case has a number.
+const MAX_IMAGE_BYTES: usize = 96 * 1024 * 1024;
+/// Plain text longer than this is not captured. `history.json` is rewritten in
+/// full on every capture, so one oversized item is a tax on every capture after
+/// it — not just on the one that stored it.
+pub const MAX_TEXT_CHARS: usize = 100_000;
+/// A char is at most four UTF-8 bytes, so nothing inside `MAX_TEXT_CHARS` is
+/// ever rejected here. This only avoids materialising a string that could not
+/// pass the char cap anyway.
+const MAX_TEXT_BYTES: usize = MAX_TEXT_CHARS * 4;
 
 /// Raw pasteboard content, as captured. `rtf`/`html` are kept so a normal paste
 /// can restore formatting while "paste as plain text" writes only `text`.
@@ -94,24 +106,34 @@ pub fn has_concealed_type() -> bool {
 
 pub fn read_clip() -> RawClip {
     let pb = NSPasteboard::generalPasteboard();
-    let string_for = |t: &str| {
+    // Every representation is measured on the pasteboard's own object and only
+    // then copied, so an oversized payload never enters this process.
+    let capped_string_for = |t: &str, max: usize| {
         pb.stringForType(&NSString::from_str(t))
+            .filter(|s| s.len() <= max)
             .map(|s| s.to_string())
     };
-    let data_for = |t: &str| {
+    let capped_data_for = |t: &str, max: usize| {
         pb.dataForType(&NSString::from_str(t))
+            .filter(|d| {
+                let len = d.len();
+                len > 0 && len <= max
+            })
             .map(|d| d.to_vec())
-            .filter(|d| !d.is_empty())
     };
 
-    let text = string_for(TYPE_TEXT);
-    let html = string_for(TYPE_HTML).filter(|h| h.len() <= MAX_RICH_BYTES);
-    let rtf = data_for(TYPE_RTF).filter(|d| d.len() <= MAX_RICH_BYTES);
+    let text = capped_string_for(TYPE_TEXT, MAX_TEXT_BYTES)
+        .filter(|t| t.chars().count() <= MAX_TEXT_CHARS);
+    let html = capped_string_for(TYPE_HTML, MAX_RICH_BYTES);
+    let rtf = capped_data_for(TYPE_RTF, MAX_RICH_BYTES);
     // Only bother with image data when there is no text representation.
     let (png, tiff) = if text.as_deref().map(|t| !t.trim().is_empty()) == Some(true) {
         (None, None)
     } else {
-        (data_for(TYPE_PNG), data_for(TYPE_TIFF))
+        (
+            capped_data_for(TYPE_PNG, MAX_IMAGE_BYTES),
+            capped_data_for(TYPE_TIFF, MAX_IMAGE_BYTES),
+        )
     };
 
     RawClip {
