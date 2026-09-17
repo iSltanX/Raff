@@ -1,7 +1,6 @@
 //! Clipboard capture: a background thread polls the pasteboard change count
 //! every ~350ms (the standard macOS approach — there is no push notification).
 
-use std::hash::{Hash, Hasher};
 use std::sync::atomic::Ordering;
 use std::ops::ControlFlow;
 use std::sync::Mutex;
@@ -10,7 +9,7 @@ use std::time::{Duration, Instant};
 use base64::Engine;
 use tauri::{AppHandle, Emitter, Manager};
 
-use crate::storage::{detect_kind, persist_capture, ItemKind, Store};
+use crate::storage::{content_hash, detect_kind, persist_capture, ItemKind, Store};
 use crate::{macos, tray, AppState};
 
 const POLL_MS: u64 = 350;
@@ -338,12 +337,6 @@ fn write_thumbnail(
     let bytes = encode_png(&thumb)?;
     std::fs::write(dir.join(&filename), bytes).ok()?;
     Some(filename)
-}
-
-fn content_hash(bytes: &[u8]) -> String {
-    let mut hasher = std::hash::DefaultHasher::new();
-    bytes.hash(&mut hasher);
-    format!("{:016x}", hasher.finish())
 }
 
 #[cfg(test)]

@@ -229,6 +229,58 @@ pub fn now_ms() -> u64 {
         .unwrap_or(0)
 }
 
+/// Version prefix on a stored image fingerprint.
+///
+/// The value is written into `history.json` and used as an identity key, so
+/// the algorithm behind it has to be one this project owns. `DefaultHasher`
+/// documents its algorithm as unspecified and free to change between Rust
+/// releases: after a toolchain upgrade every stored fingerprint would quietly
+/// stop matching, and re-copying a saved image would silently make a second
+/// row and a second file. The prefix is what lets a value written by the old
+/// one be recognised and replaced.
+const HASH_PREFIX: &str = "f1:";
+
+/// FNV-1a, 64-bit — short enough to write down here and fixed forever.
+///
+/// The job is dropping duplicates of images the user copied twice, not
+/// resisting an adversary who gets to choose the bytes.
+pub fn content_hash(bytes: &[u8]) -> String {
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for byte in bytes {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    format!("{HASH_PREFIX}{hash:016x}")
+}
+
+/// Replaces fingerprints written by the old, undefined algorithm.
+///
+/// Every image whose file survives is re-fingerprinted from that file, so no
+/// duplicate is ever accepted as the price of the change. One whose file is
+/// gone loses its fingerprint instead of keeping an unverifiable value: `None`
+/// falls back to comparing text, where a stale hash would match nothing and
+/// block the row from ever healing.
+fn migrate_image_hashes(items: &mut [ClipItem], images_dir: &Path) -> bool {
+    let mut changed = false;
+    for item in items.iter_mut() {
+        if item.kind != ItemKind::Image {
+            continue;
+        }
+        match item.hash.as_deref() {
+            Some(hash) if !hash.starts_with(HASH_PREFIX) => {
+                item.hash = item
+                    .image_file
+                    .as_ref()
+                    .and_then(|file| fs::read(images_dir.join(file)).ok())
+                    .map(|bytes| content_hash(&bytes));
+                changed = true;
+            }
+            _ => {}
+        }
+    }
+    changed
+}
+
 /// Folds text for searching, exactly as `normalizeArabic` in `logic.js` does.
 ///
 /// The two must agree: the panel filters what it can see with the JavaScript
@@ -533,6 +585,15 @@ impl Store {
         // - item still on disk => delete never committed; preserve its files
         // - item absent on disk => deletion committed; clean up its files
         store.resolve_interrupted_delete();
+        // Before anything compares fingerprints, and written down so the next
+        // launch finds nothing left to migrate.
+        let images_dir = store.images_dir();
+        if migrate_image_hashes(&mut store.history, &images_dir) {
+            store.save_history();
+        }
+        if migrate_image_hashes(&mut store.pinned, &images_dir) {
+            store.save_pinned();
+        }
         // An unreadable layer may still be the only metadata referencing image
         // files. Its recovery copy is useful only if those images survive too,
         // so orphan collection is safe exclusively when both live layers were
@@ -1962,6 +2023,78 @@ mod tests {
             s.history[0].text.split(' ').next(),
             Some((rows - 1).to_string().as_str()),
             "trimming drops the oldest, never the newest"
+        );
+    }
+
+    #[test]
+    fn the_fingerprint_is_this_project_s_own_and_is_written_down() {
+        // Literals, not values read back from whatever the standard library
+        // happens to hash with today. If this test has to be edited, every
+        // fingerprint already on disk has just stopped matching.
+        assert_eq!(content_hash(b""), "f1:cbf29ce484222325");
+        assert_eq!(content_hash(b"raff"), "f1:6dcf031fd20381b8");
+        assert_eq!(content_hash(&[0x89, b'P', b'N', b'G']), "f1:09935de427cea543");
+    }
+
+    #[test]
+    fn an_old_fingerprint_is_recomputed_from_its_file_at_boot() {
+        let dir = std::env::temp_dir().join(format!("raff-test-{}", uuid::Uuid::new_v4()));
+        let images = dir.join(IMAGES_DIR);
+        fs::create_dir_all(&images).unwrap();
+        fs::write(images.join("shot.png"), b"raff").unwrap();
+        // A row written before the fingerprint had a defined algorithm.
+        fs::write(
+            dir.join(HISTORY_FILE),
+            r#"[{"id":"1","type":"image","text":"صورة 2×2","imageFile":"shot.png","hash":"9f8e7d6c5b4a3210","sourceAppBundleId":"com.test","sourceApp":"Test","createdAt":1,"isPinned":false,"copyCount":1,"pasteCount":0,"lastUsedAt":1}]"#,
+        )
+        .unwrap();
+
+        let store = Store::load(dir.clone());
+
+        assert_eq!(
+            store.history[0].hash.as_deref(),
+            Some("f1:6dcf031fd20381b8"),
+            "recomputed from the file itself, not carried over or dropped"
+        );
+
+        // And it was written down, so the next boot has nothing left to do.
+        let reloaded = Store::load(dir);
+        assert_eq!(
+            reloaded.history[0].hash.as_deref(),
+            Some("f1:6dcf031fd20381b8")
+        );
+
+        // Which is the whole point: re-copying the same image still dedupes.
+        let mut store = reloaded;
+        let result = store.capture(
+            ItemKind::Image,
+            "صورة 2×2".into(),
+            None,
+            None,
+            Some("again.png".into()),
+            None,
+            Some(content_hash(b"raff")),
+            ("Test".into(), "com.test".into()),
+        );
+        assert_eq!(result.outcome, CaptureOutcome::Deduped);
+        assert_eq!(store.history.len(), 1);
+    }
+
+    #[test]
+    fn an_old_fingerprint_with_no_file_left_is_dropped_not_guessed() {
+        let dir = std::env::temp_dir().join(format!("raff-test-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(dir.join(IMAGES_DIR)).unwrap();
+        fs::write(
+            dir.join(HISTORY_FILE),
+            r#"[{"id":"1","type":"image","text":"صورة 2×2","imageFile":"gone.png","hash":"9f8e7d6c5b4a3210","sourceAppBundleId":"com.test","sourceApp":"Test","createdAt":1,"isPinned":false,"copyCount":1,"pasteCount":0,"lastUsedAt":1}]"#,
+        )
+        .unwrap();
+
+        let store = Store::load(dir);
+
+        assert_eq!(
+            store.history[0].hash, None,
+            "an unverifiable fingerprint is worse than none: it would match nothing and block everything"
         );
     }
 
