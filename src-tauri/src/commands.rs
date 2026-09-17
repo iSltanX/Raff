@@ -63,12 +63,15 @@ pub struct StatePayload {
     /// True when a stored layer could not be read on this launch. An empty
     /// list then means something very different, and the panel says so.
     pub unreadable_layer: bool,
+    /// False once the capture loop has given up. Distinct from
+    /// `settings.capture_enabled`, which only says what the user asked for.
+    pub capture_alive: bool,
 }
 
 #[tauri::command]
 pub fn get_state(app: AppHandle, state: State<AppState>) -> StatePayload {
     crate::startup_trace::mark("FRONTEND_CALLED_get_state");
-    let store = state.store.lock().unwrap();
+    let store = crate::lock_store(&state.store);
     let mut pinned: Vec<&crate::storage::ClipItem> = store.pinned.iter().collect();
     pinned.sort_by_key(|i| i.pinned_order.unwrap_or(u32::MAX));
     StatePayload {
@@ -78,6 +81,7 @@ pub fn get_state(app: AppHandle, state: State<AppState>) -> StatePayload {
         ax_trusted: macos::ax_trusted(),
         version: app.package_info().version.to_string(),
         unreadable_layer: store.unreadable_layer,
+        capture_alive: state.capture_alive.load(std::sync::atomic::Ordering::SeqCst),
     }
 }
 
@@ -104,7 +108,7 @@ pub fn toggle_pin(
     is_pinned: bool,
 ) -> Result<bool, String> {
     let is_pinned = {
-        let mut store = state.store.lock().unwrap();
+        let mut store = crate::lock_store(&state.store);
         store.set_pin_persisted(&id, is_pinned)?
     };
     notify(&app);
@@ -124,7 +128,7 @@ pub fn delete_item(
     id: String,
 ) -> Result<DeleteReceiptDto, String> {
     let token = {
-        let mut store = state.store.lock().unwrap();
+        let mut store = crate::lock_store(&state.store);
         store.delete_reversible(&id)?
     };
     notify(&app);
@@ -134,7 +138,7 @@ pub fn delete_item(
 #[tauri::command]
 pub fn undo_delete(app: AppHandle, state: State<AppState>, token: String) -> Result<(), String> {
     {
-        let mut store = state.store.lock().unwrap();
+        let mut store = crate::lock_store(&state.store);
         store.undo_delete(&token)?;
     }
     notify(&app);
@@ -143,14 +147,14 @@ pub fn undo_delete(app: AppHandle, state: State<AppState>, token: String) -> Res
 
 #[tauri::command]
 pub fn commit_delete(state: State<AppState>, token: String) -> Result<(), String> {
-    let mut store = state.store.lock().unwrap();
+    let mut store = crate::lock_store(&state.store);
     store.commit_delete(&token)
 }
 
 #[tauri::command]
 pub fn clear_history(app: AppHandle, state: State<AppState>) -> Result<(), String> {
     {
-        let mut store = state.store.lock().unwrap();
+        let mut store = crate::lock_store(&state.store);
         store.clear_history_persisted()?;
     }
     notify(&app);
@@ -160,7 +164,7 @@ pub fn clear_history(app: AppHandle, state: State<AppState>) -> Result<(), Strin
 #[tauri::command]
 pub fn clear_learning(app: AppHandle, state: State<AppState>) -> Result<(), String> {
     {
-        let mut store = state.store.lock().unwrap();
+        let mut store = crate::lock_store(&state.store);
         store.clear_learning_persisted()?;
     }
     notify(&app);
@@ -182,7 +186,7 @@ pub struct LearnDto {
 /// learned. Returns the most-used items with their raw signals.
 #[tauri::command]
 pub fn learning_summary(state: State<AppState>) -> Vec<LearnDto> {
-    let store = state.store.lock().unwrap();
+    let store = crate::lock_store(&state.store);
     let mut items: Vec<&crate::storage::ClipItem> = store
         .pinned
         .iter()
@@ -211,7 +215,7 @@ pub fn update_settings(
 ) -> Result<(), String> {
     validate_settings(&settings)?;
     let old = {
-        let store = state.store.lock().unwrap();
+        let store = crate::lock_store(&state.store);
         store.settings.clone()
     };
 
@@ -295,7 +299,7 @@ fn validate_settings(settings: &Settings) -> Result<(), String> {
 
 #[tauri::command]
 pub fn get_image(state: State<AppState>, id: String) -> Option<String> {
-    let store = state.store.lock().unwrap();
+    let store = crate::lock_store(&state.store);
     image_data_url(&store, &id)
 }
 
@@ -339,7 +343,7 @@ pub fn open_accessibility_settings() {
 #[tauri::command]
 pub fn firstrun_done(app: AppHandle, state: State<AppState>) -> Result<(), String> {
     {
-        let mut store = state.store.lock().unwrap();
+        let mut store = crate::lock_store(&state.store);
         store.mark_first_run_shown_persisted()?;
     }
     if let Some(w) = app.get_webview_window("firstrun") {
@@ -392,7 +396,7 @@ fn sync_appearance(app: &AppHandle) {
     let _ = app.run_on_main_thread(move || {
         let theme = {
             let state = handle.state::<AppState>();
-            let store = state.store.lock().unwrap();
+            let store = crate::lock_store(&state.store);
             theme_for(&store.settings)
         };
         handle.set_theme(theme);

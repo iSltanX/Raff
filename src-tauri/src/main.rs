@@ -12,8 +12,8 @@ mod storage;
 mod tray;
 mod updater;
 
-use std::sync::atomic::AtomicI64;
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, AtomicI64};
+use std::sync::{Mutex, MutexGuard};
 
 use tauri::Manager;
 use tauri_plugin_autostart::MacosLauncher;
@@ -24,6 +24,25 @@ pub struct AppState {
     pub skip_change_count: AtomicI64,
     /// pid of the app that was frontmost when the panel opened (focus restore).
     pub previous_app: Mutex<Option<i32>>,
+    /// False once the capture loop has given up. `capture_enabled` is a
+    /// setting — what the user asked for — and cannot answer whether capture
+    /// is actually running, which is why a silent death used to look exactly
+    /// like a healthy app.
+    pub capture_alive: AtomicBool,
+}
+
+/// The store guard, recovering a poisoned lock instead of propagating the panic.
+///
+/// One panic anywhere that holds this lock would otherwise turn every later
+/// `lock().unwrap()` into a second panic — ending the capture thread for the
+/// rest of the session, with the menu-bar icon and the settings toggle both
+/// still saying everything is fine. The durable JSON files are the reference
+/// either way, so the model in memory stays usable and recovering is strictly
+/// better than spreading the failure.
+pub fn lock_store(store: &Mutex<storage::Store>) -> MutexGuard<'_, storage::Store> {
+    store
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 fn main() {
@@ -116,6 +135,7 @@ fn main() {
                 store: Mutex::new(store),
                 skip_change_count: AtomicI64::new(-1),
                 previous_app: Mutex::new(None),
+                capture_alive: AtomicBool::new(true),
             });
             app.manage(updater::UpdaterState::new());
             startup_trace::mark("state_managed");
@@ -166,4 +186,32 @@ fn main() {
             startup_trace::mark("run_loop_READY__events_now_processed");
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_poisoned_store_lock_still_yields_a_usable_guard() {
+        let store = Mutex::new(storage::Store::load(
+            std::env::temp_dir().join(format!("raff-poison-test-{}", uuid::Uuid::new_v4())),
+        ));
+
+        // Poison it exactly the way a panic in any command handler would.
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _guard = store.lock().unwrap();
+            panic!("a command handler panicked while holding the store");
+        }));
+        assert!(store.is_poisoned(), "the lock really is poisoned");
+        assert!(
+            store.lock().is_err(),
+            "so the old `lock().unwrap()` would have panicked here"
+        );
+
+        // The durable JSON files are the reference either way, so the model in
+        // memory stays usable and capture must not die with the panic.
+        let guard = lock_store(&store);
+        assert!(guard.history.is_empty());
+    }
 }

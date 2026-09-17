@@ -184,6 +184,22 @@
                   <span class="label-sub" dir="auto">عند الإيقاف، يتوقف رفّ عن حفظ أي نسخة جديدة.</span>
                 </div>
               </div>
+
+              <!-- Shown only when capture is down. The switch above says what
+                   was asked for; this says what is actually happening. -->
+              <div
+                class="row"
+                id="capture-status"
+                role="status"
+                aria-live="polite"
+                aria-atomic="true"
+                hidden
+              >
+                <div class="row-label">
+                  <span class="label-title" dir="auto">الالتقاط توقّف</span>
+                  <span class="label-sub" dir="auto">أعد تشغيل رفّ ليعود الالتقاط. ما حُفظ سابقًا في مكانه.</span>
+                </div>
+              </div>
             </div>
           </div>
 

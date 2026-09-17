@@ -148,6 +148,40 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
+/// Full strength. Anything lower has to stay readable as "still here, just not
+/// doing its job" — a template image at 0.45 reads as inactive the way a
+/// disabled menu item does, without adding a glyph, a colour or a badge.
+const MUTED_ALPHA: f64 = 0.45;
+
+/// Quietly reflects a degraded state in the menu bar, or clears it with `None`.
+///
+/// The icon is the only surface a menu-bar app always has. A capture that died
+/// or a permission that was never granted is otherwise invisible until the
+/// user opens Settings and thinks to look — which is exactly what nobody does.
+pub fn note_quiet_state(reason: Option<String>) {
+    crate::macos::dispatch_to_main(move || {
+        let Some(mtm) = MainThreadMarker::new() else {
+            return;
+        };
+        NATIVE.with(|cell| {
+            let Some(native) = cell.get() else { return };
+            let Some(button) = native.item.button(mtm) else {
+                return;
+            };
+            match &reason {
+                Some(reason) => {
+                    button.setAlphaValue(MUTED_ALPHA);
+                    button.setToolTip(Some(&NSString::from_str(&format!("رفّ — {reason}"))));
+                }
+                None => {
+                    button.setAlphaValue(1.0);
+                    button.setToolTip(Some(&NSString::from_str("رفّ")));
+                }
+            }
+        });
+    });
+}
+
 fn show_menu(mtm: MainThreadMarker) {
     NATIVE.with(|cell| {
         let Some(native) = cell.get() else { return };

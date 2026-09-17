@@ -20,7 +20,7 @@ const ACTIVATE_DELAY_MS: u64 = 150;
 pub fn write_item_to_clipboard(app: &AppHandle, id: &str, plain: bool) -> bool {
     let state = app.state::<AppState>();
     let (kind, text, html, rtf, png) = {
-        let store = state.store.lock().unwrap();
+        let store = crate::lock_store(&state.store);
         let Some(item) = store.find(id) else {
             return false;
         };
@@ -163,7 +163,7 @@ pub fn bump_copy_signals(app: &AppHandle, id: &str) {
 
 fn bump_signals(app: &AppHandle, id: &str, bump: impl Fn(&mut crate::storage::ClipItem)) {
     let state = app.state::<AppState>();
-    let mut store = state.store.lock().unwrap();
+    let mut store = crate::lock_store(&state.store);
     if let Err(err) = store.finish_pending_pin() {
         eprintln!("raff: usage signal deferred: {err}");
         return;

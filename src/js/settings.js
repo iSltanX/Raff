@@ -125,6 +125,9 @@ async function load() {
   hotkeySub.textContent = HOTKEY_HINT;
   setChecked('launch-toggle', settings.launchAtLogin);
   setChecked('capture-toggle', settings.captureEnabled);
+  // `captureEnabled` above is the request; this is the outcome. They agree
+  // until the capture loop gives up, and that gap is the whole point of the row.
+  el('capture-status').hidden = state.captureAlive !== false;
   setChecked('concealed-toggle', settings.respectConcealed);
   setChecked('learning-toggle', settings.learningEnabled);
   el('history-limit').value = String(settings.historyLimit);

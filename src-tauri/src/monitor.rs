@@ -3,6 +3,7 @@
 
 use std::hash::{Hash, Hasher};
 use std::sync::atomic::Ordering;
+use std::ops::ControlFlow;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
@@ -10,7 +11,7 @@ use base64::Engine;
 use tauri::{AppHandle, Emitter, Manager};
 
 use crate::storage::{detect_kind, ItemKind, Store};
-use crate::{macos, AppState};
+use crate::{macos, tray, AppState};
 
 const POLL_MS: u64 = 350;
 /// How far back a capture looks when asking who owned the clipboard. A change
@@ -32,67 +33,119 @@ pub fn start(app: AppHandle) {
     macos::start_activation_watch();
     std::thread::spawn(move || {
         let mut last = macos::change_count();
-        loop {
+        let outcome = supervise(|| {
             std::thread::sleep(Duration::from_millis(POLL_MS));
-            let count = macos::change_count();
-            if count == last {
-                continue;
-            }
-            last = count;
-            let detected_at = Instant::now();
-
+            poll_once(&app, &mut last);
+            ControlFlow::Continue(())
+        });
+        if outcome == Supervision::GaveUp {
             let state = app.state::<AppState>();
-            // Skip our own paste/copy writes.
-            if state.skip_change_count.swap(-1, Ordering::SeqCst) == count as i64 {
-                continue;
-            }
-
-            let (enabled, respect_concealed, excluded) = {
-                let store = state.store.lock().unwrap();
-                (
-                    store.settings.capture_enabled,
-                    store.settings.respect_concealed,
-                    store.settings.excluded_apps.clone(),
-                )
-            };
-            if !enabled {
-                continue;
-            }
-
-            // Exclusion is decided before the pasteboard is touched at all, and
-            // over the whole window the copy could have happened in — not just
-            // over whoever is frontmost by the time the poll runs.
-            let activations = macos::activation_snapshot();
-            let front_now = macos::frontmost_app();
-            if excluded.contains(&front_now.bundle_id)
-                || macos::window_has_excluded(&activations, &excluded, detected_at, SOURCE_WINDOW)
-            {
-                continue;
-            }
-
-            // Bracket the probe and the read: if the pasteboard changes in
-            // between, what we hold mixes two clipboards and the concealed-type
-            // answer belongs to the older one.
-            let before = macos::change_count();
-            // Never store password-manager / auto-generated content.
-            if respect_concealed && macos::has_concealed_type() {
-                continue;
-            }
-            let clip = macos::read_clip();
-            let after = macos::change_count();
-
-            let reading = ClipReading {
-                before,
-                after,
-                clip,
-                source: macos::front_at(&activations, detected_at, SOURCE_WINDOW)
-                    .unwrap_or(front_now),
-            };
-            if capture_reading(&state.store, reading) {
-                let _ = app.emit("raff://changed", ());
-            }
+            state.capture_alive.store(false, Ordering::SeqCst);
+            // Say it where the user is looking, not only where they might go
+            // looking: the settings row needs the window opened first.
+            tray::note_quiet_state(Some("الالتقاط متوقف".into()));
+            let _ = app.emit("raff://changed", ());
         }
     });
+}
+
+/// How many ticks may fail back to back before the loop gives up. One panic is
+/// an incident worth riding out; a run of them means every tick will fail, and
+/// spinning would only burn the battery and flood the log.
+const MAX_CONSECUTIVE_PANICS: u32 = 3;
+
+#[derive(PartialEq, Eq, Debug)]
+enum Supervision {
+    /// `tick` asked to stop.
+    Finished,
+    /// `tick` failed `MAX_CONSECUTIVE_PANICS` times in a row.
+    GaveUp,
+}
+
+/// Runs `tick` until it stops or fails repeatedly, absorbing isolated panics.
+///
+/// Without this, a single panic — a poisoned lock, a decoder that trips over a
+/// malformed image — ended the capture thread for the rest of the session with
+/// nothing to show for it.
+fn supervise(mut tick: impl FnMut() -> ControlFlow<()>) -> Supervision {
+    let mut consecutive = 0u32;
+    loop {
+        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(&mut tick)) {
+            Ok(ControlFlow::Break(())) => return Supervision::Finished,
+            Ok(ControlFlow::Continue(())) => consecutive = 0,
+            Err(_) => {
+                consecutive += 1;
+                // The payload is deliberately not logged: nothing about a
+                // capture, not even its shape, belongs in a log.
+                eprintln!("raff: capture tick failed ({consecutive} in a row)");
+                if consecutive >= MAX_CONSECUTIVE_PANICS {
+                    eprintln!("raff: capture stopped");
+                    return Supervision::GaveUp;
+                }
+            }
+        }
+    }
+}
+
+/// One poll of the pasteboard. `last` carries the change count across ticks.
+fn poll_once(app: &AppHandle, last: &mut isize) {
+    let count = macos::change_count();
+    if count == *last {
+        return;
+    }
+    *last = count;
+    let detected_at = Instant::now();
+
+    let state = app.state::<AppState>();
+    // Skip our own paste/copy writes.
+    if state.skip_change_count.swap(-1, Ordering::SeqCst) == count as i64 {
+        return;
+    }
+
+    let (enabled, respect_concealed, excluded) = {
+        let store = crate::lock_store(&state.store);
+        (
+            store.settings.capture_enabled,
+            store.settings.respect_concealed,
+            store.settings.excluded_apps.clone(),
+        )
+    };
+    if !enabled {
+        return;
+    }
+
+    // Exclusion is decided before the pasteboard is touched at all, and
+    // over the whole window the copy could have happened in — not just
+    // over whoever is frontmost by the time the poll runs.
+    let activations = macos::activation_snapshot();
+    let front_now = macos::frontmost_app();
+    if excluded.contains(&front_now.bundle_id)
+        || macos::window_has_excluded(&activations, &excluded, detected_at, SOURCE_WINDOW)
+    {
+        return;
+    }
+
+    // Bracket the probe and the read: if the pasteboard changes in
+    // between, what we hold mixes two clipboards and the concealed-type
+    // answer belongs to the older one.
+    let before = macos::change_count();
+    // Never store password-manager / auto-generated content.
+    if respect_concealed && macos::has_concealed_type() {
+        return;
+    }
+    let clip = macos::read_clip();
+    let after = macos::change_count();
+
+    let reading = ClipReading {
+        before,
+        after,
+        clip,
+        source: macos::front_at(&activations, detected_at, SOURCE_WINDOW)
+            .unwrap_or(front_now),
+    };
+    if capture_reading(&state.store, reading) {
+        let _ = app.emit("raff://changed", ());
+    }
 }
 
 /// A pasteboard read bracketed by change counts, plus the app credited with it.
@@ -129,7 +182,7 @@ fn capture_reading(store_lock: &Mutex<Store>, reading: ClipReading) -> bool {
         let rtf_b64 = raw
             .rtf
             .map(|r| base64::engine::general_purpose::STANDARD.encode(r));
-        let mut store = store_lock.lock().unwrap();
+        let mut store = crate::lock_store(store_lock);
         let old_history = store.history.clone();
         let old_pinned = store.pinned.clone();
         let capture = store.capture(
@@ -156,7 +209,7 @@ fn capture_reading(store_lock: &Mutex<Store>, reading: ClipReading) -> bool {
     let (w, h) = (decoded.width(), decoded.height());
     let label = format!("صورة {w}×{h}");
 
-    let mut store = store_lock.lock().unwrap();
+    let mut store = crate::lock_store(store_lock);
     // Identical image already stored? Bump it without touching the disk.
     let dup = store
         .pinned
@@ -273,6 +326,39 @@ fn content_hash(bytes: &[u8]) -> String {
 mod tests {
     use super::*;
     use image::GenericImageView;
+
+    #[test]
+    fn one_panic_does_not_end_the_capture_loop() {
+        let mut turns = 0;
+        let outcome = supervise(|| {
+            turns += 1;
+            if turns == 2 {
+                panic!("a lock this tick touched was poisoned");
+            }
+            if turns == 5 {
+                return std::ops::ControlFlow::Break(());
+            }
+            std::ops::ControlFlow::Continue(())
+        });
+
+        assert_eq!(outcome, Supervision::Finished, "the loop was not given up on");
+        assert_eq!(turns, 5, "polling carried on across the panic");
+    }
+
+    #[test]
+    fn a_run_of_panics_gives_the_loop_up() {
+        let mut turns = 0;
+        let outcome = supervise(|| -> std::ops::ControlFlow<()> {
+            turns += 1;
+            panic!("every tick fails now");
+        });
+
+        assert_eq!(outcome, Supervision::GaveUp);
+        assert_eq!(
+            turns, MAX_CONSECUTIVE_PANICS,
+            "it stops rather than spinning on a tick that cannot succeed"
+        );
+    }
 
     fn reading(before: isize, after: isize, text: &str) -> ClipReading {
         ClipReading {
