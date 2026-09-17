@@ -305,6 +305,58 @@ pub fn normalize_for_search(text: &str) -> String {
     out
 }
 
+/// Schemes the «روابط» filter recognises.
+///
+/// An explicit list, not "anything with a colon": `C:\\Users`, `12:30` and
+/// `note: see below` are not links, and a filter that claimed they were would
+/// be worse than one that missed a few.
+const LINK_SCHEMES: [&str; 4] = ["http://", "https://", "mailto:", "tel:"];
+
+/// Whether a single whitespace-free token is a link.
+///
+/// Deliberately conservative about the bare-domain case: a host has to have a
+/// plausible last label, or every `file.txt` and `3.5` in the shelf would file
+/// itself under «روابط».
+fn is_link(token: &str) -> bool {
+    if let Some(scheme) = LINK_SCHEMES
+        .iter()
+        .find(|scheme| token.starts_with(**scheme))
+    {
+        // A scheme on its own addresses nothing.
+        return token.len() > scheme.len();
+    }
+    let rest = token.strip_prefix("www.").unwrap_or(token);
+    let host = rest.split(['/', '?', '#']).next().unwrap_or(rest);
+    let labels: Vec<&str> = host.split('.').collect();
+    if labels.len() < 2 || labels.iter().any(|label| label.is_empty()) {
+        return false;
+    }
+    // A path, query or fragment after the host is its own evidence, and it is
+    // what `example.co.uk/guide` has and `report.pdf` does not — so the ending
+    // does not have to be recognised for those.
+    if host.len() < rest.len() {
+        return true;
+    }
+    let tld = labels[labels.len() - 1].to_ascii_lowercase();
+    // "Two or more letters" is not a test: `file.txt`, `notes.md` and
+    // `report.pdf` all pass it, and filing those under «روابط» would be worse
+    // than missing a domain. A short list of the endings this shelf actually
+    // sees is the conservative call — an unknown one stays text, which is the
+    // harmless direction, and `www.` or a scheme still recognises it.
+    KNOWN_TLDS.contains(&tld.as_str())
+        && labels[..labels.len() - 1]
+            .iter()
+            .all(|label| label.chars().all(|c| c.is_alphanumeric() || c == '-'))
+}
+
+/// Endings recognised in a bare domain, with no `www.` and no scheme to go on.
+const KNOWN_TLDS: [&str; 30] = [
+    // generic
+    "com", "net", "org", "edu", "gov", "int", "mil", "info", "io", "dev", "app", "ai", "co", "me",
+    "xyz", "online", "site", // Arabic-speaking region
+    "sa", "ae", "eg", "qa", "kw", "bh", "om", "jo", "ma", "tn", "dz", "iq", "ps",
+];
+
 /// Heuristic content typing (plan §4: simple, not smart).
 pub fn detect_kind(text: &str) -> ItemKind {
     let t = text.trim();
@@ -312,9 +364,7 @@ pub fn detect_kind(text: &str) -> ItemKind {
         return ItemKind::Text;
     }
     let single_token = !t.contains(char::is_whitespace);
-    if single_token
-        && (t.starts_with("http://") || t.starts_with("https://") || t.starts_with("www."))
-    {
+    if single_token && is_link(t) {
         return ItemKind::Link;
     }
 
@@ -2096,6 +2146,36 @@ mod tests {
             store.history[0].hash, None,
             "an unverifiable fingerprint is worse than none: it would match nothing and block everything"
         );
+    }
+
+    #[test]
+    fn links_cover_the_schemes_and_bare_domains_people_actually_copy() {
+        for link in [
+            "https://example.com/a",
+            "http://example.com",
+            "www.example.com",
+            "mailto:a@b.com",
+            "tel:+966500000000",
+            "example.com",
+            "docs.example.co.uk/guide",
+        ] {
+            assert_eq!(detect_kind(link), ItemKind::Link, "{link}");
+        }
+    }
+
+    #[test]
+    fn prose_that_merely_contains_a_link_stays_text() {
+        for text in [
+            "\u{0627}\u{0641}\u{062a}\u{062d} https://example.com \u{0627}\u{0644}\u{0622}\u{0646}", // prose around a URL
+            "example",                 // a word, not a domain
+            "3.5",                     // a number
+            "file.txt",                // a filename, not a host
+            "\u{0645}\u{0644}\u{0641}.\u{0646}\u{0635}",  // ...in Arabic too
+            "a@b",                     // not an address, and no scheme
+            "mailto:",                 // a scheme with nothing after it
+        ] {
+            assert_ne!(detect_kind(text), ItemKind::Link, "{text}");
+        }
     }
 
     #[test]
