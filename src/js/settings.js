@@ -500,6 +500,41 @@ retryRunningApps.addEventListener('click', () => {
   void populateRunningApps();
 });
 
+const manualBundle = el('excluded-bundle');
+const manualError = el('excluded-manual-error');
+const manualErrorText = el('excluded-manual-error-text');
+
+function showManualError(message) {
+  manualErrorText.textContent = message;
+  manualError.hidden = false;
+}
+
+manualBundle.addEventListener('input', () => {
+  manualError.hidden = true;
+});
+
+el('add-excluded-manual').addEventListener('click', async () => {
+  const bundleId = manualBundle.value.trim();
+  if (!bundleId || settings.excludedApps.includes(bundleId)) return;
+
+  const saved = await save((current) => ({
+    excludedApps: current.excludedApps.includes(bundleId)
+      ? current.excludedApps
+      : [...current.excludedApps, bundleId],
+  }));
+
+  if (!saved) {
+    // `validate_settings` refused it, and `load()` has already put the list
+    // back the way it was. Said in Raff's own words rather than passing the
+    // backend's string through.
+    showManualError('معرّف الحزمة غير صالح. اكتبه بلا مسافات، مثل com.apple.Notes');
+    return;
+  }
+  manualBundle.value = '';
+  manualError.hidden = true;
+  await populateRunningApps();
+});
+
 addExcludedBtn.addEventListener('click', async () => {
   const bundleId = runningAppsSelect.value;
   if (!bundleId || settings.excludedApps.includes(bundleId)) return;

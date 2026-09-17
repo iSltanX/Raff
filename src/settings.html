@@ -319,6 +319,36 @@
                   </div>
                   <button type="button" class="push-btn" id="add-excluded">إضافة</button>
                 </div>
+
+                <!-- The picker above only knows apps that are open right now
+                     and visible in the Dock. Menu-bar apps and closed ones are
+                     a whole category it cannot reach, and often the category
+                     worth excluding. -->
+                <div class="excluded-add excluded-add-manual">
+                  <input
+                    type="text"
+                    class="text-input is-latin"
+                    id="excluded-bundle"
+                    dir="ltr"
+                    spellcheck="false"
+                    autocomplete="off"
+                    placeholder="com.apple.Notes"
+                    aria-label="معرّف حزمة تطبيق"
+                    aria-describedby="excluded-manual-hint"
+                  />
+                  <button type="button" class="push-btn" id="add-excluded-manual">إضافة</button>
+                </div>
+                <p class="excluded-hint" id="excluded-manual-hint" dir="auto">
+                  لتطبيق مغلق الآن، أو يعمل في شريط القوائم: اكتب معرّف حزمته.
+                </p>
+                <div
+                  class="inline-error"
+                  id="excluded-manual-error"
+                  role="alert"
+                  aria-live="assertive"
+                  aria-atomic="true"
+                  hidden
+                ><span id="excluded-manual-error-text"></span></div>
               </div>
             </div>
           </div>

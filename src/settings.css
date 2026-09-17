@@ -593,3 +593,32 @@ body {
   background: var(--danger);
   color: #fff;
 }
+
+/* A bundle id typed by hand: same row shape as the picker above it. */
+.text-input {
+  height: 28px;
+  min-width: 120px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-control);
+  font-size: var(--text-small);
+  color: var(--ink);
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.excluded-add-manual {
+  margin-top: 8px;
+}
+
+.excluded-add-manual .text-input {
+  flex: 1;
+}
+
+.excluded-hint {
+  margin: 6px 0 0;
+  font-size: var(--text-small);
+  color: var(--ink-3);
+}
