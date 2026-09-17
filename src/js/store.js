@@ -17,6 +17,8 @@ export const api = {
   getState: () => invoke('get_state'),
   // The Settings window's own read: preferences and states, no shelf.
   getSettings: () => invoke('get_settings'),
+  // Ids of rows matching beyond the preview the panel holds.
+  searchItems: (query) => invoke('search_items', { query }),
   pasteItem: (id, plain = false) => invoke('paste_item', { id, plain }),
   copyItem: (id) => invoke('copy_item', { id }),
   togglePin: (id, isPinned) => invoke('toggle_pin', { id, isPinned }),

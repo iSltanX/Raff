@@ -229,6 +229,30 @@ pub fn now_ms() -> u64 {
         .unwrap_or(0)
 }
 
+/// Folds text for searching, exactly as `normalizeArabic` in `logic.js` does.
+///
+/// The two must agree: the panel filters what it can see with the JavaScript
+/// one and asks this one about everything it cannot, and a query that means
+/// two different things on the two sides would show and hide the same row.
+pub fn normalize_for_search(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for ch in text.chars() {
+        match ch {
+            // Arabic-Indic digits fold to Western, so either spelling finds both.
+            '\u{0660}'..='\u{0669}' => {
+                out.push(char::from(b'0' + (ch as u32 - 0x0660) as u8));
+            }
+            // Tashkeel and the superscript alef carry no search meaning...
+            '\u{064B}'..='\u{065F}' | '\u{0670}' => {}
+            '\u{0640}' => {}                       // ...nor does tatweel
+            '\u{0623}' | '\u{0625}' | '\u{0622}' => out.push('\u{0627}'),
+            '\u{0649}' => out.push('\u{064A}'),
+            _ => out.extend(ch.to_lowercase()),
+        }
+    }
+    out
+}
+
 /// Heuristic content typing (plan §4: simple, not smart).
 pub fn detect_kind(text: &str) -> ItemKind {
     let t = text.trim();

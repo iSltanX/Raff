@@ -76,6 +76,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             commands::get_state,
             commands::get_settings,
+            commands::search_items,
             commands::paste_item,
             commands::copy_item,
             commands::toggle_pin,

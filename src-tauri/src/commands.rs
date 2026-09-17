@@ -111,6 +111,29 @@ pub fn get_state(app: AppHandle, state: State<AppState>) -> StatePayload {
     }
 }
 
+/// Ids of the rows whose **full** text matches — everything the panel cannot
+/// see, because what it holds is cut at `PREVIEW_MAX_CHARS`.
+///
+/// Ids and not rows: the panel already has the rows, and shipping the whole
+/// text back so it could search it would undo the very cap this exists to work
+/// around. The scan is linear over the shelf; the byte budget on the layer is
+/// what keeps that bounded.
+#[tauri::command]
+pub fn search_items(state: State<AppState>, query: String) -> Vec<String> {
+    let needle = crate::storage::normalize_for_search(query.trim());
+    if needle.is_empty() {
+        return Vec::new();
+    }
+    let store = crate::lock_store(&state.store);
+    store
+        .pinned
+        .iter()
+        .chain(store.history.iter())
+        .filter(|item| crate::storage::normalize_for_search(&item.text).contains(&needle))
+        .map(|item| item.id.clone())
+        .collect()
+}
+
 #[tauri::command]
 pub async fn paste_item(app: AppHandle, id: String, plain: bool) -> Result<bool, String> {
     paste::paste_item(&app, &id, plain).await
@@ -607,6 +630,85 @@ pub fn open_update_window(app: &AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The store-side half of `search_items`: everything except taking the lock.
+    fn ids_matching(store: &Store, query: &str) -> Vec<String> {
+        let needle = crate::storage::normalize_for_search(query.trim());
+        if needle.is_empty() {
+            return Vec::new();
+        }
+        store
+            .pinned
+            .iter()
+            .chain(store.history.iter())
+            .filter(|item| crate::storage::normalize_for_search(&item.text).contains(&needle))
+            .map(|item| item.id.clone())
+            .collect()
+    }
+
+    #[test]
+    fn search_reaches_past_the_preview_the_panel_can_see() {
+        let mut store = Store::load(
+            std::env::temp_dir().join(format!("raff-search-test-{}", uuid::Uuid::new_v4())),
+        );
+        // The distinctive word sits at character 2500 — well past the cut.
+        let mut text = "\u{0645} ".repeat(1_250);
+        text.push_str("\u{0634}\u{0641}\u{0631}\u{0629}\u{0627}\u{0644}\u{062e}\u{0632}\u{0646}\u{0629}");
+        text.push_str(&"\u{0645} ".repeat(250));
+        assert!(text.chars().count() > 3_000);
+        store.capture(
+            ItemKind::Text,
+            text.clone(),
+            None,
+            None,
+            None,
+            None,
+            None,
+            ("Notes".into(), "com.apple.Notes".into()),
+        );
+        let id = store.history[0].id.clone();
+
+        assert_eq!(
+            ids_matching(&store, "\u{0634}\u{0641}\u{0631}\u{0629}\u{0627}\u{0644}\u{062e}\u{0632}\u{0646}\u{0629}"),
+            vec![id],
+            "the shelf is searched, not the preview"
+        );
+
+        // ...and the row the panel is handed is still cut where it was.
+        let dto = ItemDto::from(&store.history[0]);
+        assert_eq!(
+            dto.text.chars().count(),
+            PREVIEW_MAX_CHARS + 1,
+            "the preview did not grow: 1000 characters plus the ellipsis"
+        );
+        assert!(dto.text.ends_with('\u{2026}'));
+    }
+
+    #[test]
+    fn search_folds_spelling_the_same_way_the_panel_does() {
+        let mut store = Store::load(
+            std::env::temp_dir().join(format!("raff-search-test-{}", uuid::Uuid::new_v4())),
+        );
+        store.capture(
+            ItemKind::Text,
+            "\u{0623}\u{0643}\u{062a}\u{0628}".into(), // أكتب
+            None,
+            None,
+            None,
+            None,
+            None,
+            ("Notes".into(), "com.apple.Notes".into()),
+        );
+
+        assert_eq!(
+            ids_matching(&store, "\u{0627}\u{0643}\u{062a}\u{0628}").len(), // اكتب
+            1,
+            "a query written with bare alef still finds it"
+        );
+        assert!(
+            ids_matching(&store, "\u{0645}\u{062f}\u{0631}\u{0633}\u{0647}").is_empty()
+        );
+    }
 
     fn image_store(original: &[u8], thumb: Option<(&str, &[u8])>) -> (Store, String) {
         let root = std::env::temp_dir().join(format!("raff-image-test-{}", uuid::Uuid::new_v4()));

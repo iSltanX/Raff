@@ -28,12 +28,20 @@ export function normalizeArabic(s) {
     .toLowerCase();
 }
 
-/** Instant filter over preview text and source app name. */
-export function filterItems(items, query) {
+/**
+ * Instant filter over preview text and source app name.
+ *
+ * `alsoMatchIds` carries the rows Rust matched in the part of the text this
+ * side never receives — the preview is cut at 1000 characters. It is a union,
+ * not a replacement: the local pass stays synchronous so typing never waits
+ * on IPC, and the deeper answer widens the result when it arrives.
+ */
+export function filterItems(items, query, alsoMatchIds = null) {
   const q = normalizeArabic(query.trim());
   if (!q) return items;
   return items.filter(
     (item) =>
+      alsoMatchIds?.has(item.id) ||
       normalizeArabic(item.text).includes(q) ||
       normalizeArabic(item.sourceApp || '').includes(q)
   );

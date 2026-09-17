@@ -51,6 +51,7 @@ export function emptyState() {
  * a flaky or wedged IPC channel would drive them.
  */
 export function createFakeTauri(initialState, { failTimes = 0 } = {}) {
+  let searchResults = [];
   let state = structuredClone(initialState);
   let remainingFailures = failTimes;
   const listeners = new Map();
@@ -159,6 +160,9 @@ export function createFakeTauri(initialState, { failTimes = 0 } = {}) {
           }
           return Promise.resolve(null);
         }
+        if (cmd === 'search_items') {
+          return Promise.resolve([...searchResults]);
+        }
         return Promise.resolve(null);
       },
     },
@@ -176,6 +180,10 @@ export function createFakeTauri(initialState, { failTimes = 0 } = {}) {
     tauri,
     emit(event, payload) {
       notify(event, payload);
+    },
+    /** Ids `search_items` answers with — the rows whose hidden tail matched. */
+    setSearchResults(ids) {
+      searchResults = ids;
     },
     setState(next) {
       state = next;

@@ -424,7 +424,8 @@ function renderList() {
   // «08» shows one chronological list with pinned items marked in place —
   // there are no section headers. The مثبّت segment is how you isolate them.
   const all = [...state.pinned, ...state.history].sort((a, b) => b.createdAt - a.createdAt);
-  visible = filterItems(all, query).filter(matchesFilter);
+  const deepIds = deepMatches.query === query ? deepMatches.ids : null;
+  visible = filterItems(all, query, deepIds).filter(matchesFilter);
 
   const selectionIsVisible = visible.some((item) => item.id === selectedId);
   if (query && !selectionIsVisible) {
@@ -1046,6 +1047,36 @@ function setSelection(id) {
   scrollSelectedIntoView();
 }
 
+// Rows whose match lives past `PREVIEW_MAX_CHARS`, for the query that found
+// them. Kept beside the query so an answer that arrives after the user has
+// typed on can never widen the wrong result.
+let deepMatches = { query: '', ids: null };
+let deepSearchToken = 0;
+
+/**
+ * Asks Rust about the text the panel was never sent.
+ *
+ * The local filter has already painted; this only widens what it found. A
+ * superseded answer is dropped rather than rendered, and a failure leaves the
+ * local result standing — searching less is a far better failure than an
+ * empty shelf.
+ */
+async function askForDeepMatches(forQuery) {
+  const token = ++deepSearchToken;
+  if (!forQuery.trim()) {
+    deepMatches = { query: '', ids: null };
+    return;
+  }
+  try {
+    const ids = await api.searchItems(forQuery);
+    if (token !== deepSearchToken) return;
+    deepMatches = { query: forQuery, ids: new Set(ids) };
+    render();
+  } catch (err) {
+    diag('search:deep-failed', err);
+  }
+}
+
 function setFilter(next) {
   const segments = [...filtersEl.querySelectorAll('.segment')];
   if (!segments.some((segment) => segment.dataset.filter === next)) return;
@@ -1410,6 +1441,7 @@ window.addEventListener('keydown', (e) => {
 searchEl.addEventListener('input', () => {
   query = searchEl.value;
   render();
+  void askForDeepMatches(query);
 });
 
 // A focused row action or filter owns Enter/arrow keys natively. Refresh the
