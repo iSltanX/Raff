@@ -50,7 +50,7 @@ async function mount() {
   dom.window.__TAURI__ = {
     core: {
       invoke(command) {
-        if (command === 'get_state') {
+        if (command === 'get_state' || command === 'get_settings') {
           return Promise.resolve({
             pinned: [],
             history: [],

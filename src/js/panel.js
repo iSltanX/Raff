@@ -81,6 +81,18 @@ const TOAST_EXIT_MS = 120;
 // Only 'ready' + zero items is the natural «الرفّ فارغ» empty shelf.
 let phase = 'loading';
 
+// The webview is never destroyed — Rust orders the NSPanel in and out, and a
+// concealed panel is still laid out on screen at alpha 0. So «hidden» means
+// nobody can see it, not that its JavaScript stopped: every capture used to
+// rebuild a thousand rows for an audience of no one.
+let isShown = false;
+
+/** Hides the panel and records it, so incoming events stop costing a rebuild. */
+function hidePanel() {
+  isShown = false;
+  return api.hidePanel();
+}
+
 // ─── Rendering ────────────────────────────────────────────────────────────
 
 /**
@@ -1003,8 +1015,35 @@ function moveSelection(delta) {
         ? visible.length - 1
         : 0
       : Math.min(visible.length - 1, Math.max(0, index + delta));
-  selectedId = visible[next].id;
-  render();
+  setSelection(visible[next].id);
+}
+
+/**
+ * Moves the selection by touching the two rows that change.
+ *
+ * `renderList` is deliberately not involved: rebuilding every row to move a
+ * highlight one line is what made arrow keys lag on a full shelf. The three
+ * things that must stay in step with the selection — the announced row, the
+ * shortcut bar and the scroll position — are synced explicitly instead.
+ */
+function setSelection(id) {
+  if (selectedId === id) return;
+  selectedId = id;
+  const previous = listEl.querySelector('.row.selected[role="row"]');
+  if (previous) {
+    previous.classList.remove('selected');
+    previous.setAttribute('aria-selected', 'false');
+  }
+  const next = [...listEl.querySelectorAll('.row[role="row"]')].find(
+    (row) => row.dataset.id === id
+  );
+  if (next) {
+    next.classList.add('selected');
+    next.setAttribute('aria-selected', 'true');
+  }
+  syncActiveOption();
+  syncShortcutBar();
+  scrollSelectedIntoView();
 }
 
 function setFilter(next) {
@@ -1172,7 +1211,7 @@ panelHeaderEl.addEventListener('mousedown', (event) => {
 });
 
 settingsBtn.addEventListener('click', () => api.openSettings());
-closeBtn.addEventListener('click', () => api.hidePanel());
+closeBtn.addEventListener('click', () => hidePanel());
 searchClearEl.addEventListener('click', () => {
   query = '';
   selectedId = null;
@@ -1295,7 +1334,7 @@ window.addEventListener('keydown', (e) => {
         searchEl.value = '';
         render();
       } else {
-        api.hidePanel();
+        hidePanel();
       }
     }
     return;
@@ -1330,7 +1369,7 @@ window.addEventListener('keydown', (e) => {
         searchEl.value = '';
         render();
       } else {
-        api.hidePanel();
+        hidePanel();
       }
       return;
   }
@@ -1381,9 +1420,18 @@ window.addEventListener('focusout', () => queueMicrotask(syncShortcutBar));
 
 // ─── Events from Rust ─────────────────────────────────────────────────────
 
-on('raff://changed', () => refresh()).catch((err) => diag('listen:failed', err));
+on('raff://changed', () => {
+  if (!isShown) {
+    // The show path below refreshes before the panel appears, so a capture
+    // nobody can see costs nothing until it is worth something.
+    diag('changed:deferred-while-hidden');
+    return;
+  }
+  refresh();
+}).catch((err) => diag('listen:failed', err));
 on('panel://shown', async () => {
   diag('event:panel-shown');
+  isShown = true;
   query = '';
   searchEl.value = '';
   selectedId = null;
@@ -1401,6 +1449,9 @@ on('panel://shown', async () => {
 // reliable signal than a webview message), this still resyncs the list
 // through the same guarded refresh() path — without resetting the search.
 window.addEventListener('focus', () => {
+  // Native activation is the more reliable signal of the two; if the IPC event
+  // was ever missed, this is what puts the panel back on the refresh path.
+  isShown = true;
   searchEl.focus();
   forceRepaint();
   refresh();

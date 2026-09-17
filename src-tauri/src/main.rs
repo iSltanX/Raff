@@ -75,6 +75,7 @@ fn main() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             commands::get_state,
+            commands::get_settings,
             commands::paste_item,
             commands::copy_item,
             commands::toggle_pin,

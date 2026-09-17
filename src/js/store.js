@@ -15,6 +15,8 @@ const listen = window.__TAURI__ ? window.__TAURI__.event.listen : () => Promise.
 
 export const api = {
   getState: () => invoke('get_state'),
+  // The Settings window's own read: preferences and states, no shelf.
+  getSettings: () => invoke('get_settings'),
   pasteItem: (id, plain = false) => invoke('paste_item', { id, plain }),
   copyItem: (id) => invoke('copy_item', { id }),
   togglePin: (id, isPinned) => invoke('toggle_pin', { id, isPinned }),

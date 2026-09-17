@@ -113,7 +113,7 @@ el('settings-repo').addEventListener('click', () => api.openRepository().catch((
 // ─── Load / sync ──────────────────────────────────────────────────────────
 
 async function load() {
-  const state = await api.getState();
+  const state = await api.getSettings();
   settings = state.settings;
 
   const version = state?.version;

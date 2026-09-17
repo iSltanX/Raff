@@ -68,6 +68,32 @@ pub struct StatePayload {
     pub capture_alive: bool,
 }
 
+/// What the Settings window actually needs: the preferences and the two states
+/// it shows, and none of the shelf.
+///
+/// `get_state` carries up to 1000 rows of up to 1000 characters each, and the
+/// Settings window used to refetch every one of them on every capture — to
+/// keep five switches in sync.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SettingsPayload {
+    pub settings: Settings,
+    pub ax_trusted: bool,
+    pub version: String,
+    pub capture_alive: bool,
+}
+
+#[tauri::command]
+pub fn get_settings(app: AppHandle, state: State<AppState>) -> SettingsPayload {
+    let store = crate::lock_store(&state.store);
+    SettingsPayload {
+        settings: store.settings.clone(),
+        ax_trusted: macos::ax_trusted(),
+        version: app.package_info().version.to_string(),
+        capture_alive: state.capture_alive.load(std::sync::atomic::Ordering::SeqCst),
+    }
+}
+
 #[tauri::command]
 pub fn get_state(app: AppHandle, state: State<AppState>) -> StatePayload {
     crate::startup_trace::mark("FRONTEND_CALLED_get_state");
