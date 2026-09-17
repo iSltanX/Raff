@@ -121,6 +121,22 @@ fn poll_once(app: &AppHandle, last: &mut isize) {
         return;
     }
 
+    // Before the pasteboard is touched at all: a change skipped on purpose
+    // must leave no trace of itself anywhere, not even its length.
+    {
+        let mut pause = crate::lock_pause(&state.pause);
+        let was_active = pause.is_active();
+        let skip = pause.consume();
+        let still_active = pause.is_active();
+        drop(pause);
+        if was_active && !still_active {
+            tray::note_paused(false);
+        }
+        if skip {
+            return;
+        }
+    }
+
     let (enabled, respect_concealed, excluded) = {
         let store = crate::lock_store(&state.store);
         (
