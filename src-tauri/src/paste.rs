@@ -67,7 +67,7 @@ pub async fn paste_item(app: &AppHandle, id: &str, plain: bool) -> Result<bool, 
     crate::startup_trace::mark(&format!("PASTE row_click_invoke id={id}"));
     if !write_item_to_clipboard(app, id, plain) {
         crate::startup_trace::mark("PASTE write_item_to_clipboard FAILED (unknown id)");
-        return Err("العنصر غير موجود".into());
+        return Err(crate::commands::err::NOT_FOUND.into());
     }
     crate::startup_trace::mark("PASTE NSPasteboard write completed");
 
@@ -132,8 +132,8 @@ pub async fn paste_item(app: &AppHandle, id: &str, plain: bool) -> Result<bool, 
             .map_err(|err| err.to_string())
     })
     .await
-    .map_err(|err| format!("تعذّر تنفيذ اللصق: {err}"))
-    .and_then(|result| result.map_err(|err| format!("تعذّر تنفيذ اللصق: {err}")));
+    .map_err(paste_failed)
+    .and_then(|result| result.map_err(paste_failed));
 
     let pasted = match attempt {
         Ok(pasted) => pasted,
@@ -157,6 +157,14 @@ fn bump_paste_signals(app: &AppHandle, id: &str) {
 
 /// Copying through رفّ (panel ⌘C, tray item click) is a usage signal exactly
 /// like pasting — recorded explicitly instead of re-capturing our own write.
+/// A paste that could not be carried out. The cause is logged, not shown: it
+/// is an OS-level string the user cannot act on, in a language رفّ does not
+/// speak to them in.
+fn paste_failed(detail: impl std::fmt::Display) -> String {
+    eprintln!("raff: paste failed: {detail}");
+    crate::commands::err::PASTE_FAILED.to_string()
+}
+
 pub fn bump_copy_signals(app: &AppHandle, id: &str) {
     bump_signals(app, id, |item| item.copy_count += 1);
 }

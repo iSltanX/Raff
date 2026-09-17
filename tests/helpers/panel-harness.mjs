@@ -52,6 +52,8 @@ export function emptyState() {
  */
 export function createFakeTauri(initialState, { failTimes = 0 } = {}) {
   let searchResults = [];
+  /** Commands forced to reject, and with what — for the error-wording suite. */
+  const forcedFailures = new Map();
   let state = structuredClone(initialState);
   let remainingFailures = failTimes;
   const listeners = new Map();
@@ -73,6 +75,9 @@ export function createFakeTauri(initialState, { failTimes = 0 } = {}) {
       invoke: (cmd, args) => {
         invocations.push({ cmd, args: structuredClone(args) });
         invokeCounts.set(cmd, (invokeCounts.get(cmd) || 0) + 1);
+        if (forcedFailures.has(cmd)) {
+          return Promise.reject(forcedFailures.get(cmd));
+        }
         if (cmd === 'get_state') {
           getStateCalls++;
           if (remainingFailures === Infinity || remainingFailures > 0) {
@@ -184,6 +189,10 @@ export function createFakeTauri(initialState, { failTimes = 0 } = {}) {
     /** Ids `search_items` answers with — the rows whose hidden tail matched. */
     setSearchResults(ids) {
       searchResults = ids;
+    },
+    /** Makes one command reject with exactly `reason`, as Rust would. */
+    failCommand(cmd, reason) {
+      forcedFailures.set(cmd, reason);
     },
     setState(next) {
       state = next;

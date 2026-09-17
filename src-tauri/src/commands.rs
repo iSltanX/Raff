@@ -11,6 +11,26 @@ use crate::{macos, panel, paste, AppState};
 
 const PREVIEW_MAX_CHARS: usize = 1000;
 
+/// Stable, detail-free error codes the panel turns into Arabic.
+///
+/// A storage failure carries an `io::Error` and the path it happened on.
+/// Handing that string to a toast put a local path — and the shape of the
+/// user's disk — into an Arabic interface, and made the wording of every
+/// message a backend concern. The backend names the kind; the panel owns the
+/// words.
+pub mod err {
+    pub const NOT_FOUND: &str = "raff/not-found";
+    pub const SAVE_FAILED: &str = "raff/save-failed";
+    pub const PASTE_FAILED: &str = "raff/paste-failed";
+}
+
+/// Keeps the detail where it is useful — the process log — and hands the
+/// interface a kind.
+fn save_failed(detail: String) -> String {
+    eprintln!("raff: {detail}");
+    err::SAVE_FAILED.to_string()
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ItemDto {
@@ -145,7 +165,7 @@ pub fn copy_item(app: AppHandle, id: String) -> Result<(), String> {
         paste::bump_copy_signals(&app, &id);
         Ok(())
     } else {
-        Err("العنصر غير موجود".into())
+        Err(err::NOT_FOUND.into())
     }
 }
 
@@ -158,7 +178,7 @@ pub fn toggle_pin(
 ) -> Result<bool, String> {
     let is_pinned = {
         let mut store = crate::lock_store(&state.store);
-        store.set_pin_persisted(&id, is_pinned)?
+        store.set_pin_persisted(&id, is_pinned).map_err(save_failed)?
     };
     notify(&app);
     Ok(is_pinned)
@@ -178,7 +198,7 @@ pub fn delete_item(
 ) -> Result<DeleteReceiptDto, String> {
     let token = {
         let mut store = crate::lock_store(&state.store);
-        store.delete_reversible(&id)?
+        store.delete_reversible(&id).map_err(save_failed)?
     };
     notify(&app);
     Ok(DeleteReceiptDto { token })
@@ -188,7 +208,7 @@ pub fn delete_item(
 pub fn undo_delete(app: AppHandle, state: State<AppState>, token: String) -> Result<(), String> {
     {
         let mut store = crate::lock_store(&state.store);
-        store.undo_delete(&token)?;
+        store.undo_delete(&token).map_err(save_failed)?;
     }
     notify(&app);
     Ok(())
@@ -197,7 +217,7 @@ pub fn undo_delete(app: AppHandle, state: State<AppState>, token: String) -> Res
 #[tauri::command]
 pub fn commit_delete(state: State<AppState>, token: String) -> Result<(), String> {
     let mut store = crate::lock_store(&state.store);
-    store.commit_delete(&token)
+    store.commit_delete(&token).map_err(save_failed)
 }
 
 #[tauri::command]
@@ -640,6 +660,18 @@ pub fn open_update_window(app: &AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_storage_failure_crosses_ipc_as_a_kind_not_as_its_detail() {
+        // Exactly the shape `try_save_json` produces.
+        let detail = "\u{062a}\u{0639}\u{0630}\u{0631} \u{062d}\u{0641}\u{0638} /Users/someone/Library/Application Support/com.raff.app/history.json: No space left on device";
+
+        let crossed = save_failed(detail.to_string());
+
+        assert_eq!(crossed, err::SAVE_FAILED);
+        assert!(!crossed.contains("/Users/"), "no path survives");
+        assert!(!crossed.contains("history"), "and no file name either");
+    }
 
     /// The store-side half of `search_items`: everything except taking the lock.
     fn ids_matching(store: &Store, query: &str) -> Vec<String> {

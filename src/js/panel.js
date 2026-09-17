@@ -890,9 +890,28 @@ function togglePinItem(id, { restoreFocus = false } = {}) {
       if (current) current.item.isPinned = previous;
       render();
       if (restoreFocus) focusRowAction(id, '.pin-btn');
-      deliverFeedback(String(err), { duration: PIN_TOAST_MS, kind: 'error' });
+      deliverFeedback(errorMessage(err), { duration: PIN_TOAST_MS, kind: 'error' });
     }
   });
+}
+
+// What the backend can say, and what رفّ says about it. Anything else gets
+// the last line: a sentence the user can act on beats a string they cannot.
+const ERROR_MESSAGES = {
+  'raff/not-found': 'لم يعد هذا العنصر موجودًا.',
+  'raff/save-failed': 'تعذّر حفظ التغيير. حاول مرة أخرى.',
+  'raff/paste-failed': 'تعذّر اللصق. المحتوى على الحافظة، الصقه بـ ⌘V.',
+};
+
+/**
+ * Turns a backend failure into something worth reading.
+ *
+ * The raw string could be anything the process produced — a local path, an OS
+ * error, a message in English — rendered verbatim in an Arabic interface. The
+ * backend names a kind; the wording lives here.
+ */
+function errorMessage(err) {
+  return ERROR_MESSAGES[String(err)] ?? 'تعذّر إتمام العملية. حاول مرة أخرى.';
 }
 
 function deleteItem(id, { restoreFocus = false } = {}) {
@@ -927,7 +946,7 @@ function deleteItem(id, { restoreFocus = false } = {}) {
       restoreLocalItem(snapshot);
       selectedId = id;
       render();
-      presentToast(String(err), { duration: PIN_TOAST_MS, kind: 'error' });
+      presentToast(errorMessage(err), { duration: PIN_TOAST_MS, kind: 'error' });
     }
   });
 }
@@ -959,7 +978,7 @@ function undoLastDelete() {
       optimisticRestores.delete(pending.snapshot.item.id);
       removeLocalItem(pending.snapshot.item.id);
       render();
-      presentToast(String(err), { duration: PIN_TOAST_MS, kind: 'error' });
+      presentToast(errorMessage(err), { duration: PIN_TOAST_MS, kind: 'error' });
     }
   });
 }
@@ -1004,7 +1023,7 @@ function paste(id, plain) {
         showToast('نُسخ إلى الحافظة — الصقه بـ ⌘V');
       }
     })
-    .catch((err) => showToast(String(err), PIN_TOAST_MS, 'error'));
+    .catch((err) => showToast(errorMessage(err), PIN_TOAST_MS, 'error'));
 }
 
 function moveSelection(delta) {
@@ -1421,7 +1440,7 @@ window.addEventListener('keydown', (e) => {
       api
         .copyItem(selectedId)
         .then(() => showToast('نُسخ إلى الحافظة'))
-        .catch((err) => showToast(String(err), PIN_TOAST_MS, 'error'));
+        .catch((err) => showToast(errorMessage(err), PIN_TOAST_MS, 'error'));
     }
     return;
   }
