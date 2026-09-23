@@ -22,8 +22,8 @@
 // WHY IT IS A POST-BUILD STEP
 // ---------------------------
 // Listing the `.icon` in tauri.conf.json makes `tauri build` drive `actool`
-// through `ibtoold`, which crashes reproducibly on this toolchain (see
-// docs/APP_ICON_DARK_MODE.md). Invoking `actool` directly, outside the Tauri
+// through `ibtoold`, which crashes reproducibly on this toolchain.
+// Invoking `actool` directly, outside the Tauri
 // build, does not go through that daemon and works. So the bundle is built
 // first and the compiled catalogue is injected afterwards.
 //

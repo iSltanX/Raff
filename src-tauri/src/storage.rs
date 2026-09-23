@@ -56,7 +56,7 @@ pub struct ClipItem {
     pub is_pinned: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pinned_order: Option<u32>,
-    // Silent learning signals (plan §9, v1: logging only — no adaptive behavior).
+    // Silent learning signals (v1: logging only — no adaptive behavior).
     pub copy_count: u32,
     pub paste_count: u32,
     pub last_used_at: u64,
@@ -367,7 +367,7 @@ const KNOWN_TLDS: [&str; 30] = [
     "sa", "ae", "eg", "qa", "kw", "bh", "om", "jo", "ma", "tn", "dz", "iq", "ps",
 ];
 
-/// Heuristic content typing (plan §4: simple, not smart).
+/// Heuristic content typing (simple, not smart).
 pub fn detect_kind(text: &str) -> ItemKind {
     let t = text.trim();
     if t.is_empty() {
@@ -1228,7 +1228,7 @@ impl Store {
         Ok(())
     }
 
-    /// Pin moves the item from the recent layer to the pinned shelf (plan §2:
+    /// Pin moves the item from the recent layer to the pinned shelf (the
     /// two layers). Unpin returns it to the history at its recency position.
     pub fn toggle_pin(&mut self, id: &str) -> bool {
         if let Some(pos) = self.history.iter().position(|i| i.id == id) {

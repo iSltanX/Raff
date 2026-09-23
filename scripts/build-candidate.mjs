@@ -12,7 +12,7 @@
 // thing this exists to fix. This script closes that gap: `tauri build` still
 // has to run first (Tauri owns compiling, code-signing and the base bundle
 // layout, and driving Icon Composer through Tauri's own bundler crashes via
-// ibtoold — see apply-app-icon.mjs and docs/APP_ICON_DARK_MODE.md), but its
+// ibtoold — see apply-app-icon.mjs), but its
 // DMG and tar.gz are discarded, and this script regenerates BOTH of them
 // directly from the patched `.app` — the same bytes, not a rebuild.
 //
@@ -49,7 +49,7 @@ try {
 } catch {
   // `tauri build` fails at its very last step locally: signing the updater
   // artifact needs TAURI_SIGNING_PRIVATE_KEY, which intentionally lives only
-  // in CI (see docs/RAFF_COMPLETE_AUDIT_2026-08-12_AR.md), never on a dev
+  // in CI, never on a dev
   // machine. Everything this script needs — the .app built and signed, an
   // unsigned tar.gz already on disk — exists by that point regardless, so
   // the failure itself is not fatal here. What IS fatal is checked next:

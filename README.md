@@ -1,209 +1,247 @@
+<div dir="rtl">
+
 <div align="center">
 
-<img alt="رفّ — Raff: رفّك القريب لكل ما نسخت" src="docs/assets/raff-cover.png" width="100%">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/header-ar-dark.png">
+  <img alt="رفّ — Raff: رفّك القريب لكل ما نسخت. افتحه بالاختصار ⇧⌘V والصق أي عنصر بـ ⌘1 إلى ⌘9" src="docs/assets/header-ar-light.png" width="100%">
+</picture>
 
-**مدير حافظة عربي لنظام macOS — سريع، هادئ، وخاص بالكامل.**
-
-[![الإصدار](https://img.shields.io/github/v/release/iSltanX/Raff?label=%D8%A7%D9%84%D8%A5%D8%B5%D8%AF%D8%A7%D8%B1&color=5E6E5B&style=flat-square)](https://github.com/iSltanX/Raff/releases/latest)
-[![macOS](https://img.shields.io/badge/macOS-12%2B%20·%20Apple%20Silicon-1C1917?style=flat-square)](#المتطلبات)
-[![محلي بالكامل](https://img.shields.io/badge/%D9%85%D8%AD%D9%84%D9%8A%20%D8%A8%D8%A7%D9%84%D9%83%D8%A7%D9%85%D9%84-%D8%A8%D9%84%D8%A7%20%D8%B4%D8%A8%D9%83%D8%A9-7C8C78?style=flat-square)](#الخصوصية)
+[![Release](https://img.shields.io/github/v/release/iSltanX/Raff?label=release&color=4D6A47&style=flat-square)](https://github.com/iSltanX/Raff/releases/latest)
+[![macOS 12+](https://img.shields.io/badge/macOS-12%2B%20%C2%B7%20Apple%20Silicon-1A2019?style=flat-square)](#المتطلبات)
+[![Local only](https://img.shields.io/badge/local--only-no%20tracking-7C8C78?style=flat-square)](#الخصوصية)
+[![UI](https://img.shields.io/badge/UI-Arabic%20%C2%B7%20RTL-4D6A47?style=flat-square)](#الميزات)
 
 ### [⬇︎ تنزيل أحدث إصدار](https://github.com/iSltanX/Raff/releases/latest)
 
+<sub>مجاني · macOS 12 أو أحدث · Apple Silicon</sub>
+
+[الفكرة](#الفكرة) · [طريقة العمل](#طريقة-العمل) · [الميزات](#الميزات) · [التثبيت](#التثبيت) · [الاستخدام](#الاستخدام) · [لقطات الشاشة](#لقطات-الشاشة) · [الخصوصية](#الخصوصية) · [الأسئلة المتكررة](#الأسئلة-المتكررة)
+
 </div>
 
 ---
 
-## ما هو رفّ؟
+## الفكرة
 
-الرفّ هو أبسط طريقة لإبقاء ما تحتاجه قريبًا ومرتبًا. و«رفّ» يطبّق الفكرة نفسها
-على الحافظة: كل ما تنسخه يُحفظ تلقائيًا، ويعود إليك بضغطة واحدة من أي تطبيق.
+تنسخ رابطًا، ثم فقرة، ثم صورة، وحين تحتاج الرابط الأول تجده قد ضاع. الحافظة في macOS تحفظ شيئًا واحدًا فقط.
 
-يسكن رفّ شريط القوائم بلا أيقونة في Dock، ويرتّب ما تنسخه في طبقتين:
+**رفّ** مدير حافظة عربي يسكن شريط القوائم: يحفظ كل ما تنسخه تلقائيًا، ويعيده إليك بضغطة واحدة من أي تطبيق. ويرتّبه في طبقتين:
 
-| الطبقة | ماذا تحفظ |
+| الطبقة | ما فيها |
 | --- | --- |
-| **الأخير** | سجل تلقائي لكل ما نسخته — نصوص وروابط وشفرات وصور. |
-| **المثبّت** | ما تختار إبقاءه دائمًا؛ لا يُحذف تلقائيًا مهما طال السجل. |
+| **الأخير** | سجل تلقائي لكل ما نسخته: نصوص وروابط وشفرات وصور. |
+| **المثبّت** | ما تختار إبقاءه دائمًا، ولا يُحذف مهما طال السجل. |
 
-> رمز رفّ يرسم الفكرة نفسها: عنصر قائم هو «المثبّت»، وبطاقة تستند إليه هي «الأخير».
-
----
-
-## لماذا رفّ؟
-
-- **سريع من اللحظة الأولى** — تفتح اللوحة فورًا بـ <kbd>⇧⌘V</kbd> أو بنقرة على أيقونة شريط القوائم، والبحث يصفّي أثناء الكتابة.
-- **لصق بإجراء واحد** — اختيار عنصر ينسخه، ويغلق اللوحة، ويلصقه مباشرة في التطبيق الذي كنت فيه.
-- **لصق سريع بالأرقام** — أمسك <kbd>⌘</kbd> لتظهر الأرقام، ثم <kbd>⌘1</kbd>…<kbd>⌘9</kbd> للصق أي عنصر من أول تسعة.
-- **خاص بالكامل** — بلا حساب ولا سحابة ولا تتبّع. بيانات الحافظة لا تغادر جهازك أبدًا.
-- **عربي أصيل** — واجهة مبنية من اليمين إلى اليسار من الأساس، وبحث يتجاهل التشكيل والتطويل.
-- **يحترم macOS** — خلفية زجاجية أصلية، ووضعان فاتح وداكن يتبعان النظام.
+<sub>رمز رفّ يرسم الفكرة نفسها: عنصر قائم هو «المثبّت»، وبطاقة تستند إليه هي «الأخير».</sub>
 
 ---
 
-## جولة سريعة
+## طريقة العمل
 
-<div align="center">
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/raff-panel-dark.png">
-  <img alt="لوحة رفّ العائمة" src="docs/assets/raff-panel-light.png" width="70%">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/steps-ar-dark.png">
+  <img alt="تنسخ كعادتك، ثم تفتح الرف بالاختصار ⇧⌘V، فيُلصق العنصر في التطبيق الذي كنت فيه" src="docs/assets/steps-ar-light.png" width="100%">
 </picture>
-</div>
 
-<br />
-
-<table>
-  <tr>
-    <td width="50%" align="center">
-      <img alt="اللصق السريع بالأرقام" src="docs/assets/raff-quick-paste.png" width="100%"><br />
-      <b>اللصق السريع</b><br />
-      أمسك ⌘ لتظهر أرقام أول تسعة عناصر.
-    </td>
-    <td width="50%" align="center">
-      <img alt="البحث الفوري" src="docs/assets/raff-search.png" width="100%"><br />
-      <b>بحث فوري</b><br />
-      النتائج تتصفّى أثناء الكتابة، في النصوص والروابط والصور.
-    </td>
-  </tr>
-</table>
-
-<div align="center">
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/raff-settings-dark.png">
-  <img alt="إعدادات رفّ" src="docs/assets/raff-settings.png" width="80%">
-</picture>
-</div>
+اختيار عنصر ينسخه، ويغلق اللوحة، ويلصقه في التطبيق الذي كنت فيه. وإن أمسكت <kbd>⌘</kbd> ظهرت أرقام أول تسعة عناصر، فتلصق أيًّا منها بـ <span dir="ltr"><kbd>⌘</kbd><kbd>1</kbd></span> إلى <span dir="ltr"><kbd>⌘</kbd><kbd>9</kbd></span> دون أن تبحث.
 
 ---
 
-## الاختصارات
+## الميزات
 
-| الإجراء | المفتاح |
-| --- | --- |
-| فتح اللوحة وإغلاقها (من أي مكان) | <kbd>⇧⌘V</kbd> — قابل للتغيير من الإعدادات |
-| التنقّل بين العناصر | <kbd>↑</kbd> <kbd>↓</kbd> — و<kbd>PageUp</kbd> <kbd>PageDown</kbd> للقفز |
-| لصق العنصر المحدد | <kbd>⏎</kbd> |
-| لصق كنص عادي بلا تنسيق | <kbd>⌥⏎</kbd> |
-| لصق سريع لأحد أول تسعة عناصر | <kbd>⌘1</kbd> … <kbd>⌘9</kbd> |
-| نسخ دون لصق | <kbd>⌘C</kbd> |
-| تثبيت / إلغاء التثبيت | <kbd>⌥P</kbd> |
-| حذف العنصر | <kbd>⌘⌫</kbd> |
-| التراجع عن الحذف (خلال ٥ ثوانٍ) | <kbd>⌘Z</kbd> |
-| البحث | اكتب مباشرة، أو <kbd>⌘F</kbd> |
-| الإعدادات | <kbd>⌘,</kbd> |
-| مسح البحث، ثم الإغلاق | <kbd>Esc</kbd> |
-
-النقر على عنصر يساوي تحديده ثم <kbd>⏎</kbd>، والنقر مع <kbd>⌥</kbd> يلصقه كنص عادي.
-النقر الأيمن على أيقونة شريط القوائم يفتح قائمة: الإعدادات، التحقق من التحديثات، عن رفّ، إنهاء.
+- **سريع من اللحظة الأولى.** اللوحة تفتح فورًا بـ <span dir="ltr"><kbd>⇧</kbd><kbd>⌘</kbd><kbd>V</kbd></span> أو بنقرة على أيقونة شريط القوائم، والبحث يصفّي أثناء الكتابة.
+- **بحث عربي.** يتجاهل التشكيل والتطويل، فتجد «مُحَمَّد» حين تكتب «محمد».
+- **لصق بلا تنسيق.** <span dir="ltr"><kbd>⌥</kbd><kbd>⏎</kbd></span> يلصق العنصر نصًّا عاديًا.
+- **خاص بالكامل.** بلا حساب ولا سحابة ولا تتبّع. ما تنسخه لا يغادر جهازك.
+- **يتجاهل كلمات المرور.** ما يعلّمه مديرو كلمات المرور محتوى سرّيًا لا يُحفظ أصلًا.
+- **تحت سيطرتك.** استثنِ تطبيقات بعينها، أو أوقف الالتقاط مؤقتًا، أو حدّد مدة الاحتفاظ بالسجل.
+- **عربي أصيل.** واجهة من اليمين إلى اليسار من الأساس، ووضعان فاتح وداكن يتبعان النظام.
 
 ---
 
 ## التثبيت
 
-1. نزّل ملف `Raff_<الإصدار>_aarch64.dmg` من [صفحة الإصدارات](https://github.com/iSltanX/Raff/releases/latest).
+1. نزّل ملف `Raff_…_aarch64.dmg` من [صفحة الإصدارات](https://github.com/iSltanX/Raff/releases/latest).
 2. افتحه واسحب **Raff** إلى مجلد **التطبيقات**.
 3. شغّل رفّ، وستجد أيقونته في **شريط القوائم**.
-4. في أول تشغيل يطلب رفّ إذن **تسهيل الوصول** — وهو مطلوب للّصق التلقائي فقط.
+4. في نافذة الترحيب: امنح إذن **تسهيلات الاستخدام** (للّصق التلقائي فقط)، واختر أن تبدأ الالتقاط أو تبقيه متوقفًا.
+
+</div>
 
 > [!IMPORTANT]
-> **تنبيه Gatekeeper:** رفّ موقّع ذاتيًا وغير موثَّق من Apple لأنه مشروع شخصي،
-> لذلك قد يرفض macOS تشغيله أول مرة.
-> انقر على التطبيق بالزر الأيمن ← **فتح** ← **فتح**. تكفي مرة واحدة.
+> **تنبيه Gatekeeper:** رفّ موقَّع ذاتيًا ولم يمرّ بتوثيق Apple (Notarization)، لأنه مشروع شخصي. لذلك قد يرفض macOS فتحه أول مرة.
 >
-> إن استمر المنع:
+> - **في macOS 15 فما بعد:** حاول فتحه مرة، ثم افتح **إعدادات النظام ← الخصوصية والأمن** واضغط **افتح على أي حال**.
+> - **في macOS 12 إلى 14:** في Finder انقر على Raff بالزر الأيمن ← **فتح** ← **فتح**.
+>
+> تكفي مرة واحدة. وإن استمر المنع، فمن الطرفية:
 > ```sh
 > xattr -dr com.apple.quarantine /Applications/Raff.app
 > ```
 
+<div dir="rtl">
+
+### المتطلبات
+
+- نظام macOS 12 (Monterey) أو أحدث، ومُختبَر حتى **macOS 27**.
+- معالج **Apple Silicon**. لا توجد نسخة لمعالجات Intel.
+
+### الصلاحية
+
+صلاحية واحدة: **تسهيلات الاستخدام** (Accessibility)، لمحاكاة <span dir="ltr"><kbd>⌘</kbd><kbd>V</kbd></span> عند اللصق. بدونها يبقى كل شيء يعمل، ويُنسخ العنصر إلى الحافظة لتلصقه بنفسك.
+
 ---
 
-## التحديث
+## الاستخدام
 
-يتحقق رفّ من التحديثات عبر [إصدارات هذا المستودع](https://github.com/iSltanX/Raff/releases).
-كل حزمة تحديث موقّعة، ويرفض التطبيق أي حزمة لا يتطابق توقيعها.
+| الإجراء | المفتاح |
+| --- | --- |
+| فتح اللوحة وإغلاقها من أي مكان | <span dir="ltr"><kbd>⇧</kbd><kbd>⌘</kbd><kbd>V</kbd></span>، ويمكن تغييره من الإعدادات |
+| لصق العنصر المحدد | <kbd>⏎</kbd> |
+| لصق كنص عادي بلا تنسيق | <span dir="ltr"><kbd>⌥</kbd><kbd>⏎</kbd></span> |
+| لصق سريع لأحد أول تسعة عناصر | <span dir="ltr"><kbd>⌘</kbd><kbd>1</kbd></span> … <span dir="ltr"><kbd>⌘</kbd><kbd>9</kbd></span> |
+| نسخ دون لصق | <span dir="ltr"><kbd>⌘</kbd><kbd>C</kbd></span> |
+| تثبيت العنصر أو إلغاء تثبيته | <span dir="ltr"><kbd>⌥</kbd><kbd>P</kbd></span> |
+| حذف العنصر، ثم التراجع خلال 5 ثوانٍ | <span dir="ltr"><kbd>⌘</kbd><kbd>⌫</kbd></span> ثم <span dir="ltr"><kbd>⌘</kbd><kbd>Z</kbd></span> |
+| البحث | اكتب مباشرة، أو <span dir="ltr"><kbd>⌘</kbd><kbd>F</kbd></span> |
+| مسح البحث، ثم الإغلاق | <kbd>Esc</kbd> |
 
-للتحقق يدويًا: **النقر الأيمن** على أيقونة رفّ ← **التحقق من التحديثات…**
-أو من **الإعدادات ← حول ← التحقق الآن**.
+- النقر على عنصر يلصقه، والنقر مع <kbd>⌥</kbd> يلصقه نصًّا عاديًا.
+- النقر الأيمن على أيقونة شريط القوائم يفتح: الإيقاف المؤقت، والإعدادات، والتحقق من التحديثات، وعن رفّ.
+- التحديثات تصل من إصدارات هذا المستودع، وكل حزمة موقَّعة ويرفض التطبيق ما لا يطابق توقيعه.
+
+---
+
+## لقطات الشاشة
+
+<table>
+  <tr>
+    <td width="50%" align="center" valign="top">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="docs/assets/raff-panel-dark.png">
+        <img alt="لوحة رفّ العائمة" src="docs/assets/raff-panel-light.png" width="100%">
+      </picture><br>
+      <b>اللوحة</b><br>
+      الأخير والمثبّت في مكان واحد، فوق ما تعمل عليه.
+    </td>
+    <td width="50%" align="center" valign="top">
+      <img alt="اللصق السريع بالأرقام" src="docs/assets/raff-quick-paste.png" width="100%"><br>
+      <b>اللصق السريع</b><br>
+      أمسك <kbd>⌘</kbd> لتظهر أرقام أول تسعة عناصر.
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" align="center" valign="top">
+      <img alt="البحث الفوري" src="docs/assets/raff-search.png" width="100%"><br>
+      <b>البحث</b><br>
+      النتائج تتصفّى أثناء الكتابة، في النصوص والروابط والصور.
+    </td>
+    <td width="50%" align="center" valign="top">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="docs/assets/raff-settings-dark.png">
+        <img alt="إعدادات رفّ" src="docs/assets/raff-settings.png" width="100%">
+      </picture><br>
+      <b>الإعدادات</b><br>
+      حجم السجل، ومدة الاحتفاظ، والتطبيقات المستبعَدة، والاختصار.
+    </td>
+  </tr>
+</table>
 
 ---
 
 ## الخصوصية
 
-رفّ مصمَّم بحيث لا يملك طريقًا لتسريب ما تنسخه:
-
-- **صفر اتصالات لبيانات الحافظة.** الاتصال الوحيد هو التحقق من التحديثات، ولا يحمل أي محتوى.
-- **لا حسابات، ولا مزامنة، ولا تتبّع.**
-- **تخزين محلي مفهوم:** ملفات JSON وصور PNG داخل `~/Library/Application Support/com.raff.app/`، يمكنك فتحها أو حذفها متى شئت.
-- **المحتوى السرّي لا يُحفظ:** ما يعلّمه مديرو كلمات المرور كمحتوى مخفي يُتجاهل تلقائيًا.
-- **استثناء التطبيقات:** لا يُلتقط ما يُنسخ من تطبيق مستثنى وهو التطبيق الأمامي.
-  نسخة تصدر من عملية في الخلفية — `pbcopy` من طرفية غير ظاهرة مثلًا — لا يستطيع
-  macOS نسبتها إلى تطبيق بعينه، فتبقى خارج ما يغطّيه الاستثناء.
-- **التعلّم اختياري ومحلي:** عدّادات استخدام بسيطة لترتيب ما تستخدمه أكثر، يمكن عرضها ومسحها وإيقافها.
-
-الإذن الوحيد الذي يطلبه رفّ هو **تسهيل الوصول**، لمحاكاة <kbd>⌘V</kbd> عند اللصق. بدونه
-يبقى كل شيء يعمل، ويُنسخ العنصر إلى الحافظة لتلصقه بنفسك.
+- **لا اتصال يحمل بيانات الحافظة.** الاتصال الوحيد هو التحقق من التحديثات، ولا يحمل أي محتوى.
+- **لا حساب، ولا مزامنة، ولا تتبّع.**
+- **تخزين محلي تفهمه:** ملفات JSON وصور PNG في <span dir="ltr">`~/Library/Application Support/com.raff.app/`</span>، تفتحها أو تحذفها متى شئت.
+- **المحتوى السرّي لا يُحفظ،** والتطبيقات المستبعَدة لا يُلتقط ما يُنسخ منها وهي في الواجهة.
+- **التعلّم اختياري ومحلي:** عدّادات استخدام بسيطة لترتيب ما تستخدمه أكثر، تعرضها وتمسحها وتوقفها من الإعدادات.
 
 ---
 
-## المتطلبات
+## الأسئلة المتكررة
 
-- macOS 12 (Monterey) أو أحدث — مُختبَر حتى **macOS 27**.
-- معالج **Apple Silicon**.
+<details>
+<summary><strong>لماذا يحذّرني macOS حين أفتحه أول مرة؟</strong></summary><br>
+
+لأن رفّ موقَّع ذاتيًا لا بشهادة Apple Developer ID، ولم يمرّ بتوثيق Apple. طريقة الفتح في [التثبيت](#التثبيت)، وتكفي مرة واحدة.
+</details>
+
+<details>
+<summary><strong>هل يحفظ كلمات المرور التي أنسخها؟</strong></summary><br>
+
+لا. مديرو كلمات المرور يعلّمون ما ينسخونه بأنه سرّي أو مؤقت، ورفّ يتجاهل هذا المحتوى تلقائيًا فلا يدخل السجل.
+</details>
+
+<details>
+<summary><strong>كم عنصرًا يحفظ، وإلى متى؟</strong></summary><br>
+
+200 أو 500 أو 1000 عنصر، والافتراضي 500. ومدة الاحتفاظ بلا حدّ، أو أسبوع، أو شهر، أو ثلاثة أشهر. العناصر المثبّتة لا تُحذف تلقائيًا أبدًا.
+</details>
+
+<details>
+<summary><strong>كيف أوقفه مؤقتًا؟</strong></summary><br>
+
+النقر الأيمن على أيقونة شريط القوائم ← الإيقاف المؤقت: تخطّي النسخة التالية فقط، أو 15 دقيقة، أو ساعة، أو حتى إعادة التشغيل.
+</details>
+
+<details>
+<summary><strong>لماذا يطلب تسهيلات الاستخدام؟</strong></summary><br>
+
+ليلصق العنصر في التطبيق الذي كنت فيه، بمحاكاة <span dir="ltr"><kbd>⌘</kbd><kbd>V</kbd></span>. إن لم تمنحها، يُنسخ العنصر إلى الحافظة وتلصقه أنت.
+</details>
+
+<details>
+<summary><strong>هل يعمل على معالجات Intel؟</strong></summary><br>
+
+لا. الإصدارات مبنية لـ Apple Silicon فقط.
+</details>
+
+<details>
+<summary><strong>كيف أزيله تمامًا؟</strong></summary><br>
+
+1. أنهِ رفّ من قائمة أيقونته.
+2. احذف **Raff** من مجلد التطبيقات.
+3. احذف مجلد البيانات: <span dir="ltr">`~/Library/Application Support/com.raff.app/`</span>
+4. إن فعّلت التشغيل عند الدخول، احذف <span dir="ltr">`~/Library/LaunchAgents/Raff.plist`</span>
+5. أزل «رفّ» من **إعدادات النظام ← الخصوصية والأمن ← تسهيلات الاستخدام**.
+</details>
 
 ---
 
 ## للمطوّرين
 
-**المتطلبات:** Rust (stable)، Node 20+، أدوات سطر أوامر Xcode.
-
-```sh
-npm install
-npm run tauri dev       # تشغيل تطويري
-npm run tauri build     # بناء Raff.app و‏.dmg
-npm test                # اختبارات الواجهة
-cargo test --manifest-path src-tauri/Cargo.toml   # اختبارات الخلفية
-npm run icons           # توليد الأيقونات من الأصول المعتمدة
-```
-
 <details>
-<summary><b>بنية المشروع</b></summary>
+<summary><b>البناء من المصدر</b></summary><br>
 
-```
-src/                    الواجهة (HTML/CSS/JS، RTL، فاتح وداكن)
-  index.html            اللوحة العائمة             js/panel.js
-  settings.html         الإعدادات                  js/settings.js
-  about.html            عن رفّ                     js/about.js
-  update.html           التحديث                    js/update.js
-  firstrun.html         إذن تسهيل الوصول           js/firstrun.js
-  tokens.css            ألوان الهوية والخطوط والمقاسات
-  controls.css          المكوّنات المشتركة
-  assets/icons/         أيقونات الواجهة (16px)
-  assets/brand/         رمز رفّ وأيقونة شريط القوائم
-src-tauri/src/          الخلفية (Rust)
-  panel.rs              اللوحة العائمة (NSPanel)
-  tray.rs               أيقونة شريط القوائم (NSStatusItem)
-  monitor.rs            مراقبة الحافظة والالتقاط
-  storage.rs            التخزين المحلي
-  paste.rs              استعادة التركيز واللصق
-  commands.rs           واجهة الأوامر والنوافذ
-  updater.rs            التحديث الموقّع
-scripts/                بناء الواجهة، توليد الأيقونات، وخط الإصدار
-tests/                  اختبارات السلوك وعقد الهوية
-```
+**المتطلبات:** Rust (stable)، وNode 20 أو أحدث، وأدوات سطر أوامر Xcode.
 
+| الأمر | ما يفعله |
+| --- | --- |
+| <span dir="ltr">`npm install`</span> | يثبّت الاعتماديات |
+| <span dir="ltr">`npm run tauri dev`</span> | تشغيل تطويري |
+| <span dir="ltr">`npm run tauri build`</span> | يبني <span dir="ltr">`Raff.app`</span> وملف DMG |
+| <span dir="ltr">`npm test`</span> | اختبارات الواجهة |
+| <span dir="ltr">`cargo test --manifest-path src-tauri/Cargo.toml`</span> | اختبارات الخلفية |
+
+الواجهة HTML وCSS وJavaScript بلا إطار، والخلفية Rust على Tauri 2. الإصدارات تُبنى عبر GitHub Actions عند دفع وسم بصيغة <span dir="ltr">`vX.Y.Z`</span>، وسجل التغييرات في [CHANGELOG.md](CHANGELOG.md).
 </details>
-
-الإصدارات تُبنى تلقائيًا عبر GitHub Actions عند دفع وسم بصيغة `vX.Y.Z`.
-سجل التغييرات الكامل في [CHANGELOG.md](CHANGELOG.md).
-
----
 
 ## الإبلاغ عن مشكلة
 
-افتح مسألة في [صفحة المسائل](https://github.com/iSltanX/Raff/issues) مع:
-إصدار رفّ (من **الإعدادات ← حول**)، وإصدار macOS، وخطوات إعادة المشكلة.
+افتح مسألة في [صفحة المسائل](https://github.com/iSltanX/Raff/issues)، واذكر: إصدار رفّ (من **الإعدادات ← حول**)، وإصدار macOS، وخطوات إعادة المشكلة.
 
-> لا تُرفق محتوى حافظة خاصًا — ما تكتبه في المسألة يصبح علنيًا.
+</div>
+
+> [!CAUTION]
+> لا ترفق محتوى حافظة خاصًّا. ما تكتبه في المسألة يصير علنيًّا.
+
+<div dir="rtl">
+
+## الرخصة
+
+جميع الحقوق محفوظة. «رفّ» وهويته البصرية عمل شخصي غير مرخَّص للاستخدام أو إعادة التوزيع دون إذن.
 
 ---
 
@@ -211,8 +249,16 @@ tests/                  اختبارات السلوك وعقد الهوية
 
 <img src="docs/assets/raff-icon.png" alt="أيقونة رفّ" width="96">
 
-**تطوير وتصميم: سلطان** · Developed & Designed by Sultan
+**تصميم وتطوير: سلطان** · Designed & developed by Sultan
 
-جميع الحقوق محفوظة. «رفّ» وهويته البصرية عمل شخصي غير مرخَّص للاستخدام أو إعادة التوزيع دون إذن.
+الموقع: [bysltan.com](https://www.bysltan.com)
+
+من الصانع نفسه<br>
+تطبيقات macOS: [بدّل](https://github.com/iSltanX/Baddel) · [Luma](https://github.com/iSltanX/Luma) · [نفّذ](https://github.com/iSltanX/naffith)<br>
+إضافات المتصفح: [SnRead](https://github.com/iSltanX/SnRead) · [صَوْب](https://github.com/iSltanX/SAWB) · [جسور](https://github.com/iSltanX/Jusoor)
+
+<sub>[سجل التغييرات](CHANGELOG.md) · [الإصدارات](https://github.com/iSltanX/Raff/releases)</sub>
+
+</div>
 
 </div>
