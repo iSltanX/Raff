@@ -49,6 +49,16 @@ export const api = {
   openUpdates: () => invoke('open_updates'),
   // Capture status actions shared by the panel strip, Settings and the menu.
   resumeCapture: () => invoke('resume_capture'),
+  // In-app problem report: Rust builds, freezes, sends and copies.
+  openReport: () => invoke('open_report'),
+  reportPrepare: (kind, category, description) => invoke('report_prepare', { kind, category, description }),
+  reportSend: () => invoke('report_send'),
+  reportCopy: () => invoke('report_copy'),
+  reportCopyNumber: (id) => invoke('report_copy_number', { id }),
+  reportPickImage: () => invoke('report_pick_image'),
+  reportPasteImage: () => invoke('report_paste_image'),
+  reportRemoveImage: () => invoke('report_remove_image'),
+  diagnosticsCopy: () => invoke('diagnostics_copy'),
   restartApp: () => invoke('restart_app'),
 };
 

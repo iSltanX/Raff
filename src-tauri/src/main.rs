@@ -5,10 +5,13 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod commands;
+mod diagnostics;
 mod macos;
 mod monitor;
 mod panel;
 mod paste;
+mod report;
+mod report_image;
 mod startup_trace;
 mod storage;
 mod tray;
@@ -146,15 +149,32 @@ pub fn lock_store(store: &Mutex<storage::Store>) -> MutexGuard<'_, storage::Stor
         .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
+/// Debug builds only: `RAFF_DATA_DIR` points the store somewhere else, so a
+/// development run never reads or writes the installed رفّ's history.
+fn dev_data_dir() -> Option<std::path::PathBuf> {
+    #[cfg(debug_assertions)]
+    if let Some(dir) = std::env::var_os("RAFF_DATA_DIR").filter(|d| !d.is_empty()) {
+        return Some(std::path::PathBuf::from(dir));
+    }
+    None
+}
+
+/// Debug builds only: `RAFF_DEV_ISOLATED=1` runs beside the installed رفّ
+/// instead of handing the launch over to it (same bundle identifier).
+fn dev_isolated() -> bool {
+    cfg!(debug_assertions) && std::env::var("RAFF_DEV_ISOLATED").is_ok_and(|v| v == "1")
+}
+
 fn main() {
     startup_trace::init();
-    let mut app = tauri::Builder::default()
+    let mut builder = tauri::Builder::default();
+    if !dev_isolated() {
         // Must be the first plugin: a second launch exits immediately and this
         // callback runs in the surviving instance instead (no duplicate tray,
         // no second monitor thread writing the same JSON files).
         // `raff --settings` surfaces the settings window; any other relaunch
         // surfaces the panel.
-        .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
+        builder = builder.plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
             eprintln!("raff: relaunch forwarded, argv: {argv:?}");
             startup_trace::mark(&format!("SINGLE_INSTANCE_FORWARD argv={argv:?}"));
             if argv.iter().any(|a| a == "--settings") {
@@ -162,7 +182,9 @@ fn main() {
             } else {
                 panel::show(app);
             }
-        }))
+        }));
+    }
+    let mut app = builder
         .plugin(tauri_nspanel::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_autostart::init(
@@ -203,6 +225,15 @@ fn main() {
             commands::list_running_apps,
             commands::resume_capture,
             commands::restart_app,
+            commands::open_report,
+            report::report_prepare,
+            report::report_send,
+            report::report_copy,
+            report::report_copy_number,
+            report::report_pick_image,
+            report::report_paste_image,
+            report::report_remove_image,
+            report::diagnostics_copy,
             updater::check_for_update,
             updater::download_and_install_update,
             updater::restart_to_update,
@@ -221,6 +252,9 @@ fn main() {
                 api.prevent_close();
                 let _ = window.hide();
             }
+            // A report is forgotten with its window: the frozen payload, its
+            // key and the image never outlive what the user was looking at.
+            tauri::WindowEvent::Destroyed if window.label() == "report" => report::reset(),
             // Closing the welcome is an answer too: it does not come back on
             // every launch. «تم» marks it the same way, before closing.
             tauri::WindowEvent::Destroyed if window.label() == "firstrun" => {
@@ -236,7 +270,12 @@ fn main() {
         })
         .setup(|app| {
             startup_trace::mark("setup_enter");
-            let data_dir = app.path().app_data_dir()?;
+            diagnostics::init();
+            report::warm();
+            let data_dir = match dev_data_dir() {
+                Some(dir) => dir,
+                None => app.path().app_data_dir()?,
+            };
             startup_trace::mark("app_data_dir_resolved");
             let store = storage::Store::load(data_dir);
             startup_trace::mark("storage_loaded");

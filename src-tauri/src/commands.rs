@@ -165,15 +165,26 @@ pub fn search_items(state: State<AppState>, query: String) -> Vec<String> {
 
 #[tauri::command]
 pub async fn paste_item(app: AppHandle, id: String, plain: bool) -> Result<bool, String> {
-    paste::paste_item(&app, &id, plain).await
+    let began = std::time::Instant::now();
+    let result = paste::paste_item(&app, &id, plain).await;
+    let outcome = match result {
+        Ok(true) => "ok",
+        Ok(false) => "clipboard-only",
+        Err(_) => "error",
+    };
+    crate::diagnostics::record("paste", outcome, began);
+    result
 }
 
 #[tauri::command]
 pub fn copy_item(app: AppHandle, id: String) -> Result<(), String> {
+    let began = std::time::Instant::now();
     if paste::write_item_to_clipboard(&app, &id, false) {
         paste::bump_copy_signals(&app, &id);
+        crate::diagnostics::record("copy", "ok", began);
         Ok(())
     } else {
+        crate::diagnostics::record("copy", "not-found", began);
         Err(err::NOT_FOUND.into())
     }
 }
@@ -642,6 +653,12 @@ pub fn open_about(app: AppHandle) {
     open_about_window(&app);
 }
 
+/// «أبلغ عن مشكلة…» from Settings and the About window.
+#[tauri::command]
+pub fn open_report(app: AppHandle) {
+    open_report_window(&app);
+}
+
 pub fn open_settings_window(app: &AppHandle) {
     // Deferred one event-loop tick: never build a webview synchronously
     // inside the tray-menu callback (see open_window_when_ready).
@@ -670,6 +687,26 @@ pub fn open_about_window(app: &AppHandle) {
             "about.html",
             "عن رفّ",
             (320.0, 420.0),
+        );
+    });
+}
+
+/// «أبلغ عن مشكلة…» — Figma «10 — Reporting & Diagnostics» 276:8. Its own
+/// window, so a report never shares a webview with the clipboard's content.
+/// Deferred to the main thread like Settings (the menu can open it).
+pub fn open_report_window(app: &AppHandle) {
+    let handle = app.clone();
+    let _ = app.run_on_main_thread(move || {
+        // A new window starts a new report: nothing left over from the last.
+        if handle.get_webview_window("report").is_none() {
+            crate::report::reset();
+        }
+        open_window_when_ready(
+            &handle,
+            "report",
+            "report.html",
+            "أبلغ عن مشكلة",
+            (460.0, 600.0),
         );
     });
 }

@@ -109,6 +109,42 @@ el('done-btn').addEventListener('click', closeWindow);
 el('open-about').addEventListener('click', () => api.openAbout());
 el('settings-repo').addEventListener('click', () => api.openRepository().catch(() => {}));
 el('settings-privacy-policy').addEventListener('click', () => api.openPrivacyPolicy().catch(() => {}));
+el('settings-report').addEventListener('click', () => api.openReport().catch(() => {}));
+
+// «نسخ» puts the diagnostics JSON on the clipboard through Rust (which skips
+// its own write, so رفّ does not capture it). Nothing is sent. The row's own
+// line says what happened, then goes back to saying what is included.
+const diagnosticsBtn = el('settings-diagnostics');
+const diagnosticsSub = el('settings-diagnostics-sub');
+const diagnosticsStatus = el('settings-diagnostics-status');
+let diagnosticsTimer = null;
+
+let copyingDiagnostics = false;
+
+// The status line stays rendered (a live region unhidden and filled in one
+// tick is often missed); the description steps aside while it speaks.
+function showDiagnosticsStatus(text, { error = false } = {}) {
+  window.clearTimeout(diagnosticsTimer);
+  diagnosticsSub.hidden = Boolean(text);
+  diagnosticsStatus.textContent = text;
+  diagnosticsStatus.classList.toggle('error', error);
+}
+
+diagnosticsBtn.addEventListener('click', async () => {
+  // A guard, not `disabled`: disabling the focused button would drop focus.
+  if (copyingDiagnostics) return;
+  copyingDiagnostics = true;
+  try {
+    await api.diagnosticsCopy();
+    showDiagnosticsStatus('نُسخت معلومات التشخيص — الصقها حيث تشاء.');
+  } catch (err) {
+    console.error('raff: copying diagnostics failed', err);
+    showDiagnosticsStatus('تعذّر النسخ. حاول مرة أخرى.', { error: true });
+  } finally {
+    copyingDiagnostics = false;
+    diagnosticsTimer = window.setTimeout(() => showDiagnosticsStatus(''), 4000);
+  }
+});
 el('confirm-icon').replaceChildren(createIcon(ALERT));
 
 // ─── Load / sync ──────────────────────────────────────────────────────────

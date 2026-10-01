@@ -11,10 +11,13 @@ use objc2::rc::Retained;
 use objc2::runtime::AnyObject;
 use objc2::{define_class, msg_send, sel, AnyThread};
 use objc2_app_kit::{
-    NSApplicationActivationOptions, NSPasteboard, NSRunningApplication, NSWorkspace,
-    NSWorkspaceApplicationKey, NSWorkspaceDidActivateApplicationNotification,
+    NSApplicationActivationOptions, NSModalResponseOK, NSOpenPanel, NSPasteboard,
+    NSRunningApplication, NSWorkspace, NSWorkspaceApplicationKey,
+    NSWorkspaceDidActivateApplicationNotification,
 };
-use objc2_foundation::{MainThreadMarker, NSData, NSNotification, NSObject, NSObjectProtocol, NSString};
+use objc2_foundation::{
+    MainThreadMarker, NSArray, NSData, NSNotification, NSObject, NSObjectProtocol, NSString,
+};
 
 /// True when the caller is already on the AppKit main thread.
 ///
@@ -59,6 +62,7 @@ const TYPE_HTML: &str = "public.html";
 const TYPE_RTF: &str = "public.rtf";
 const TYPE_PNG: &str = "public.png";
 const TYPE_TIFF: &str = "public.tiff";
+const TYPE_FILE_URL: &str = "public.file-url";
 
 /// Rich representations larger than this are not stored (keeps the JSON store lean).
 const MAX_RICH_BYTES: usize = 256 * 1024;
@@ -173,6 +177,59 @@ pub fn write_clip(
         accepted |= pb.setData_forType(Some(&NSData::with_bytes(p)), &NSString::from_str(TYPE_PNG));
     }
     accepted.then(|| pb.changeCount())
+}
+
+/// «اختر صورة…» in the report window: a native open panel limited to the
+/// formats a report takes. Main thread only. The path stays in Rust — the
+/// webview never learns it, and the report never carries it.
+pub fn choose_image_file() -> Option<String> {
+    let mtm = MainThreadMarker::new()?;
+    let panel = NSOpenPanel::openPanel(mtm);
+    panel.setCanChooseFiles(true);
+    panel.setCanChooseDirectories(false);
+    panel.setAllowsMultipleSelection(false);
+    panel.setPrompt(Some(&NSString::from_str("إرفاق")));
+    // `allowedContentTypes` takes UTType, a crate رفّ does not ship; the
+    // extension list filters the same, and the bytes are sniffed regardless.
+    let extensions = ["png", "jpg", "jpeg"].map(NSString::from_str);
+    #[allow(deprecated)]
+    panel.setAllowedFileTypes(Some(&NSArray::from_retained_slice(&extensions)));
+    if panel.runModal() != NSModalResponseOK {
+        return None;
+    }
+    panel.URL()?.path().map(|p| p.to_string())
+}
+
+/// What a paste in the report window found on the pasteboard.
+pub enum PastedImage {
+    Image(Vec<u8>),
+    /// A file copied in Finder: its pasteboard image is the file's icon, not
+    /// the picture, so it is not attached — «اختر صورة…» picks the file.
+    File,
+    Nothing,
+}
+
+/// A paste in the report window: the pasteboard's image, read at that moment
+/// and for that purpose only. Content an app marked secret is never read.
+pub fn read_image_for_report() -> PastedImage {
+    if has_concealed_type() {
+        return PastedImage::Nothing;
+    }
+    let pb = NSPasteboard::generalPasteboard();
+    let is_file = pb
+        .types()
+        .is_some_and(|types| types.iter().any(|t| t.to_string() == TYPE_FILE_URL));
+    if is_file {
+        return PastedImage::File;
+    }
+    [TYPE_PNG, TYPE_TIFF]
+        .iter()
+        .find_map(|t| {
+            pb.dataForType(&NSString::from_str(t))
+                .filter(|d| !d.is_empty() && d.len() <= crate::report_image::MAX_INPUT_BYTES)
+                .map(|d| d.to_vec())
+        })
+        .map_or(PastedImage::Nothing, PastedImage::Image)
 }
 
 pub fn frontmost_app() -> FrontApp {

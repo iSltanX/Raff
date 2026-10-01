@@ -12,8 +12,8 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const project = path.join(here, '..');
 const read = (file) => readFileSync(path.join(project, file), 'utf8');
 
-const CSS = ['tokens.css', 'controls.css', 'panel.css', 'settings.css', 'about.css', 'update.css', 'firstrun.css'];
-const HTML = ['index.html', 'settings.html', 'about.html', 'update.html', 'firstrun.html'];
+const CSS = ['tokens.css', 'controls.css', 'panel.css', 'settings.css', 'about.css', 'update.css', 'firstrun.css', 'report.css'];
+const HTML = ['index.html', 'settings.html', 'about.html', 'update.html', 'firstrun.html', 'report.html'];
 
 function block(css, selector) {
   const match = css.match(new RegExp(`${selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\{([^}]*)\\}`, 'u'));

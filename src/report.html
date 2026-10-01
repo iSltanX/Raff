@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <title>أبلغ عن مشكلة</title>
+  <script src="theme.js"></script>
+  <link rel="stylesheet" href="tokens.css" />
+  <link rel="stylesheet" href="controls.css" />
+  <link rel="stylesheet" href="report.css" />
+</head>
+<body>
+  <!-- Figma «10 — Reporting & Diagnostics»: compose 276:8, preview 277:146,
+       results 278:243. Nothing is sent before «إرسال»; the payload shown in
+       the preview is the one Rust froze and will send. -->
+  <main class="report" id="report">
+    <header class="title-bar" data-tauri-drag-region>
+      <span class="title-bar-title" id="window-title" data-tauri-drag-region>أبلغ عن مشكلة</span>
+    </header>
+
+    <!-- ─── Compose ───────────────────────────────────────────────────── -->
+    <section class="view scroll-pane" id="view-compose" aria-labelledby="window-title">
+      <p class="intro">صف المشكلة أو الاقتراح. سترى كل ما سيُرسل قبل الإرسال، ولا يُرسل شيء من حافظتك.</p>
+
+      <div class="field">
+        <span class="field-label" id="kind-label">نوع البلاغ</span>
+        <div class="kinds" id="kinds" role="radiogroup" aria-labelledby="kind-label">
+          <button type="button" class="kind" role="radio" aria-checked="false" data-kind="bug" tabindex="0">خلل</button>
+          <button type="button" class="kind" role="radio" aria-checked="false" data-kind="crash" tabindex="-1">تعطّل</button>
+          <button type="button" class="kind" role="radio" aria-checked="false" data-kind="suggestion" tabindex="-1">اقتراح</button>
+          <button type="button" class="kind" role="radio" aria-checked="false" data-kind="other" tabindex="-1">أخرى</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <label class="field-label" for="category">الجزء المعني (اختياري)</label>
+        <div class="select-wrap">
+          <select class="select" id="category">
+            <option value="">غير محدد</option>
+            <option value="panel">اللوحة</option>
+            <option value="search">البحث</option>
+            <option value="paste">اللصق</option>
+            <option value="hotkey">الاختصار وفتح اللوحة</option>
+            <option value="capture">الالتقاط</option>
+            <option value="settings">الإعدادات</option>
+            <option value="updates">التحديثات</option>
+            <option value="other">غير ذلك</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="field">
+        <label class="field-label" for="description">الوصف</label>
+        <textarea
+          class="textarea"
+          id="description"
+          rows="5"
+          dir="rtl"
+          spellcheck="true"
+          placeholder="صف ما حدث وما توقّعت أن يحدث. لا تكتب محتوى خاصًّا."
+          aria-describedby="description-count"
+        ></textarea>
+        <div class="field-foot">
+          <span class="field-error" id="description-error" role="alert" hidden>الوصف أطول من ١٠٠٠ حرف. اختصره ليُفعَّل «التالي».</span>
+          <span class="counter" id="description-count">٠ / ١٠٠٠<span class="sr-only"> حرف</span></span>
+        </div>
+      </div>
+
+      <div class="attachment" id="attachment" data-state="empty">
+        <span class="attachment-art" id="attachment-art" aria-hidden="true"></span>
+        <img class="attachment-thumb" id="attachment-thumb" alt="" hidden />
+        <div class="attachment-info" role="status">
+          <span class="attachment-title" id="attachment-title">صورة (اختيارية)</span>
+          <span class="attachment-detail" id="attachment-detail">PNG أو JPEG من ملف، أو الصقها بـ <bdi>⌘V</bdi> هنا. لا تُلتقط الشاشة.</span>
+        </div>
+        <button type="button" class="btn" id="attach-choose">اختر صورة…</button>
+        <button type="button" class="btn btn-quiet" id="attach-remove" hidden>إزالة</button>
+      </div>
+    </section>
+
+    <!-- ─── Preview ───────────────────────────────────────────────────── -->
+    <section class="view scroll-pane" id="view-preview" aria-labelledby="preview-title" tabindex="0" hidden>
+      <h1 class="sr-only" id="preview-title">معاينة البلاغ</h1>
+      <div class="callout">
+        <span class="callout-icon" id="preview-info-icon" aria-hidden="true"></span>
+        <div class="callout-body">
+          <span class="callout-title">هذا كل ما سيُرسل</span>
+          <p class="callout-text" id="preview-destination"></p>
+        </div>
+      </div>
+      <p class="not-included">لا يتضمن: محتوى الحافظة، البحث، المثبّتات، أسماء التطبيقات أو النوافذ، المسارات، قائمة الاستثناءات، أي معرّف دائم لك أو لجهازك.</p>
+      <p class="test-badge" id="preview-test" hidden>بلاغ تجريبي — نسخة تطوير (<bdi>test: true</bdi>)</p>
+
+      <h2 class="section-title">البلاغ</h2>
+      <dl class="card fields" id="preview-report"></dl>
+      <div class="quote" id="preview-description" dir="auto"></div>
+
+      <div id="preview-image-section" hidden>
+        <h2 class="section-title">المرفق</h2>
+        <div class="card image-row">
+          <img class="preview-image" id="preview-image" alt="الصورة المرفقة كما ستُرسل" />
+          <p class="image-meta" id="preview-image-meta"></p>
+        </div>
+      </div>
+
+      <h2 class="section-title">عن الجهاز والتطبيق</h2>
+      <dl class="card fields" id="preview-envelope"></dl>
+      <p class="caption"><bdi>Idempotency-Key</bdi> عشوائي لهذا البلاغ وحده: يمنع تسجيله مرتين، ولا يعرّفك ولا يعرّف جهازك.</p>
+
+      <h2 class="section-title">التشخيص (<bdi>diagnostics</bdi>)</h2>
+      <pre class="json" id="preview-diagnostics" dir="ltr"></pre>
+    </section>
+
+    <!-- ─── Result ────────────────────────────────────────────────────── -->
+    <section class="view result" id="view-result" hidden>
+      <div class="result-success" id="result-success" hidden>
+        <span class="success-tile" id="success-icon" aria-hidden="true"></span>
+        <h1 class="result-title" id="result-title" tabindex="-1">وصل بلاغك</h1>
+        <div class="report-number">
+          <span class="report-number-label">رقم البلاغ</span>
+          <span class="report-number-value" id="report-number" dir="ltr"></span>
+          <button type="button" class="btn" id="copy-number">نسخ الرقم</button>
+        </div>
+        <p class="result-text">هذا الرقم هو مرجعك الوحيد: لا حساب ولا بريد. احتفظ به إن أردت الإشارة إلى البلاغ أو طلب حذفه.</p>
+      </div>
+      <div class="callout" id="result-problem" hidden>
+        <span class="callout-icon" id="result-problem-icon" aria-hidden="true"></span>
+        <div class="callout-body">
+          <h1 class="callout-title" id="result-problem-title" tabindex="-1"></h1>
+          <p class="callout-text" id="result-problem-text"></p>
+        </div>
+      </div>
+      <p class="result-note" id="result-note" hidden></p>
+    </section>
+
+    <p class="status-line" id="status-line" role="status"></p>
+
+    <footer class="footer" id="footer">
+      <button type="button" class="btn btn-quiet" id="cancel">إلغاء</button>
+      <button type="button" class="btn btn-quiet" id="back" hidden>رجوع</button>
+      <button type="button" class="btn" id="copy-report" hidden>نسخ البلاغ</button>
+      <button type="button" class="btn" id="retry" hidden>إعادة المحاولة</button>
+      <button type="button" class="btn btn-primary" id="next" disabled>التالي: المعاينة</button>
+      <button type="button" class="btn btn-primary" id="send" hidden>إرسال</button>
+      <button type="button" class="btn btn-primary" id="done" hidden>تم</button>
+    </footer>
+  </main>
+  <script type="module" src="js/report.js"></script>
+</body>
+</html>

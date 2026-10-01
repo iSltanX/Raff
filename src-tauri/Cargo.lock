@@ -1857,6 +1857,8 @@ dependencies = [
  "num-traits",
  "png 0.18.1",
  "tiff",
+ "zune-core",
+ "zune-jpeg",
 ]
 
 [[package]]
@@ -2922,6 +2924,8 @@ dependencies = [
  "objc2",
  "objc2-app-kit",
  "objc2-foundation",
+ "reqwest",
+ "rustls",
  "serde",
  "serde_json",
  "tauri",

@@ -179,6 +179,13 @@ define_class!(
             }
         }
 
+        #[unsafe(method(openReport:))]
+        fn open_report(&self, _sender: Option<&AnyObject>) {
+            if let Some(app) = APP.get() {
+                commands::open_report_window(app);
+            }
+        }
+
         #[unsafe(method(openAbout:))]
         fn open_about(&self, _sender: Option<&AnyObject>) {
             if let Some(app) = APP.get() {
@@ -361,6 +368,7 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
     menu.addItem(&NSMenuItem::separatorItem(mtm));
     menu.addItem(&new_item("الإعدادات…", Some(sel!(openSettings:)), ","));
     menu.addItem(&new_item("التحقق من التحديثات…", Some(sel!(checkUpdates:)), ""));
+    menu.addItem(&new_item("أبلغ عن مشكلة…", Some(sel!(openReport:)), ""));
     menu.addItem(&new_item("عن رفّ", Some(sel!(openAbout:)), ""));
     menu.addItem(&NSMenuItem::separatorItem(mtm));
     menu.addItem(&new_item("إنهاء رفّ", Some(sel!(quitApp:)), "q"));

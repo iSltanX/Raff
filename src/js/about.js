@@ -64,6 +64,10 @@ el('privacy-link').addEventListener('click', () => {
   api.openPrivacyPolicy().catch(() => {});
 });
 
+el('report-btn').addEventListener('click', () => {
+  api.openReport().catch(() => {});
+});
+
 // ─── Update check — Actions-Bottom (2:8072) ───────────────────────────────
 
 // The line stays rendered (its room is reserved): a live region unhidden and
