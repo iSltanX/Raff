@@ -9,3 +9,8 @@ DerivedData/
 xcuserdata/
 /Sultan-Visual-Identity.zip
 *.zip
+
+# Working files: kept on the maintainer's disk (working rules, status, decisions,
+# Figma→code map, reporting spec, test matrix), not in the public tree.
+/CLAUDE.md
+/docs/internal/
