@@ -23,6 +23,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSy
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { styleDmg } from './dmg-layout.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const project = path.join(here, '..');
@@ -85,6 +86,8 @@ const dmgPath = path.join(bundleDmg, dmgName);
       'create', '-ov', '-fs', 'HFS+', '-volname', 'Raff',
       '-srcfolder', staging, '-format', 'UDRW', rwDmg,
     ]);
+    // The designed installer window (scripts/dmg-layout.mjs), on the same image.
+    styleDmg(rwDmg);
     if (existsSync(dmgPath)) rmSync(dmgPath, { force: true });
     run('hdiutil', ['convert', rwDmg, '-format', 'UDZO', '-imagekey', 'zlib-level=9', '-o', dmgPath]);
   } finally {

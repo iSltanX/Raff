@@ -1,0 +1,88 @@
+<!doctype html>
+<!--
+  The DMG window background — رفّ's installer, 660 × 420 pt.
+  Design source only: `npm run dmg:background` renders it (1× and 2×) and
+  packs background.tiff, which scripts/dmg-layout.mjs puts in the DMG.
+  Colours, fonts, radii and the marks come from the app itself (src/).
+  Finder draws Raff.app and the Applications link on top, at the centres
+  of the two dashed frames (dmg-layout.mjs: ICON_CENTRES), with their labels.
+-->
+<html lang="ar" dir="rtl" data-appearance="light">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../../src/tokens.css">
+<style>
+  html, body { margin: 0; width: 660px; height: 420px; overflow: hidden; }
+  body {
+    position: relative;
+    background: linear-gradient(180deg, var(--bg-raised) 0%, var(--bg-window) 62%, var(--bg-canvas) 100%);
+    color: var(--ink);
+    font-family: var(--font-ar);
+    -webkit-font-smoothing: antialiased;
+  }
+  .abs { position: absolute; }
+
+  /* Header: the Latin name at the start of a Latin reader's eye, the Arabic one at ours. */
+  .brand { top: 22px; display: flex; align-items: center; gap: 9px; height: 32px; }
+  .brand-latin { left: 30px; direction: ltr; font: 700 21px var(--font-latin); letter-spacing: -0.2px; }
+  .brand-latin .glyph { width: 24px; height: 24px; }
+  .brand-ar { right: 30px; font-size: 25px; font-weight: 700; }
+  .brand-ar img { width: 30px; height: 30px; }
+
+  /* Where Finder puts the two icons. */
+  .frame {
+    width: 148px; height: 148px; top: 113px; box-sizing: border-box;
+    border-radius: 30px;
+    border: 1.5px dashed var(--line-input);
+    opacity: 0.55;
+    background: rgba(255, 255, 255, 0.35);
+  }
+  .frame.app { left: 96px; }
+  .frame.apps { left: 416px; }
+
+  /* The idea, behind everything: a shelf the two items rest above. */
+  .shelf { left: 64px; right: 64px; top: 283px; height: 3px; border-radius: 2px; background: var(--line-strong); opacity: 0.7; }
+
+  .arrow { left: 0; top: 0; width: 660px; height: 420px; }
+
+  /* Three steps, read right to left. */
+  .steps {
+    left: 24px; right: 24px; top: 296px; height: 104px; box-sizing: border-box;
+    display: flex; direction: rtl;
+    background: var(--bg-raised);
+    border-radius: var(--radius-lg);
+    box-shadow: 0 0 0 1px var(--line-edge), 0 6px 18px rgba(0, 0, 0, 0.05);
+  }
+  .step { flex: 1; min-width: 0; padding: 12px 12px 0; display: grid; grid-template-columns: 20px 1fr; column-gap: 8px; align-content: start; }
+  .step + .step { box-shadow: inset -1px 0 0 var(--line); }
+  .num {
+    width: 20px; height: 20px; border-radius: 50%;
+    display: grid; place-items: center;
+    background: var(--accent); color: var(--on-accent);
+    font: 700 11px var(--font-latin);
+  }
+  .ar { font-size: 12px; font-weight: 600; line-height: 1.5; text-align: right; margin-top: -1px; }
+  .en { grid-column: 2; margin-top: 3px; direction: ltr; text-align: right; font: 400 10px/1.4 var(--font-latin); color: var(--ink-3); }
+  bdi { font-family: var(--font-latin); }
+</style>
+</head>
+<body>
+  <div class="abs brand brand-latin"><span class="glyph" style="display:inline-block;background:url('../../src/assets/brand/mark.svg') center/contain no-repeat"></span>Raff</div>
+  <div class="abs brand brand-ar"><img src="../../src/assets/app-icon/raff-app-icon-1024.png" alt="">رفّ</div>
+
+  <div class="abs shelf"></div>
+  <div class="abs frame app"></div>
+  <div class="abs frame apps"></div>
+
+  <svg class="abs arrow" viewBox="0 0 660 420" aria-hidden="true">
+    <path d="M 262 206 Q 330 158 396 196" fill="none" stroke="var(--brand-sage)" stroke-width="3.5" stroke-linecap="round"/>
+    <path d="M 381 182 L 398 197 L 377 202" fill="none" stroke="var(--brand-sage)" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>
+
+  <div class="abs steps">
+    <div class="step"><span class="num">1</span><div class="ar">اسحب رفّ إلى «التطبيقات»</div><div class="en">Drag Raff to Applications</div></div>
+    <div class="step"><span class="num">2</span><div class="ar">افتحه من «التطبيقات»</div><div class="en">Open it from Applications</div></div>
+    <div class="step"><span class="num">3</span><div class="ar">إن نبّهك <bdi>macOS</bdi>: «افتح على أي حال» من الخصوصية والأمن</div><div class="en">If macOS warns: Privacy &amp; Security → Open Anyway</div></div>
+  </div>
+</body>
+</html>
