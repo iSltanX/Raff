@@ -241,7 +241,17 @@ pub async fn check_for_update(app: AppHandle) -> Result<UpdateCheck, String> {
         inner.pending = None; // a fresh check supersedes any prior result
     }
 
+    let began = std::time::Instant::now();
     let outcome = do_check(&app).await;
+    crate::diagnostics::record(
+        "update-check",
+        match &outcome {
+            Ok(Some(_)) => "available",
+            Ok(None) => "ok",
+            Err(_) => "error",
+        },
+        began,
+    );
 
     let state = app.state::<UpdaterState>();
     let mut inner = state.inner.lock().unwrap();

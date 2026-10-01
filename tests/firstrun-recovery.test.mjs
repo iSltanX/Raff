@@ -111,10 +111,11 @@ test('first-run permission polling backs off and recovers without unhandled reje
   assert.match(status.textContent, /تم منح الإذن/u);
   assert.equal(dom.window.document.getElementById('open-settings').disabled, true);
   assert.equal(dom.window.document.getElementById('later').disabled, true);
-  assert.deepEqual(timers.snapshot().map((timer) => timer.delay), [1200]);
-
-  await timers.runNext();
-  assert.equal(finished, 1);
+  // A granted permission ends the polling and nothing else: the welcome no
+  // longer closes itself on a timer (gap ١أ, Gate 1 2026-10-01). The capture
+  // question and «إنهاء» remain the user's.
+  assert.deepEqual(timers.snapshot(), [], 'no timer is left to close the window');
+  assert.equal(finished, 0);
   assert.deepEqual(uncaught, []);
 
   const source = readFileSync(path.join(here, '../src/js/firstrun.js'), 'utf8');

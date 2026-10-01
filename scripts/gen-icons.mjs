@@ -1,12 +1,16 @@
-// Builds every bundled icon from the رفّ brand masters.
+// Builds every bundled icon from the رفّ brand masters, all exported from the
+// Figma file (j3EzLpDw4tIHQQSRQm8ZDM, page «03 — Identity»):
 //
-//   src/assets/app-icon/raff-app-icon-1024.png  ← Figma «brand/app-icon»; one
-//       artwork for every appearance (a floating shelf holding «المثبّت» upright
-//       and «الأخير» leaning on it). Corners stay transparent.
-//   src/assets/brand/menubar.svg                ← 18pt template glyph.
+//   src/assets/app-icon/raff-app-icon.svg       ← «Brand/App Icon v5 (flat)»
+//       252:3987; one artwork for every appearance: a solid plate, «المثبّت»
+//       upright in ink and «الأخير» leaning on it in sage. The only shadow is
+//       the standard macOS icon shadow. Rendered to the 1024 PNG master.
+//   src/assets/brand/menubar*.svg               ← «Menu Bar/Glyph 18» 252:51,
+//       four template states: capturing (the leaning card), paused (‖ in its
+//       place), off (no card), fault (! in its place). No alpha dimming.
 //   src/assets/brand/icon-layer-*.svg           ← Icon Composer masks for the
 //       macOS 26+ asset catalog (src-tauri/icon-composer/AppIcon.icon), tinted
-//       ink and sage identically in Light and Dark.
+//       by icon.json identically in Light and Dark.
 //
 //   npm run icons
 import { Resvg } from '@resvg/resvg-js';
@@ -15,6 +19,7 @@ import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSy
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+const MASTER_SVG = 'src/assets/app-icon/raff-app-icon.svg';
 const MASTER = 'src/assets/app-icon/raff-app-icon-1024.png';
 
 const render = (svgPath, width, outPath) => {
@@ -24,6 +29,8 @@ const render = (svgPath, width, outPath) => {
 };
 
 mkdirSync('src-tauri/icons', { recursive: true });
+
+render(MASTER_SVG, 1024, MASTER);
 
 // Tauri's own generator derives the .icns and every PNG size from the master.
 const generated = mkdtempSync(join(tmpdir(), 'raff-tauri-icons-'));
@@ -41,8 +48,15 @@ try {
   rmSync(generated, { recursive: true, force: true });
 }
 
-// AppKit derives every menu-bar appearance from this one alpha mask (@2x).
-render('src/assets/brand/menubar.svg', 36, 'src-tauri/icons/tray.png');
+// AppKit derives every menu-bar appearance from these alpha masks (@2x).
+for (const [svg, png] of [
+  ['menubar.svg', 'tray.png'],
+  ['menubar-paused.svg', 'tray-paused.png'],
+  ['menubar-off.svg', 'tray-off.png'],
+  ['menubar-fault.svg', 'tray-fault.png'],
+]) {
+  render(`src/assets/brand/${svg}`, 36, `src-tauri/icons/${png}`);
+}
 
 render('src/assets/brand/icon-layer-shelf.svg', 1024, 'src-tauri/icon-composer/AppIcon.icon/Assets/shelf.png');
 render('src/assets/brand/icon-layer-recent.svg', 1024, 'src-tauri/icon-composer/AppIcon.icon/Assets/recent.png');

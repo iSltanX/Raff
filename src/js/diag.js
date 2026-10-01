@@ -5,8 +5,8 @@
 // error names). `detail` is stringified defensively and clamped, so even a
 // mistaken caller cannot spill a clip into the buffer.
 //
-// The buffer is in-memory only — nothing is written to disk and nothing
-// leaves the machine, matching Raff's zero-network rule.
+// The buffer is in-memory only — nothing is written to disk, nothing leaves
+// the machine, and a problem report never reads it.
 
 const MAX_ENTRIES = 120;
 const MAX_DETAIL_CHARS = 120;

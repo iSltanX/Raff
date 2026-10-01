@@ -1,4 +1,5 @@
-/* First run — one permission, explained once, calmly. */
+/* The welcome — five calm steps in a 460×520 window (Figma 273:8). Each step
+   fits without scrolling; the footer never moves. */
 
 html,
 body {
@@ -10,29 +11,48 @@ body {
 .firstrun {
   display: flex;
   flex-direction: column;
-  justify-content: center;
   height: 100vh;
-  padding: 36px 32px 24px;
+  padding: var(--space-32) 0 0;
+}
+
+.step {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-12);
+  min-height: 0;
+  padding: 0 var(--space-32);
+  text-align: center;
 }
 
 .figure {
-  width: 88px;
-  height: 88px;
-  margin: 0 auto 10px;
+  width: 96px;
+  height: 96px;
+}
+
+.figure.is-small {
+  width: 72px;
+  height: 72px;
 }
 
 .title {
-  margin: 0 0 6px;
-  font-size: 20px;
+  margin: 0;
+  font-size: var(--text-display);
   font-weight: 700;
-  text-align: center;
+  line-height: 1.5;
+}
+
+.title:focus {
+  outline: none;
 }
 
 .body-text {
-  margin: 0 0 16px;
+  max-width: 388px;
+  margin: 0;
   font-size: var(--text-body);
   color: var(--ink-2);
-  text-align: center;
 }
 
 .body-text strong {
@@ -40,121 +60,227 @@ body {
   color: var(--ink);
 }
 
-.privacy-note {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 12px 14px;
-  border-radius: var(--radius-lg);
-  background: var(--success-soft);
+/* Step 1 — the two layers, as the mark draws them. */
+.layers {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-12);
+  width: 100%;
+  margin-top: var(--space-8);
 }
 
-.privacy-note p {
+.layer {
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-12);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--bg-raised);
+  text-align: start;
+  font-size: var(--text-caption);
+  color: var(--ink-2);
+}
+
+.layer strong {
+  font-size: var(--text-body);
+  color: var(--ink);
+}
+
+.layer.is-recent strong {
+  color: var(--accent-ink);
+}
+
+/* Step 2 — the way in. Keycaps read ⇧⌘V left to right even in RTL. */
+.keys {
+  display: flex;
+  gap: var(--space-6);
+}
+
+.keys kbd {
+  min-width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  font-size: 18px;
+  color: var(--ink);
+}
+
+.legend {
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+  padding: var(--space-12) var(--space-16);
+  border-radius: var(--radius-lg);
+  background: var(--bg-sunken);
+  text-align: start;
+}
+
+.legend ul {
+  display: grid;
+  gap: var(--space-2);
   margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--text-small);
+  color: var(--ink);
+}
+
+.legend .is-quiet {
+  color: var(--ink-2);
+}
+
+.legend-glyph {
+  order: 2;
+  width: 36px;
+  height: 36px;
+  flex: none;
+  background: var(--ink);
+  -webkit-mask: url('assets/brand/menubar.svg') center / contain no-repeat;
+  mask: url('assets/brand/menubar.svg') center / contain no-repeat;
+}
+
+/* Step 3 — the decision is the way forward. */
+.choices {
+  display: grid;
+  gap: var(--space-8);
+  width: 100%;
+  max-width: 388px;
+  margin-top: var(--space-8);
+}
+
+.choices .btn {
+  min-height: 34px;
+}
+
+.step .callout {
+  width: 100%;
+  max-width: 388px;
+  text-align: start;
+}
+
+/* Step 4 — optional permission. */
+.step-glyph {
+  color: var(--accent-ink);
+}
+
+.step-glyph .icon {
+  width: 40px;
+  height: 40px;
+}
+
+.steps {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-4) var(--space-12);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: step;
   font-size: var(--text-small);
   color: var(--ink-2);
 }
 
-.shield {
-  color: var(--success);
-}
-
-.shield .icon {
-  width: 20px;
-  height: 20px;
-}
-
-.steps {
-  display: grid;
-  gap: 10px;
-  margin: 18px 0 0;
-  padding: 0;
-  list-style: none;
-}
-
 .steps li {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: var(--text-body);
+  counter-increment: step;
 }
 
-.step-num {
-  display: grid;
-  place-items: center;
-  width: 24px;
-  height: 24px;
-  flex: none;
-  border-radius: 50%;
-  background: var(--accent-soft);
-  font-size: var(--text-small);
-  font-weight: 700;
-  color: var(--accent-ink);
-}
-
-.actions {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 8px;
-  margin-top: 28px;
-}
-
-.btn.big {
-  min-height: 34px;
+.steps li::before {
+  content: counter(step, arabic-indic) '. ';
+  color: var(--ink-3);
 }
 
 .permission-status {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-top: 12px;
+  gap: var(--space-8);
   font-size: var(--text-small);
-  color: var(--ink-3);
+  color: var(--ink-2);
 }
 
 .permission-status.is-error {
-  color: var(--danger);
+  color: var(--ink-2);
 }
 
-/* The capture question and the "how to open رفّ" note are their own blocks —
-   separated from the permission above by a rule, because neither is a
-   consequence of granting it. */
-.capture-consent,
-.completion {
-  margin-top: 20px;
-  padding-top: 18px;
-  border-top: 1px solid var(--line);
-}
-
-.consent-title {
-  margin: 0 0 6px;
-  font-size: var(--text-body);
-  font-weight: 600;
-  text-align: center;
-}
-
-.capture-consent .body-text,
-.completion .body-text {
-  margin-bottom: 0;
+.privacy-line {
+  margin: 0;
   font-size: var(--text-small);
+  color: var(--ink-2);
 }
 
-.capture-consent .actions,
-.completion .actions {
-  margin-top: 14px;
+/* Step 5 — what you chose, not a general promise. */
+.summary {
+  display: grid;
+  gap: var(--space-6);
+  width: 100%;
+  max-width: 388px;
+  margin: 0;
+  padding: var(--space-12) var(--space-16);
+  border-radius: var(--radius-lg);
+  background: var(--bg-sunken);
+  list-style: none;
+  text-align: start;
+  font-size: var(--text-small);
+  color: var(--ink-2);
 }
 
-.completion .actions {
-  grid-template-columns: 1fr;
+.summary li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+}
+
+.summary li .icon {
+  color: var(--ink-3);
+}
+
+.summary li.is-on {
+  color: var(--ink);
+}
+
+.summary li.is-on .icon {
+  color: var(--success);
+}
+
+.finish-error {
+  margin: 0;
+  font-size: var(--text-small);
+  color: var(--danger-ink);
 }
 
 .completion kbd {
-  padding: 1px 5px;
-  border-radius: var(--radius-sm);
-  background: var(--bg-sunken);
-  font-family: inherit;
+  padding: 1px var(--space-6);
   font-size: var(--text-small);
-  font-weight: 600;
   color: var(--ink);
+}
+
+/* ─── Footer: dots at the reading start, actions at the end ───────────── */
+
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-12) var(--space-20) var(--space-16);
+}
+
+.actions {
+  display: flex;
+  gap: var(--space-8);
+}
+
+.progress {
+  display: flex;
+  gap: var(--space-6);
+}
+
+.progress span {
+  width: 6px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--line-strong);
+  transition: width var(--t-base) var(--ease);
+}
+
+.progress span.is-current {
+  width: 18px;
+  background: var(--accent);
 }

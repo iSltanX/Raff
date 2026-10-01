@@ -2,81 +2,129 @@
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="utf-8" />
-  <title>رفّ</title>
+  <title>مرحبًا بك في رفّ</title>
   <script src="theme.js"></script>
   <link rel="stylesheet" href="tokens.css" />
   <link rel="stylesheet" href="controls.css" />
   <link rel="stylesheet" href="firstrun.css" />
 </head>
 <body>
-  <main class="firstrun">
-    <img class="figure" id="figure" src="assets/app-icon.png" width="88" height="88" alt="" aria-hidden="true" />
+  <!-- Figma «09 — Onboarding» 273:8. Five steps, each fits the 460×520
+       window. Nothing here closes by itself: the capture answer and the
+       optional permission are separate, and only «إنهاء»/«افتح رفّ الآن» end it. -->
+  <main class="firstrun" id="firstrun">
+    <section class="step" id="step-idea" data-step="1" aria-labelledby="idea-title">
+      <img class="figure" id="figure" src="assets/app-icon.png" width="96" height="96" alt="" aria-hidden="true" />
+      <h1 class="title" id="idea-title">رفّك القريب لكل ما نسخت</h1>
+      <p class="body-text">يحفظ رفّ ما تنسخه على جهازك، ويعيده إليك بضغطة من أي تطبيق.</p>
+      <div class="layers">
+        <div class="layer">
+          <strong>المثبّت</strong>
+          <span>ما تختار إبقاءه، لا يُحذف مهما طال السجل.</span>
+        </div>
+        <div class="layer is-recent">
+          <strong>الأخير</strong>
+          <span>كل ما نسخته: نصوص وروابط وشفرات وصور.</span>
+        </div>
+      </div>
+    </section>
 
-    <h1 class="title">رفّ يحتاج إذنًا واحدًا</h1>
-    <p class="body-text">
-      لكي يلصق رفّ المحتوى في التطبيقات الأخرى تلقائيًا عند الضغط على ⏎،
-      يحتاج إلى إذن <strong>تسهيل الوصول</strong> في إعدادات النظام.
-    </p>
+    <!-- رفّ has no Dock icon and no ⌘Tab entry, so the way in is taught
+         before any question. -->
+    <section class="step" id="step-open" data-step="2" aria-labelledby="open-title" hidden>
+      <h2 class="title" id="open-title">افتحه من أي مكان</h2>
+      <div class="keys" dir="ltr" role="img" aria-label="الاختصار ⇧⌘V">
+        <kbd>⇧</kbd><kbd>⌘</kbd><kbd>V</kbd>
+      </div>
+      <p class="body-text">يفتح اللوحة فوق ما تعمل عليه. يمكنك تغييره من الإعدادات.</p>
+      <div class="legend">
+        <span class="legend-glyph" aria-hidden="true"></span>
+        <ul>
+          <li>نقرة على الرمز في شريط القوائم: اللوحة</li>
+          <li>نقرة يمنى: القائمة والإيقاف المؤقت</li>
+          <li class="is-quiet">تغيب البطاقة من الرمز حين يتوقف الحفظ</li>
+        </ul>
+      </div>
+    </section>
 
-    <div class="privacy-note">
-      <span class="shield" id="shield"></span>
-      <p>
-        رفّ خاص بالكامل — لا يُغادر شيء من بياناتك جهازك، ولا حساب، ولا سحابة.
-        إذن تسهيل الوصول مطلوب للصق فقط، وليس لرصد نشاطك.
-      </p>
-    </div>
-
-    <ol class="steps">
-      <li><span class="step-num">١</span>افتح إعدادات النظام</li>
-      <li><span class="step-num">٢</span>انتقل إلى الخصوصية والأمان › تسهيل الوصول</li>
-      <li><span class="step-num">٣</span>فعّل رفّ في القائمة</li>
-    </ol>
-
-    <div class="actions">
-      <button class="btn btn-primary big" id="open-settings">فتح إعدادات النظام</button>
-      <button class="btn big" id="later">لاحقًا</button>
-    </div>
-
-    <!-- The monitor is already running by the time this window appears, and
-         capture defaults to on. Saying so, and offering the other answer, is
-         the difference between a default and a decision. Deliberately not
-         tied to the permission above: manual paste works without it. -->
-    <section class="capture-consent" id="capture-consent" aria-labelledby="capture-consent-title">
-      <h2 class="consent-title" id="capture-consent-title">يلتقط رفّ ما تنسخه الآن</h2>
+    <!-- The monitor already runs and capture defaults to on (kept at Gate 1);
+         saying so, and offering the other answer, is what makes it a decision. -->
+    <section class="step capture-consent" id="capture-consent" data-step="3" aria-labelledby="capture-consent-title" hidden>
+      <h2 class="title" id="capture-consent-title">يلتقط رفّ ما تنسخه الآن</h2>
       <p class="body-text">
-        كل ما تنسخه يُحفظ على جهازك وحده. يمكنك إيقاف الالتقاط الآن وتشغيله
-        لاحقًا من الإعدادات متى شئت.
+        كل ما تنسخه يُحفظ على جهازك وحده، ويُتجاهل تلقائيًا ما تعلّمه مديرات كلمات
+        المرور والتطبيقات بأنه سرّي أو مؤقت. أبقِه يعمل أو أوقفه؛ وتغيّر رأيك من
+        الإعدادات متى شئت.
       </p>
-      <div class="actions">
-        <button class="btn btn-primary" id="capture-accept">ابدأ الالتقاط</button>
-        <button class="btn" id="capture-decline">أبقِه متوقفًا</button>
+      <div class="callout" data-tone="danger" id="capture-error" role="alert" hidden>
+        <span class="callout-icon" id="capture-error-icon" aria-hidden="true"></span>
+        <div class="callout-body">
+          <span class="callout-title">لم يتوقف الالتقاط</span>
+          <p class="callout-text">لم يُحفظ قرارك، ورفّ ما زال يلتقط ما تنسخه. حاول مرة أخرى، أو أوقفه من الإعدادات.</p>
+        </div>
+      </div>
+      <div class="choices">
+        <button class="btn btn-primary" id="capture-accept">أبقِه يعمل</button>
+        <button class="btn" id="capture-decline">أوقفه</button>
       </div>
     </section>
 
-    <!-- Separate from the permission block on purpose: رفّ has no Dock icon
-         and no ⌘Tab entry, so how to open it is its own thing to learn, not a
-         consequence of granting anything. -->
-    <section class="completion" id="completion" role="status" aria-live="polite" aria-atomic="true" hidden>
-      <h2 class="consent-title">رفّ جاهز</h2>
+    <section class="step permission" id="step-permission" data-step="4" aria-labelledby="permission-title" hidden>
+      <span class="step-glyph" id="permission-glyph" aria-hidden="true"></span>
+      <h2 class="title" id="permission-title">اللصق التلقائي — اختياري</h2>
+      <p class="body-text">
+        بإذن <strong>تسهيل الوصول</strong> يلصق رفّ العنصر في التطبيق الذي كنت فيه.
+        بدونه يبقى كل شيء يعمل: يُنسخ العنصر وتلصقه أنت بـ <bdi>⌘V</bdi>.
+      </p>
+      <div class="callout" data-tone="success" id="permission-granted" hidden>
+        <span class="callout-icon" id="permission-granted-icon" aria-hidden="true"></span>
+        <div class="callout-body">
+          <span class="callout-title" id="permission-granted-title">الإذن ممنوح</span>
+          <p class="callout-text">سيلصق رفّ نيابةً عنك.</p>
+        </div>
+      </div>
+      <ol class="steps" id="permission-steps">
+        <li>افتح إعدادات النظام</li>
+        <li>الخصوصية والأمن › تسهيل الوصول</li>
+        <li>فعّل رفّ في القائمة</li>
+      </ol>
+      <div
+        class="permission-status"
+        id="permission-status"
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+        hidden
+      >
+        <span id="permission-status-text"></span>
+        <button type="button" class="btn" id="permission-retry" hidden>إعادة التحقق</button>
+      </div>
+      <p class="privacy-line">هذا الإذن للصق فقط، لا لرصد نشاطك.</p>
+    </section>
+
+    <section class="step completion" id="completion" data-step="5" role="status" aria-live="polite" aria-atomic="true" hidden>
+      <img class="figure is-small" src="assets/app-icon.png" width="72" height="72" alt="" aria-hidden="true" />
+      <h2 class="title">رفّ جاهز</h2>
       <p class="body-text" id="completion-text">
-        افتحه في أي وقت بـ <kbd>⇧⌘V</kbd>، أو من أيقونته في شريط القوائم أعلى الشاشة.
+        انسخ أي شيء، ثم افتح رفّ بـ <kbd>⇧⌘V</kbd> أو من رمزه في شريط القوائم أعلى الشاشة.
       </p>
-      <div class="actions">
-        <button class="btn btn-primary" id="open-raff">افتح رفّ الآن</button>
-      </div>
+      <ul class="summary" id="completion-summary"></ul>
+      <p class="finish-error" id="finish-error" role="alert" hidden>تعذّر إكمال الإعداد. حاول مرة أخرى.</p>
     </section>
 
-    <div
-      class="permission-status"
-      id="permission-status"
-      role="status"
-      aria-live="polite"
-      aria-atomic="true"
-      hidden
-    >
-      <span id="permission-status-text"></span>
-      <button type="button" class="btn permission-retry" id="permission-retry" hidden>إعادة التحقق</button>
-    </div>
+    <footer class="footer">
+      <div class="progress" id="progress" aria-hidden="true">
+        <span></span><span></span><span></span><span></span><span></span>
+      </div>
+      <div class="actions">
+        <button class="btn btn-quiet" id="back" hidden>رجوع</button>
+        <button class="btn" id="later" hidden>تخطَّ</button>
+        <button class="btn" id="open-settings" hidden>منح الإذن…</button>
+        <button class="btn" id="finish" hidden>إنهاء</button>
+        <button class="btn btn-primary" id="next">التالي</button>
+        <button class="btn btn-primary" id="open-raff" hidden>افتح رفّ الآن</button>
+      </div>
+    </footer>
   </main>
   <script type="module" src="js/firstrun.js"></script>
 </body>

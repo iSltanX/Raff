@@ -86,6 +86,8 @@ pub struct StatePayload {
     /// False once the capture loop has given up. Distinct from
     /// `settings.capture_enabled`, which only says what the user asked for.
     pub capture_alive: bool,
+    /// A pause in force, if any — its kind and minutes left, nothing it skipped.
+    pub capture_pause: crate::PauseView,
 }
 
 /// What the Settings window actually needs: the preferences and the two states
@@ -101,6 +103,11 @@ pub struct SettingsPayload {
     pub ax_trusted: bool,
     pub version: String,
     pub capture_alive: bool,
+    pub capture_pause: crate::PauseView,
+}
+
+fn pause_view(state: &AppState) -> crate::PauseView {
+    crate::lock_pause(&state.pause).view()
 }
 
 #[tauri::command]
@@ -111,6 +118,7 @@ pub fn get_settings(app: AppHandle, state: State<AppState>) -> SettingsPayload {
         ax_trusted: ax_trusted_noted(),
         version: app.package_info().version.to_string(),
         capture_alive: state.capture_alive.load(std::sync::atomic::Ordering::SeqCst),
+        capture_pause: pause_view(&state),
     }
 }
 
@@ -128,6 +136,7 @@ pub fn get_state(app: AppHandle, state: State<AppState>) -> StatePayload {
         version: app.package_info().version.to_string(),
         unreadable_layer: store.unreadable_layer,
         capture_alive: state.capture_alive.load(std::sync::atomic::Ordering::SeqCst),
+        capture_pause: pause_view(&state),
     }
 }
 
@@ -156,15 +165,26 @@ pub fn search_items(state: State<AppState>, query: String) -> Vec<String> {
 
 #[tauri::command]
 pub async fn paste_item(app: AppHandle, id: String, plain: bool) -> Result<bool, String> {
-    paste::paste_item(&app, &id, plain).await
+    let began = std::time::Instant::now();
+    let result = paste::paste_item(&app, &id, plain).await;
+    let outcome = match result {
+        Ok(true) => "ok",
+        Ok(false) => "clipboard-only",
+        Err(_) => "error",
+    };
+    crate::diagnostics::record("paste", outcome, began);
+    result
 }
 
 #[tauri::command]
 pub fn copy_item(app: AppHandle, id: String) -> Result<(), String> {
+    let began = std::time::Instant::now();
     if paste::write_item_to_clipboard(&app, &id, false) {
         paste::bump_copy_signals(&app, &id);
+        crate::diagnostics::record("copy", "ok", began);
         Ok(())
     } else {
+        crate::diagnostics::record("copy", "not-found", began);
         Err(err::NOT_FOUND.into())
     }
 }
@@ -359,9 +379,31 @@ pub fn update_settings(
     if settings.follow_system != old.follow_system || settings.appearance != old.appearance {
         sync_appearance(&app);
     }
+    crate::tray::note_capture_enabled(settings.capture_enabled);
 
     notify(&app);
     Ok(())
+}
+
+/// Turns capture on or off from outside Settings (the menu bar's «تفعيل
+/// الالتقاط»), through the same validated, persisted path.
+pub fn set_capture_enabled(app: &AppHandle, enabled: bool) -> Result<(), String> {
+    let state = app.state::<AppState>();
+    let mut next = crate::lock_store(&state.store).settings.clone();
+    next.capture_enabled = enabled;
+    update_settings(app.clone(), state, next)
+}
+
+/// Ends a pause from the panel strip or Settings.
+#[tauri::command]
+pub fn resume_capture() {
+    crate::tray::resume_capture();
+}
+
+/// «إعادة تشغيل رفّ» — the remedy when the capture loop has stopped.
+#[tauri::command]
+pub fn restart_app(app: AppHandle) {
+    app.restart();
 }
 
 fn validate_settings(settings: &Settings) -> Result<(), String> {
@@ -593,6 +635,12 @@ pub fn open_repository() {
     macos::open_repository();
 }
 
+/// Opens PRIVACY.md. Takes no argument, like `open_repository`.
+#[tauri::command]
+pub fn open_privacy_policy() {
+    macos::open_privacy_policy();
+}
+
 /// The panel header's gear (Figma «08», Header-Actions 2:7695).
 #[tauri::command]
 pub fn open_settings(app: AppHandle) {
@@ -603,6 +651,12 @@ pub fn open_settings(app: AppHandle) {
 #[tauri::command]
 pub fn open_about(app: AppHandle) {
     open_about_window(&app);
+}
+
+/// «أبلغ عن مشكلة…» from Settings and the About window.
+#[tauri::command]
+pub fn open_report(app: AppHandle) {
+    open_report_window(&app);
 }
 
 pub fn open_settings_window(app: &AppHandle) {
@@ -632,7 +686,27 @@ pub fn open_about_window(app: &AppHandle) {
             "about",
             "about.html",
             "عن رفّ",
-            (320.0, 360.0),
+            (320.0, 420.0),
+        );
+    });
+}
+
+/// «أبلغ عن مشكلة…» — Figma «10 — Reporting & Diagnostics» 276:8. Its own
+/// window, so a report never shares a webview with the clipboard's content.
+/// Deferred to the main thread like Settings (the menu can open it).
+pub fn open_report_window(app: &AppHandle) {
+    let handle = app.clone();
+    let _ = app.run_on_main_thread(move || {
+        // A new window starts a new report: nothing left over from the last.
+        if handle.get_webview_window("report").is_none() {
+            crate::report::reset();
+        }
+        open_window_when_ready(
+            &handle,
+            "report",
+            "report.html",
+            "أبلغ عن مشكلة",
+            (460.0, 600.0),
         );
     });
 }

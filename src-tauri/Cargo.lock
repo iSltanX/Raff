@@ -1857,6 +1857,8 @@ dependencies = [
  "num-traits",
  "png 0.18.1",
  "tiff",
+ "zune-core",
+ "zune-jpeg",
 ]
 
 [[package]]
@@ -2912,7 +2914,7 @@ checksum = "f8dcc9c7d52a811697d2151c701e0d08956f92b0e24136cf4cf27b57a6a0d9bf"
 
 [[package]]
 name = "raff"
-version = "5.1.0"
+version = "6.0.0"
 dependencies = [
  "base64 0.22.1",
  "core-foundation",
@@ -2922,6 +2924,8 @@ dependencies = [
  "objc2",
  "objc2-app-kit",
  "objc2-foundation",
+ "reqwest",
+ "rustls",
  "serde",
  "serde_json",
  "tauri",

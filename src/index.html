@@ -64,6 +64,13 @@
       <button type="button" class="segment" data-filter="pinned" role="tab" aria-selected="false" aria-controls="list" tabindex="-1">مثبّت</button>
     </div>
 
+    <!-- Figma Panel Status Strip 283:402: shown only while رفّ is not saving. -->
+    <div class="capture-strip" id="capture-strip" role="status" hidden>
+      <span class="capture-strip-icon" id="capture-strip-icon" aria-hidden="true"></span>
+      <span class="capture-strip-text" id="capture-strip-text"></span>
+      <button type="button" class="capture-strip-action" id="capture-strip-action"></button>
+    </div>
+
     <div class="items-list" id="list" role="region" aria-label="حالة عناصر الحافظة" aria-busy="true"></div>
 
     <span class="sr-only" id="feedback-announcer" role="status" aria-live="polite" aria-atomic="true"></span>

@@ -17,6 +17,16 @@ export const KEYBOARD = asset('keyboard');
 export const SHIELD = asset('shield');
 export const MOVE_UP = asset('move-up');
 export const MOVE_DOWN = asset('move-down');
+export const PAUSE = asset('pause');
+export const CAPTURE_OFF = asset('capture-off');
+export const ACCESSIBILITY = asset('accessibility');
+export const REPORT = asset('report');
+export const COPY = asset('copy');
+export const ATTACH_IMAGE = asset('attach-image');
+export const RETRY = asset('retry');
+export const CLOCK = asset('clock');
+export const DIAGNOSTICS = asset('diagnostics');
+export const ABOUT = asset('about');
 
 export const CONTENT_TYPE_ICONS = Object.freeze({
   text: Object.freeze({ asset: asset('text'), label: 'نص' }),

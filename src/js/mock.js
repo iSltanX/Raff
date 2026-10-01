@@ -37,6 +37,11 @@ const RECENT = [
   item('r7', 'link', 'https://github.com/iSltanX/Raff/releases/latest', 'Safari', 'com.apple.Safari', 30 * HOUR),
 ];
 
+// Design review: `?pause=timed` (or skipNext / untilRestart) shows the
+// capture strip; `?capture=off` shows capture turned off.
+const params = new URLSearchParams(globalThis.location?.search ?? '');
+let MOCK_PAUSE = params.get('pause') ?? 'off';
+
 let pendingDelete = null;
 let deleteSequence = 0;
 
@@ -44,14 +49,55 @@ const SETTINGS = {
   hotkey: 'shift+super+v',
   launchAtLogin: false,
   historyLimit: 500,
-  captureEnabled: true,
+  captureEnabled: params.get('capture') !== 'off',
   respectConcealed: true,
   excludedApps: ['com.1password.1password'],
   learningEnabled: true,
   firstRunShown: false,
   appearance: 'light',
   followSystem: true,
+  retentionDays: 0,
 };
+
+const MOCK_DIAGNOSTICS = {
+  schema: 1,
+  build: 'debug',
+  accessibility: 'granted',
+  capture: { enabled: true, alive: true, paused: 'off' },
+  settings: {
+    historyLimit: 500,
+    retentionDays: 0,
+    appearance: 'system',
+    launchAtLogin: false,
+    learningEnabled: true,
+    respectConcealed: true,
+    excludedCount: 1,
+    hotkeyIsDefault: true,
+  },
+  counts: { history: 7, pinned: 1 },
+  storage: { unreadableLayer: false },
+  recent: [{ op: 'paste', result: 'ok', ms: 180, agoS: 40 }],
+  uptimeS: 5400,
+};
+
+const MOCK_SEND = {
+  sent: { status: 'sent', id: 128 },
+  failed: { status: 'failed', reason: 'network' },
+  limited: { status: 'rateLimited', retryAfterS: 1500 },
+  rejected: { status: 'rejected', code: 400, error: 'invalid_field', field: 'os_version' },
+};
+
+// A neutral grey square, so the attachment states can be reviewed.
+const MOCK_IMAGE = {
+  mime: 'image/png',
+  bytes: 284_312,
+  width: 1280,
+  height: 800,
+  thumb:
+    'data:image/svg+xml;utf8,' +
+    encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="160" height="100"><rect width="160" height="100" fill="#d9d9d9"/></svg>'),
+};
+let mockImage = null;
 
 export function mockInvoke(cmd, args = {}) {
   switch (cmd) {
@@ -61,8 +107,24 @@ export function mockInvoke(cmd, args = {}) {
         history: RECENT,
         settings: SETTINGS,
         axTrusted: true,
-        version: '5.1.0',
+        version: '6.0.0',
+        captureAlive: true,
+        capturePause: { kind: MOCK_PAUSE, minutesLeft: MOCK_PAUSE === 'timed' ? 12 : null },
+        unreadableLayer: false,
       }));
+    case 'get_settings':
+      return Promise.resolve(structuredClone({
+        settings: SETTINGS,
+        axTrusted: false,
+        version: '6.0.0',
+        captureAlive: true,
+        capturePause: { kind: MOCK_PAUSE, minutesLeft: MOCK_PAUSE === 'timed' ? 12 : null },
+      }));
+    case 'resume_capture':
+      MOCK_PAUSE = 'off';
+      return Promise.resolve(null);
+    case 'restart_app':
+      return Promise.resolve(null);
     case 'paste_item':
       return Promise.resolve(true);
     case 'toggle_pin': {
@@ -133,8 +195,8 @@ export function mockInvoke(cmd, args = {}) {
     case 'check_for_update':
       return Promise.resolve({
         status: 'available',
-        currentVersion: '5.1.0',
-        version: '5.1.0',
+        currentVersion: '6.0.0',
+        version: '6.0.1',
         date: '2026-10-01',
         notes: 'تحسينات في الأداء وإصلاحات متفرّقة.\nدعم إعادة التشغيل بعد التحديث.',
       });
@@ -143,6 +205,35 @@ export function mockInvoke(cmd, args = {}) {
       return Promise.resolve(null);
     case 'consume_update_intent':
       return Promise.resolve(false); // no tray in the browser
+
+    // Report window. `?send=sent|failed|limited|rejected` picks the answer.
+    case 'report_prepare':
+      return Promise.resolve({
+        kind: args.kind,
+        category: args.category,
+        description: args.description.trim(),
+        appVersion: '6.0.0',
+        os: 'macos',
+        osVersion: '15.4',
+        arch: 'arm64',
+        locale: 'ar',
+        test: true,
+        idempotencyKey: '3f6c1a52-8e0b-4c7d-9a14-2b5e7d90c831',
+        diagnosticsJson: JSON.stringify(MOCK_DIAGNOSTICS, null, 2),
+        image: mockImage,
+        endpointHost: 'app-reports.isultantf.workers.dev',
+      });
+    case 'report_send':
+      return new Promise((resolve) =>
+        setTimeout(() => resolve(MOCK_SEND[params.get('send') ?? 'sent'] ?? MOCK_SEND.sent), 600)
+      );
+    case 'report_pick_image':
+    case 'report_paste_image':
+      mockImage = MOCK_IMAGE;
+      return new Promise((resolve) => setTimeout(() => resolve(MOCK_IMAGE), 400));
+    case 'report_remove_image':
+      mockImage = null;
+      return Promise.resolve(null);
 
     default:
       return Promise.resolve(null);

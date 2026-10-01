@@ -148,7 +148,9 @@ fn poll_once(app: &AppHandle, last: &mut isize) {
         let still_active = pause.is_active();
         drop(pause);
         if was_active && !still_active {
-            tray::note_paused(false);
+            tray::sync_paused();
+            // The panel and Settings show the pause; tell them it ended.
+            let _ = app.emit("raff://changed", ());
         }
         if skip {
             return;

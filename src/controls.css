@@ -1,12 +1,15 @@
-/* Shared controls: buttons, keycaps, scroll panes. Colour only via tokens. */
+/* Shared controls: buttons, keycaps, callouts, scroll panes. Colour only via
+   tokens. Figma «05 — Components & States»: Button 254:138, Keycap 254:71,
+   Callout 259:260. */
 
 .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: var(--space-6);
+  min-width: 64px;
   min-height: 28px;
-  padding: 0 14px;
+  padding: 0 var(--space-16);
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
   background: var(--bg-raised);
@@ -14,28 +17,27 @@
   font-weight: 500;
   font-size: var(--text-body);
   white-space: nowrap;
-  transition: background var(--t-fast) var(--ease), opacity var(--t-fast) var(--ease);
+  transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
 }
 
+/* Hover and press are a translucent wash over the button's own surface. */
 .btn:hover:not(:disabled) {
-  background: var(--bg-hover);
+  background: linear-gradient(var(--bg-hover), var(--bg-hover)), var(--bg-raised);
 }
 
 .btn:active:not(:disabled) {
-  background: var(--bg-sunken);
-}
-
-.btn:disabled {
-  opacity: 0.45;
+  background: linear-gradient(var(--bg-pressed), var(--bg-pressed)), var(--bg-raised);
 }
 
 .btn-primary {
   border-color: transparent;
   background: var(--accent);
+  box-shadow: none;
   color: var(--on-accent);
 }
 
-.btn-primary:hover:not(:disabled) {
+.btn-primary:hover:not(:disabled),
+.btn-primary:active:not(:disabled) {
   background: var(--accent-hover);
 }
 
@@ -45,8 +47,70 @@
   box-shadow: none;
 }
 
+.btn-quiet:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+
+.btn-quiet:active:not(:disabled) {
+  background: var(--bg-pressed);
+}
+
 .btn-danger {
-  color: var(--danger);
+  color: var(--danger-ink);
+}
+
+.btn-danger-fill {
+  border-color: transparent;
+  background: var(--danger);
+  box-shadow: none;
+  color: var(--on-danger);
+}
+
+.btn-danger-fill:hover:not(:disabled),
+.btn-danger-fill:active:not(:disabled) {
+  background: var(--danger);
+}
+
+/* Disabled is a state of its own, not a faded enabled button: a pale sage
+   fill in Dark otherwise still reads as pressable. */
+.btn:disabled {
+  border-color: transparent;
+  box-shadow: none;
+  color: var(--ink-disabled);
+}
+
+.btn-primary:disabled,
+.btn-danger-fill:disabled {
+  background: var(--bg-sunken);
+}
+
+/* Busy is not dead: a busy button is disabled to stop a second press, but it
+   keeps its own colours so «جارٍ الإرسال…» reads as work in progress. */
+.btn[aria-busy='true']:disabled {
+  color: var(--ink-2);
+}
+
+.btn-primary[aria-busy='true']:disabled {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+/* Busy: a spinner leads the label (reading start) and the button is inert. */
+.btn[aria-busy='true']::before {
+  content: '';
+  width: 12px;
+  height: 12px;
+  flex: none;
+  border: 1.5px solid currentColor;
+  border-inline-start-color: transparent;
+  border-radius: 50%;
+  animation: btn-spin 0.8s linear infinite;
+}
+
+@keyframes btn-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 kbd {
@@ -55,7 +119,7 @@ kbd {
   justify-content: center;
   min-width: 20px;
   height: 18px;
-  padding: 0 5px;
+  padding: 0 var(--space-6);
   border-radius: var(--radius-xs);
   background: var(--bg-sunken);
   font-size: var(--text-caption);
@@ -63,7 +127,52 @@ kbd {
   line-height: 1;
   color: var(--ink-2);
   direction: ltr;
+  unicode-bidi: isolate;
 }
+
+/* One status system: tone + icon + one wording wherever a state appears. */
+.callout {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-12);
+  padding: var(--space-12);
+  border-radius: var(--radius-lg);
+  background: var(--bg-sunken);
+}
+
+.callout-icon {
+  margin-top: var(--space-2);
+  color: var(--ink-2);
+}
+
+.callout-body {
+  display: grid;
+  flex: 1;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.callout-title {
+  font-size: var(--text-small);
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.callout-text {
+  margin: 0;
+  font-size: var(--text-small);
+  color: var(--ink-2);
+}
+
+.callout[data-tone='success'] { background: var(--success-soft); }
+.callout[data-tone='success'] .callout-icon { color: var(--success); }
+.callout[data-tone='success'] .callout-title { color: var(--success-ink); }
+.callout[data-tone='warning'] { background: var(--warning-soft); }
+.callout[data-tone='warning'] .callout-icon { color: var(--warning); }
+.callout[data-tone='warning'] .callout-title { color: var(--warning-ink); }
+.callout[data-tone='danger'] { background: var(--danger-soft); }
+.callout[data-tone='danger'] .callout-icon { color: var(--danger); }
+.callout[data-tone='danger'] .callout-title { color: var(--danger-ink); }
 
 .scroll-pane {
   overflow-y: auto;
@@ -76,6 +185,6 @@ kbd {
 
 ::-webkit-scrollbar-thumb {
   border: 2px solid transparent;
-  border-radius: 8px;
+  border-radius: var(--space-8);
   background: var(--line-strong) padding-box;
 }

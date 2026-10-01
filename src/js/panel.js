@@ -20,6 +20,8 @@ import {
   IMAGE,
   MOVE_UP,
   MOVE_DOWN,
+  PAUSE,
+  CAPTURE_OFF,
   contentTypeIcon,
   createIcon,
 } from './icons.js';
@@ -41,6 +43,7 @@ const toastUndoEl = document.getElementById('toast-undo');
 const toastActionEl = document.getElementById('toast-action');
 const footerHintEl = document.getElementById('footer-hint');
 const filtersEl = document.getElementById('filters');
+const captureStripEl = document.getElementById('capture-strip');
 const settingsBtn = document.getElementById('settings-btn');
 const closeBtn = document.getElementById('panel-close');
 
@@ -58,6 +61,7 @@ let filter = 'all';
 let selectedId = null;
 let visible = []; // flat filtered list, newest first
 const thumbs = new Map(); // item id → data URL
+const missingThumbs = new Set(); // ids whose image file is gone, until the next refresh
 const optimisticDeletedIds = new Set();
 const optimisticPins = new Map(); // item id → { generation, value }
 const optimisticRestores = new Map(); // item id → deleted-row snapshot during Undo IPC
@@ -74,6 +78,7 @@ const DELETE_TOAST_MS = 5000;
 /** Longer than PIN_TOAST_MS: this toast carries a button the user needs time
  * to read and act on, not just a status line to glance at. */
 const ACCESS_TOAST_MS = 6000;
+let offeredAccessibility = false;
 const TOAST_EXIT_MS = 120;
 
 // The list area has three distinct states and they must never be confused:
@@ -219,11 +224,14 @@ function failureView() {
   );
   const action = document.createElement('button');
   action.type = 'button';
-  action.className = 'state-action';
+  action.className = 'btn';
   action.id = 'failure-reload';
   action.textContent = 'إعادة تحميل الواجهة';
   action.addEventListener('click', () => hardReload('failure-view'));
-  view.append(action);
+  const hint = document.createElement('div');
+  hint.className = 'state-hint';
+  hint.textContent = 'أو \u2066⌘R\u2069';
+  view.append(action, hint);
   return view;
 }
 
@@ -271,13 +279,20 @@ function buildRow(item, index) {
     img.addEventListener('load', () => {
       thumb.dataset.state = 'ready';
     });
-    img.addEventListener('error', () => {
-      thumb.dataset.state = 'unavailable';
-    });
+    img.addEventListener('error', () => markThumbUnavailable(thumb));
     if (thumbs.has(item.id)) img.src = thumbs.get(item.id);
-    else requestThumb(item.id, img, thumb);
+    else if (missingThumbs.has(item.id)) {
+      thumb.dataset.state = 'unavailable';
+      row.classList.add('is-image-missing');
+    } else requestThumb(item.id, img, thumb);
     thumb.append(placeholder, img);
-    preview.append(thumb);
+    const media = document.createElement('div');
+    media.className = 'preview-media';
+    const missing = document.createElement('span');
+    missing.className = 'preview-missing';
+    missing.textContent = 'الصورة غير متاحة';
+    media.append(thumb, missing);
+    preview.append(media);
   } else {
     // «08» renders text and code identically — Cairo Medium 12, right-aligned,
     // with dir=auto letting a Latin snippet read left-to-right in place. Only
@@ -531,16 +546,20 @@ function renderList() {
       // as gone, which is the opposite of what happened.
       listEl.append(
         stateView(
-          null,
+          ALERT,
           'تعذّرت قراءة سجلّك',
           'محتواك لم يُفقد، واحتفظ رفّ بنسخة منه جانبًا. ما تنسخه من الآن يُحفظ كالمعتاد.',
           'is-unreadable'
         )
       );
+    } else if (captureStatus()?.blocking) {
+      // Empty AND not saving: «سيظهر هنا فورًا» would be a promise رفّ is not
+      // keeping right now (Figma 284:1938). The strip above names the cause.
+      listEl.append(
+        stateView(BRAND, 'رفّك فارغ', 'الالتقاط لا يعمل الآن، فلن يظهر هنا ما تنسخه حتى يعود.')
+      );
     } else {
       // Genuinely nothing saved yet — never shown for a failed fetch.
-      // Copy is «08» COMPONENT 69:397 "State=Empty" verbatim; v4.0 had drifted
-      // to its own wording, which the approved composition never carried.
       listEl.append(
         stateView(BRAND, 'رفّك جاهز', 'انسخ أي نص أو رابط أو صورة، وسيظهر هنا فورًا.')
       );
@@ -561,6 +580,92 @@ function renderList() {
   listEl.append(fragment);
   syncActiveOption();
   scrollSelectedIntoView();
+}
+
+// ─── Capture status (Figma Panel Status Strip 283:402) ────────────────────
+
+/**
+ * What the panel says when رفّ is not saving, or null when it is. Same order,
+ * tone and wording as the menu bar and Settings: a capture loop that died
+ * outranks capture the user turned off, which outranks a pause.
+ * `blocking` is false for «skip the next copy» — everything after it saves.
+ */
+function captureStatus() {
+  if (state.captureAlive === false) {
+    return {
+      tone: 'danger',
+      icon: ALERT,
+      text: 'توقّف الالتقاط — لا يُحفظ ما تنسخه',
+      action: { label: 'إعادة تشغيل رفّ', run: () => api.restartApp() },
+      blocking: true,
+    };
+  }
+  if (state.settings && state.settings.captureEnabled === false) {
+    return {
+      tone: 'info',
+      icon: CAPTURE_OFF,
+      text: 'الالتقاط معطّل — لا يُحفظ ما تنسخه',
+      action: { label: 'تفعيل', run: enableCapture },
+      blocking: true,
+    };
+  }
+  const pause = state.capturePause;
+  if (pause && pause.kind && pause.kind !== 'off') {
+    const text =
+      pause.kind === 'skipNext'
+        ? 'سيتجاهل رفّ النسخة التالية'
+        : pause.kind === 'timed'
+          ? pause.minutesLeft
+            ? `الالتقاط موقوف — يُستأنف بعد ${arabicDigits(pause.minutesLeft)} د`
+            : 'الالتقاط موقوف مؤقتًا'
+          : 'الالتقاط موقوف حتى إعادة التشغيل';
+    return {
+      tone: 'warning',
+      icon: PAUSE,
+      text,
+      action: { label: 'استئناف', run: () => api.resumeCapture().then(() => refresh()) },
+      blocking: pause.kind !== 'skipNext',
+    };
+  }
+  return null;
+}
+
+function enableCapture() {
+  if (!state.settings) return Promise.resolve();
+  return api
+    .updateSettings({ ...state.settings, captureEnabled: true })
+    .then(() => refresh())
+    .catch((err) => showToast(errorMessage(err), PIN_TOAST_MS, 'error'));
+}
+
+let shownStripText = null;
+
+function renderCaptureStrip() {
+  if (!captureStripEl) return;
+  const status = phase === 'ready' ? captureStatus() : null;
+  if (!status) {
+    captureStripEl.hidden = true;
+    shownStripText = null;
+    return;
+  }
+  // render() runs on every keystroke; a live region rewritten each time would
+  // re-announce. Touch it only when what it says changes.
+  if (status.text === shownStripText && !captureStripEl.hidden) return;
+  shownStripText = status.text;
+  captureStripEl.hidden = false;
+  captureStripEl.dataset.tone = status.tone;
+  captureStripEl.setAttribute('role', status.tone === 'danger' ? 'alert' : 'status');
+  document.getElementById('capture-strip-icon').replaceChildren(createIcon(status.icon));
+  document.getElementById('capture-strip-text').textContent = status.text;
+  const action = document.getElementById('capture-strip-action');
+  action.textContent = status.action.label;
+  action.onclick = () => {
+    action.disabled = true;
+    Promise.resolve(status.action.run()).finally(() => {
+      action.disabled = false;
+      searchEl.focus({ preventScroll: true });
+    });
+  };
 }
 
 /** Footer copy and the clear button follow the current view state. */
@@ -624,6 +729,7 @@ function syncShortcutBar() {
  */
 function render() {
   try {
+    renderCaptureStrip();
     renderList();
   } catch (err) {
     diag('render:threw', err);
@@ -703,11 +809,20 @@ async function loadThumb(id, img, thumb) {
       thumbs.set(id, url);
       img.src = url;
     } else {
-      thumb.dataset.state = 'unavailable';
+      markThumbUnavailable(thumb);
     }
   } catch {
-    thumb.dataset.state = 'unavailable';
+    markThumbUnavailable(thumb);
   }
+}
+
+/** A stored image whose file is gone says so beside its placeholder.
+ *  A class, not :has() — WebKit 15 on macOS 12 has no :has(). */
+function markThumbUnavailable(thumb) {
+  thumb.dataset.state = 'unavailable';
+  const row = thumb.closest('.row');
+  row?.classList.add('is-image-missing');
+  if (row?.dataset.id) missingThumbs.add(row.dataset.id);
 }
 
 function scrollSelectedIntoView() {
@@ -978,7 +1093,7 @@ function togglePinItem(id, { restoreFocus = false } = {}) {
 const ERROR_MESSAGES = {
   'raff/not-found': 'لم يعد هذا العنصر موجودًا.',
   'raff/save-failed': 'تعذّر حفظ التغيير. حاول مرة أخرى.',
-  'raff/paste-failed': 'تعذّر اللصق. المحتوى على الحافظة، الصقه بـ ⌘V.',
+  'raff/paste-failed': 'تعذّر اللصق. المحتوى على الحافظة، الصقه بـ \u2066⌘V\u2069.',
 };
 
 /**
@@ -1084,9 +1199,12 @@ function paste(id, plain) {
         // Treat an unknown status as "assume trusted" — the plain fallback
         // below still lands the item on the clipboard either way.
       }
-      if (!trusted) {
+      // The permission is optional: offer it once per session, not on every
+      // paste — after that the toast only says where the item is.
+      if (!trusted && !offeredAccessibility) {
+        offeredAccessibility = true;
         showToast(
-          'نُسخ إلى الحافظة — الصقه بـ ⌘V. للصق التلقائي مستقبلًا، امنح رفّ إذن تسهيل الوصول.',
+          'نُسخ إلى الحافظة — الصقه بـ \u2066⌘V\u2069. للصق التلقائي، فعّل إذن تسهيل الوصول.',
           ACCESS_TOAST_MS,
           'success',
           {
@@ -1098,7 +1216,7 @@ function paste(id, plain) {
           }
         );
       } else {
-        showToast('نُسخ إلى الحافظة — الصقه بـ ⌘V');
+        showToast('نُسخ إلى الحافظة — الصقه بـ \u2066⌘V\u2069');
       }
     })
     .catch((err) => showToast(errorMessage(err), PIN_TOAST_MS, 'error'));
@@ -1550,6 +1668,8 @@ window.addEventListener('focusout', () => queueMicrotask(syncShortcutBar));
 // ─── Events from Rust ─────────────────────────────────────────────────────
 
 on('raff://changed', () => {
+  // A re-copied image heals its row; ask for missing thumbnails again.
+  missingThumbs.clear();
   if (!isShown) {
     // The show path below refreshes before the panel appears, so a capture
     // nobody can see costs nothing until it is worth something.

@@ -1,1 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024"><rect x="164" y="655" width="696.6" height="117.3" rx="22" fill="#fff"/><rect x="292.4" y="251.8" width="154" height="403.3" rx="30" fill="#fff"/></svg>
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path id="shelf" d="M737 640H287C262.147 640 242 660.147 242 685C242 709.853 262.147 730 287 730H737C761.853 730 782 709.853 782 685C782 660.147 761.853 640 737 640Z" fill="white"/>
+<path id="pinned" d="M437 295H377C360.431 295 347 308.431 347 325V610C347 626.569 360.431 640 377 640H437C453.569 640 467 626.569 467 610V325C467 308.431 453.569 295 437 295Z" fill="white"/>
+</svg>
