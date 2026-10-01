@@ -61,12 +61,13 @@ async function mount(query) {
 
 const click = (dom, el) => el.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
 
-test('first run: «أبقِه متوقفًا» actually stops capture', async (t) => {
+test('first run: «أوقفه» actually stops capture', async (t) => {
   const { dom, calls } = await mount('consent-off');
   const doc = dom.window.document;
 
   await t.test('the window says capture is already running', () => {
     assert.match(doc.body.textContent, /يلتقط رفّ ما تنسخه الآن/u);
+    assert.equal(doc.getElementById('capture-accept').textContent.trim(), 'أبقِه يعمل', 'capture is already on; the choice is to keep it');
   });
 
   await t.test('declining saves captureEnabled: false', async () => {
@@ -83,6 +84,13 @@ test('first run: «أبقِه متوقفًا» actually stops capture', async (t
       SETTINGS.hotkey,
       'and nothing else was invented on the way'
     );
+  });
+
+  await t.test('then the optional permission step, which can be skipped', async () => {
+    assert.equal(doc.getElementById('step-permission').hidden, false);
+    assert.match(doc.getElementById('step-permission').textContent, /اختياري/u);
+    click(dom, doc.getElementById('later'));
+    await flush();
   });
 
   await t.test('then it teaches the way back in', () => {
@@ -104,6 +112,8 @@ test('first run: accepting capture also lands on the completion state', async (t
   const doc = dom.window.document;
 
   click(dom, doc.getElementById('capture-accept'));
+  await flush();
+  click(dom, doc.getElementById('later'));
   await flush();
 
   await t.test('accepting saves nothing — capture is already the default', () => {
