@@ -37,6 +37,11 @@ const RECENT = [
   item('r7', 'link', 'https://github.com/iSltanX/Raff/releases/latest', 'Safari', 'com.apple.Safari', 30 * HOUR),
 ];
 
+// Design review: `?pause=timed` (or skipNext / untilRestart) shows the
+// capture strip; `?capture=off` shows capture turned off.
+const params = new URLSearchParams(globalThis.location?.search ?? '');
+let MOCK_PAUSE = params.get('pause') ?? 'off';
+
 let pendingDelete = null;
 let deleteSequence = 0;
 
@@ -44,13 +49,14 @@ const SETTINGS = {
   hotkey: 'shift+super+v',
   launchAtLogin: false,
   historyLimit: 500,
-  captureEnabled: true,
+  captureEnabled: params.get('capture') !== 'off',
   respectConcealed: true,
   excludedApps: ['com.1password.1password'],
   learningEnabled: true,
   firstRunShown: false,
   appearance: 'light',
   followSystem: true,
+  retentionDays: 0,
 };
 
 export function mockInvoke(cmd, args = {}) {
@@ -62,7 +68,23 @@ export function mockInvoke(cmd, args = {}) {
         settings: SETTINGS,
         axTrusted: true,
         version: '5.1.0',
+        captureAlive: true,
+        capturePause: { kind: MOCK_PAUSE, minutesLeft: MOCK_PAUSE === 'timed' ? 12 : null },
+        unreadableLayer: false,
       }));
+    case 'get_settings':
+      return Promise.resolve(structuredClone({
+        settings: SETTINGS,
+        axTrusted: false,
+        version: '5.1.0',
+        captureAlive: true,
+        capturePause: { kind: MOCK_PAUSE, minutesLeft: MOCK_PAUSE === 'timed' ? 12 : null },
+      }));
+    case 'resume_capture':
+      MOCK_PAUSE = 'off';
+      return Promise.resolve(null);
+    case 'restart_app':
+      return Promise.resolve(null);
     case 'paste_item':
       return Promise.resolve(true);
     case 'toggle_pin': {
@@ -143,6 +165,7 @@ export function mockInvoke(cmd, args = {}) {
       return Promise.resolve(null);
     case 'consume_update_intent':
       return Promise.resolve(false); // no tray in the browser
+
 
     default:
       return Promise.resolve(null);

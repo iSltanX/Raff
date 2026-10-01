@@ -30,8 +30,13 @@ test('clipboard-only paste keeps Raff visible and announces the manual fallback'
   assert.equal(fake.invokeCount('hide_panel'), 0);
   assert.match(
     dom.window.document.getElementById('toast-message').textContent,
-    /الصقه بـ ⌘V/u,
+    /الصقه بـ \u2066?⌘V\u2069?/u,
     'immediate manual-paste guidance is not dropped by the added explanation'
+  );
+  assert.match(
+    dom.window.document.getElementById('toast-message').textContent,
+    /\u2066⌘V\u2069/u,
+    'the shortcut is an isolated LTR run, so it never reads «V⌘» in Arabic'
   );
   assert.match(
     dom.window.document.getElementById('toast-message').textContent,
