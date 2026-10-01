@@ -1,16 +1,39 @@
+# macOS
 .DS_Store
+._*
+
+# Dependencies and build outputs (npm ci, npm run build:frontend, tauri build)
 node_modules/
-src-tauri/target/
-.claude/
 dist/
 build/
+src-tauri/target/
+
+# Local DMG and updater outputs, rebuilt by scripts/build-candidate.mjs.
+# The designed installer background in src-tauri/dmg/ is tracked on purpose.
+*.dmg
+*.app.tar.gz
+*.app.tar.gz.sig
+/latest.json
+
+# Xcode
 DerivedData/
 *.xcuserdatad/
 xcuserdata/
-/Sultan-Visual-Identity.zip
+
+# Archives
 *.zip
 
+# Preview, debug, tmp and scratch files
+*.log
+*.tmp
+/preview/
+/debug/
+/tmp/
+/scratch/
+
 # Working files: kept on the maintainer's disk (working rules, status, decisions,
-# Figma→code map, reporting spec, test matrix), not in the public tree.
+# Figma→code map, reporting spec, test matrix, local preview config), not in the
+# public tree.
+.claude/
 /CLAUDE.md
 /docs/internal/
