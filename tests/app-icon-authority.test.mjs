@@ -1,9 +1,9 @@
 // Exactly one application icon may ship, and it must be the canonical Light one.
 //
 // Raff's release policy is that the macOS application icon is ALWAYS the
-// canonical Light (terracotta) mark, independent of the system appearance —
-// only Raff's own interior UI follows Light/Dark. A dark app-icon master is
-// kept on disk as approved design material and is deliberately NOT shippable.
+// canonical light mark (light plate, ink shelf, sage card), independent of the
+// system appearance and the Dark icon style — only Raff's own interior UI
+// follows Light/Dark. There is no dark app icon, and none may be added.
 //
 // These assertions target the decision points a regression would actually pass
 // through — what the bundle declares, what the generator writes, and what the
@@ -25,7 +25,7 @@ test('the bundle declares exactly one icon set, and no dark variant', () => {
 
   assert.ok(Array.isArray(icons) && icons.length > 0, 'bundle.icon must be an explicit list');
   // An explicit list is what keeps this controllable: Tauri would otherwise
-  // sweep the icons directory, which is exactly where icon-dark.icns lives.
+  // sweep the icons directory, where any stray icon would be picked up.
   for (const entry of icons) {
     assert.doesNotMatch(
       entry,
@@ -54,13 +54,20 @@ test('the generator derives every shipped icon from the one brand master', () =>
 test('the Icon Composer asset pins every appearance to the SAME light artwork', () => {
   // macOS 26 does not just draw a legacy .icns. It splits the icon into a
   // background plate and a foreground glyph and restyles the plate per
-  // appearance — which turned Raff's terracotta plate black in Dark Mode.
+  // appearance — which turned Raff's light plate black in Dark Mode.
   // Shipping an Icon Composer asset is what takes that decision back, and it
   // only helps if its dark appearance is IDENTICAL to its light one.
+  //
+  // The `dark` entry must be PRESENT, not just equal when present: removing it
+  // does not remove a dark icon, it makes Icon Composer generate one (a black
+  // plate on which the ink shelf vanishes — ictool's Dark rendition).
   const icon = JSON.parse(read('src-tauri/icon-composer/AppIcon.icon/icon.json'));
+  const pinsDark = (specs, what) =>
+    assert.ok(specs.some((s) => s.appearance === 'dark'), `${what} must pin its dark appearance to the light value`);
 
   const fills = icon['fill-specializations'] ?? [];
   assert.ok(fills.length > 0, 'the icon must declare its background fill');
+  pinsDark(fills, 'the plate');
   const [first, ...rest] = fills;
   for (const spec of rest) {
     assert.deepEqual(
@@ -73,6 +80,7 @@ test('the Icon Composer asset pins every appearance to the SAME light artwork', 
   for (const group of icon.groups ?? []) {
     for (const layer of group.layers ?? []) {
       const layerFills = layer['fill-specializations'] ?? [];
+      pinsDark(layerFills, `layer "${layer.name}"`);
       const [base, ...others] = layerFills;
       for (const spec of others) {
         assert.deepEqual(
@@ -104,7 +112,7 @@ test('no dark app icon is reachable from bundle metadata or runtime code', () =>
     assert.doesNotMatch(
       text,
       /icon-dark\.icns/u,
-      `${file} must not reference the parked dark icon`
+      `${file} must not reference a dark app icon`
     );
   }
 });

@@ -5,19 +5,22 @@
 // ---------------
 // macOS 26 does not simply display a legacy `.icns`. It decomposes the icon
 // into a background "plate" and a foreground glyph and re-renders the plate
-// with system material — which in Dark Mode means a near-black plate. Raff's
-// brand colour IS the plate, so the terracotta was being replaced wholesale
-// and the app showed up black, no matter that the shipped `.icns` contained
-// only light artwork. Verified by resolving the icon through
+// with system material — which in Dark Mode, or with the Dark icon style,
+// means a near-black plate. Raff's plate is part of the mark, so the app
+// showed up black, no matter that the shipped `.icns` contained only light
+// artwork. Verified by resolving the icon through
 // `NSWorkspace.icon(forFile:)`: the same `.icns` rendered black, while a
 // control app's legacy icns kept its colour because that app ships a modern
 // icon asset.
 //
 // The only supported way to pin appearance is to ship an Icon Composer asset
 // (`.icon` compiled to `Assets.car`, named by `CFBundleIconName`). Raff's
-// declares the SAME terracotta for the default and `dark` appearances, so the
-// application icon is identical in Light and Dark. This has no effect on
-// Raff's interior UI, which keeps following its own appearance setting.
+// declares the SAME light plate, ink and sage for the default and `dark`
+// appearances. That `dark` entry is not a dark icon: it is what stops macOS
+// generating one — without it, Icon Composer darkens the plate itself (checked
+// with ictool's Dark rendition). So the application icon is the light one in
+// Light, Dark and the Dark icon style alike. Raff's interior UI keeps
+// following its own appearance setting.
 //
 // WHY IT IS A POST-BUILD STEP
 // ---------------------------
@@ -96,6 +99,17 @@ try {
 
   // Adding resources invalidates the signature the bundler applied.
   run('codesign', ['--force', '--sign', '-', '--options', 'runtime', appPath]);
+
+  // macOS caches a bundle's icon by path. The bundle was just built without
+  // the catalogue, so Finder and the Dock would keep showing the pre-patch
+  // (darkened) icon for this path; re-registering makes them read the new one.
+  // Local convenience only — a copy installed from the DMG is a new path.
+  try {
+    run('touch', [appPath]);
+    run('/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister', ['-f', appPath]);
+  } catch {
+    // Not fatal: the shipped artefacts are already correct.
+  }
 
   console.log(`apply-app-icon: canonical Light icon applied to ${appPath}`);
 } finally {
