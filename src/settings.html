@@ -94,14 +94,13 @@
       >
         <div class="page-heading">
           <h2>عام</h2>
-          <p>بدء التشغيل، سعة السجل، ومظهر رفّ.</p>
+          <p>بدء التشغيل، والاختصار، ومظهر رفّ.</p>
         </div>
-
-        <!-- Two genuine groups: what happens when the Mac starts and how much
-             Raff keeps, then how Raff looks. -->
+        <!-- Figma 268:9. The shortcut is how رفّ opens, not a privacy matter
+             (Gate 1, 2026-10-01). -->
         <div class="settings-groups">
           <div class="settings-group">
-            <h3 class="group-title">بدء التشغيل والسجل</h3>
+            <h3 class="group-title">بدء التشغيل</h3>
             <div class="settings-rows">
               <div class="row">
                 <button
@@ -113,44 +112,37 @@
                   aria-labelledby="launch-label"
                 ><span class="switch-knob"></span></button>
                 <div class="row-label">
-                  <span class="label-title" id="launch-label" dir="auto">تشغيل تلقائي عند بدء النظام</span>
-                </div>
-              </div>
-
-              <div class="row">
-                <div class="select-wrap">
-                  <select class="select" id="history-limit" aria-labelledby="history-limit-label">
-                    <option value="200">٢٠٠ عنصر</option>
-                    <option value="500">٥٠٠ عنصر</option>
-                    <option value="1000">١٠٠٠ عنصر</option>
-                  </select>
-                </div>
-                <div class="row-label">
-                  <span class="label-title" id="history-limit-label" dir="auto">الحد الأقصى لحفظ الحافظة</span>
-                  <span class="label-sub" dir="auto">تُحذف الأقدم تلقائيًا، وتبقى العناصر المثبّتة.</span>
-                </div>
-              </div>
-
-              <!-- The count answers "how many"; this answers "how long what I
-                   copied lives on my disk" — and only the second is a promise
-                   a user can hold رفّ to. The two limits coexist. -->
-              <div class="row">
-                <div class="select-wrap">
-                  <select class="select" id="retention" aria-labelledby="retention-label">
-                    <option value="0">بلا حدّ زمني</option>
-                    <option value="7">أسبوع</option>
-                    <option value="30">شهر</option>
-                    <option value="90">ثلاثة أشهر</option>
-                  </select>
-                </div>
-                <div class="row-label">
-                  <span class="label-title" id="retention-label" dir="auto">مدة الاحتفاظ</span>
-                  <span class="label-sub" dir="auto">يُحذف غير المثبّت بعد هذه المدة، ولو لم تفتح رفّ.</span>
+                  <span class="label-title" id="launch-label" dir="auto">افتح رفّ عند تسجيل الدخول</span>
                 </div>
               </div>
             </div>
           </div>
-
+          <div class="settings-group">
+            <h3 class="group-title">الاختصار</h3>
+            <div class="settings-rows">
+              <div class="row">
+                <button
+                  type="button"
+                  class="hotkey-badge"
+                  id="hotkey-chip"
+                  aria-labelledby="hotkey-label"
+                  aria-describedby="hotkey-sub"
+                ></button>
+                <div class="row-label">
+                  <span class="label-title" id="hotkey-label" dir="auto">اختصار فتح رفّ</span>
+                  <!-- A refusal has to be heard, not only painted. -->
+                  <span
+                    class="label-sub is-status"
+                    id="hotkey-sub"
+                    role="status"
+                    aria-live="polite"
+                    aria-atomic="true"
+                    dir="auto"
+                  ></span>
+                </div>
+              </div>
+            </div>
+          </div>
           <div class="settings-group">
             <h3 class="group-title">المظهر</h3>
             <div class="settings-rows">
@@ -161,15 +153,14 @@
                   <button type="button" class="seg-tab" data-appearance="light" role="radio" aria-checked="false" tabindex="-1">فاتح</button>
                 </div>
                 <div class="row-label">
-                  <span class="label-title" id="appearance-label" dir="auto">مظهر التطبيق</span>
-                  <span class="label-sub" dir="auto">يتبع «تلقائي» مظهر macOS لحظة بلحظة.</span>
+                  <span class="label-title" id="appearance-label" dir="auto">مظهر رفّ</span>
+                  <span class="label-sub" dir="auto">«تلقائي» يتبع مظهر <bdi>macOS</bdi> لحظة بلحظة.</span>
                 </div>
               </div>
             </div>
           </div>
         </div>
       </section>
-
       <section
         class="settings-page"
         id="settings-panel-capture"
@@ -180,11 +171,11 @@
       >
         <div class="page-heading">
           <h2>الالتقاط</h2>
-          <p>تحكّم فيما إذا كان رفّ يحفظ النسخ الجديدة.</p>
+          <p>هل يحفظ رفّ ما تنسخه، وكم يحفظ، وإلى متى.</p>
         </div>
-
-        <!-- One group, so the page heading already names it. The note is not a
-             setting and therefore never sits inside the settings card. -->
+        <!-- Figma 268:182. The switch says what was asked for; the status row
+             under it says what is actually happening — off, paused or
+             stopped — with the one action that changes it. -->
         <div class="settings-groups">
           <div class="settings-group">
             <div class="settings-rows">
@@ -199,35 +190,69 @@
                 ><span class="switch-knob"></span></button>
                 <div class="row-label">
                   <span class="label-title" id="capture-label" dir="auto">التقاط ما أنسخه</span>
-                  <span class="label-sub" dir="auto">عند الإيقاف، يتوقف رفّ عن حفظ أي نسخة جديدة.</span>
+                  <span class="label-sub" dir="auto">عند الإيقاف لا يحفظ رفّ أي نسخة جديدة.</span>
                 </div>
               </div>
-
-              <!-- Shown only when capture is down. The switch above says what
-                   was asked for; this says what is actually happening. -->
               <div
-                class="row"
+                class="row capture-status"
                 id="capture-status"
                 role="status"
                 aria-live="polite"
                 aria-atomic="true"
                 hidden
               >
+                <button type="button" class="push-btn" id="capture-status-action" hidden></button>
                 <div class="row-label">
-                  <span class="label-title" dir="auto">الالتقاط توقّف</span>
-                  <span class="label-sub" dir="auto">أعد تشغيل رفّ ليعود الالتقاط. ما حُفظ سابقًا في مكانه.</span>
+                  <span class="label-title capture-status-text" id="capture-status-text" dir="auto"></span>
+                </div>
+                <span class="capture-status-icon" id="capture-status-icon" aria-hidden="true"></span>
+              </div>
+            </div>
+          </div>
+          <div class="settings-group">
+            <h3 class="group-title">السجل</h3>
+            <div class="settings-rows">
+              <div class="row">
+                <div class="select-wrap">
+                  <select class="select" id="history-limit" aria-labelledby="history-limit-label">
+                    <option value="200">٢٠٠ عنصر</option>
+                    <option value="500">٥٠٠ عنصر</option>
+                    <option value="1000">١٠٠٠ عنصر</option>
+                  </select>
+                </div>
+                <div class="row-label">
+                  <span class="label-title" id="history-limit-label" dir="auto">عدد العناصر المحفوظة</span>
+                  <span class="label-sub" dir="auto">تُحذف الأقدم تلقائيًا، وتبقى المثبّتة.</span>
+                </div>
+              </div>
+              <!-- The count answers "how many"; this answers "how long what I
+                   copied lives on my disk". The two limits coexist. -->
+              <div class="row">
+                <div class="select-wrap">
+                  <select class="select" id="retention" aria-labelledby="retention-label">
+                    <option value="0">بلا حدّ زمني</option>
+                    <option value="7">أسبوع</option>
+                    <option value="30">شهر</option>
+                    <option value="90">ثلاثة أشهر</option>
+                  </select>
+                </div>
+                <div class="row-label">
+                  <span class="label-title" id="retention-label" dir="auto">مدة الاحتفاظ</span>
+                  <span class="label-sub" dir="auto">يُحذف غير المثبّت بعد هذه المدة، ولو لم تفتح رفّ.</span>
+                </div>
+              </div>
+              <div class="row">
+                <button type="button" class="push-btn is-destructive" id="clear-history" disabled>مسح السجل…</button>
+                <div class="row-label">
+                  <span class="label-title" dir="auto">مسح سجل الحافظة</span>
+                  <span class="label-sub" dir="auto">يحذف كل غير المثبّت نهائيًا. لا تراجع عنه.</span>
                 </div>
               </div>
             </div>
           </div>
-
-          <div class="privacy-note" role="note">
-            <strong>المعالجة محلية.</strong>
-            <span>يبقى سجل الحافظة وبيانات التعلّم على جهازك.</span>
-          </div>
+          <p class="page-note" dir="auto">ما يحفظه رفّ يبقى على جهازك.</p>
         </div>
       </section>
-
       <section
         class="settings-page"
         id="settings-panel-privacy"
@@ -238,46 +263,15 @@
       >
         <div class="page-heading">
           <h2>الخصوصية</h2>
-          <p>الاختصار والتطبيقات التي لا ينبغي لرفّ التقاط محتواها.</p>
+          <p>الإذن الاختياري للصق، وما لا ينبغي لرفّ حفظه.</p>
         </div>
-
-        <!-- Two genuine groups: how Raff is summoned, and what it must never
-             see. The exclusion manager belongs to the group it expands from. -->
+        <!-- Figma 269:344. -->
         <div class="settings-groups">
-          <div class="settings-group">
-            <h3 class="group-title">الاختصار</h3>
-            <div class="settings-rows">
-              <div class="row">
-                <button
-                  type="button"
-                  class="hotkey-badge"
-                  id="hotkey-chip"
-                  aria-labelledby="hotkey-label"
-                  aria-describedby="hotkey-sub"
-                ></button>
-                <div class="row-label">
-                  <span class="label-title" id="hotkey-label" dir="auto">اختصار لوحة المفاتيح لفتح رفّ</span>
-                  <!-- A refusal has to be heard, not only painted. Same
-                       pattern as #settings-update-status below. -->
-                  <span
-                    class="label-sub is-status"
-                    id="hotkey-sub"
-                    role="status"
-                    aria-live="polite"
-                    aria-atomic="true"
-                    dir="auto"
-                  ></span>
-                </div>
-              </div>
-            </div>
-          </div>
-
           <div class="settings-group">
             <h3 class="group-title">اللصق التلقائي</h3>
             <div class="settings-rows">
-              <!-- The permission was reachable only from a first-run window
-                   shown once, and from a toast after a paste had already
-                   failed. This is the standing answer to "why did ⌘V stop?". -->
+              <!-- The standing answer to "why did ⌘V stop?". Optional, and
+                   named so: without it everything is still saved. -->
               <div
                 class="row"
                 id="accessibility-status"
@@ -294,15 +288,14 @@
                   hidden
                 >منح الإذن…</button>
                 <div class="row-label">
-                  <span class="label-title" id="accessibility-label" dir="auto">إذن تسهيل الوصول</span>
+                  <span class="label-title" id="accessibility-label" dir="auto">إذن تسهيل الوصول (اختياري)</span>
                   <span class="label-sub" id="accessibility-sub" dir="auto"></span>
                 </div>
               </div>
             </div>
           </div>
-
           <div class="settings-group">
-            <h3 class="group-title">الاستثناءات</h3>
+            <h3 class="group-title">ما لا يُحفظ</h3>
             <div class="settings-rows">
               <div class="row">
                 <button
@@ -312,12 +305,13 @@
                   role="checkbox"
                   aria-checked="true"
                   aria-labelledby="concealed-label"
+                  aria-describedby="concealed-sub"
                 ></button>
                 <div class="row-label">
-                  <span class="label-title" id="concealed-label" dir="auto">تجاهل تطبيقات كلمات المرور الحساسة</span>
+                  <span class="label-title" id="concealed-label" dir="auto">تجاهل المحتوى السرّي والمؤقت</span>
+                  <span class="label-sub" id="concealed-sub" dir="auto">ما تعلّمه مديرات كلمات المرور والتطبيقات بأنه سرّي أو مؤقت لا يُحفظ أصلًا.</span>
                 </div>
               </div>
-
               <div class="row">
                 <button
                   type="button"
@@ -329,10 +323,9 @@
                 >إدارة…</button>
                 <div class="row-label">
                   <span class="label-title" id="excluded-label" dir="auto">التطبيقات المستبعَدة</span>
-                  <span class="label-sub" dir="auto">لا يُحفظ ما يُنسخ منها وهي التطبيق الأمامي.</span>
+                  <span class="label-sub" dir="auto">لا يُحفظ ما يُنسخ منها وهي في الواجهة.</span>
                 </div>
               </div>
-
               <div class="expandable-region excluded-manager" id="excluded-manager" hidden>
                 <ul class="excluded-list" id="excluded-list" aria-label="التطبيقات المستبعَدة"></ul>
                 <div
@@ -352,11 +345,8 @@
                   </div>
                   <button type="button" class="push-btn" id="add-excluded">إضافة</button>
                 </div>
-
-                <!-- The picker above only knows apps that are open right now
-                     and visible in the Dock. Menu-bar apps and closed ones are
-                     a whole category it cannot reach, and often the category
-                     worth excluding. -->
+                <!-- The picker only knows apps open right now and visible in
+                     the Dock; menu-bar apps and closed ones are reached by id. -->
                 <div class="excluded-add excluded-add-manual">
                   <input
                     type="text"
@@ -387,7 +377,6 @@
           </div>
         </div>
       </section>
-
       <section
         class="settings-page"
         id="settings-panel-learning"
@@ -398,10 +387,10 @@
       >
         <div class="page-heading">
           <h2>التعلّم</h2>
-          <p>ترتيب محلي يساعد رفّ على إبراز ما تستخدمه أكثر.</p>
+          <p>عدّادات استخدام محلية لكل عنصر.</p>
         </div>
-
-        <!-- One group: everything here is the same local ranking feature. -->
+        <!-- Figma 269:520. Says what it does — counts — and nothing more: the
+             panel's order is by time, not by use (gap 7, Gate 1). -->
         <div class="settings-groups">
           <div class="settings-group">
             <div class="settings-rows">
@@ -416,10 +405,9 @@
                 ><span class="switch-knob"></span></button>
                 <div class="row-label">
                   <span class="label-title" id="learning-label" dir="auto">تفعيل التعلّم</span>
-                  <span class="label-sub" dir="auto">يحلّل رفّ نمط نسخك على هذا الجهاز فقط.</span>
+                  <span class="label-sub" dir="auto">يعدّ رفّ مرات نسخ كل عنصر ولصقه، على هذا الجهاز فقط.</span>
                 </div>
               </div>
-
               <div class="row">
                 <button
                   type="button"
@@ -433,21 +421,23 @@
                   <span class="label-title" id="learning-view-label" dir="auto">ما تعلّمه رفّ حتى الآن</span>
                 </div>
               </div>
-
               <div class="expandable-region learning-view" id="learning-view" hidden></div>
-
+            </div>
+          </div>
+          <div class="settings-group">
+            <div class="settings-rows">
               <div class="row">
                 <button
                   type="button"
                   class="push-btn is-destructive"
                   id="clear-learning"
-                  data-label="مسح بيانات التعلّم"
+                  data-label="مسح…"
                   data-confirm="متأكد؟ اضغط للتأكيد"
                   aria-label="مسح بيانات التعلّم"
                   aria-describedby="clear-learning-label"
-                >مسح بيانات التعلّم</button>
+                >مسح…</button>
                 <div class="row-label">
-                  <span class="label-title" id="clear-learning-label" dir="auto">حذف ما تعلّمه رفّ عن عادات نسخك</span>
+                  <span class="label-title" id="clear-learning-label" dir="auto">مسح بيانات التعلّم</span>
                   <span class="label-sub" dir="auto">لا يُحذف أي عنصر من الحافظة.</span>
                 </div>
               </div>
@@ -455,7 +445,6 @@
           </div>
         </div>
       </section>
-
       <section
         class="settings-page about-page"
         id="settings-panel-about"
@@ -464,18 +453,32 @@
         tabindex="0"
         hidden
       >
+        <!-- Figma 269:593. -->
         <div class="about-summary">
-          <img class="about-mark" src="assets/app-icon.png" width="58" height="58" alt="" aria-hidden="true" />
+          <img class="about-mark" src="assets/app-icon.png" width="64" height="64" alt="" aria-hidden="true" />
           <div>
-            <h2>رفّ <span class="latin" lang="en">Raff</span></h2>
+            <h2>رفّ</h2>
             <p class="about-version" id="settings-version" dir="rtl"></p>
             <p>كل ما نسخته، على رفٍّ قريب.</p>
           </div>
         </div>
-
         <div class="settings-groups">
           <div class="settings-group">
             <div class="settings-rows about-actions">
+              <div class="row">
+                <button type="button" class="push-btn" id="settings-update">التحقق الآن</button>
+                <div class="row-label">
+                  <span class="label-title" dir="auto">التحديثات</span>
+                  <span class="label-sub is-status" id="settings-update-status" role="status" aria-live="polite" aria-atomic="true" dir="auto">تحقق يدويًا من وجود إصدار أحدث.</span>
+                </div>
+              </div>
+              <div class="row">
+                <button type="button" class="push-btn" id="settings-privacy-policy">فتح</button>
+                <div class="row-label">
+                  <span class="label-title" dir="auto">سياسة الخصوصية</span>
+                  <span class="label-sub" dir="auto">ما يبقى على جهازك، وما يُرسل ومتى.</span>
+                </div>
+              </div>
               <div class="row">
                 <button type="button" class="push-btn" id="settings-repo">فتح المستودع</button>
                 <div class="row-label">
@@ -483,20 +486,11 @@
                   <span class="label-sub latin" dir="ltr">github.com/iSltanX/Raff</span>
                 </div>
               </div>
-
               <div class="row">
-                <button type="button" class="push-btn" id="settings-update">التحقق الآن</button>
+                <button type="button" class="push-btn" id="open-about" aria-label="فتح نافذة عن رفّ" aria-describedby="about-label">فتح</button>
                 <div class="row-label">
-                  <span class="label-title" dir="auto">تحديثات رفّ</span>
-                  <span class="label-sub is-status" id="settings-update-status" role="status" aria-live="polite" aria-atomic="true" dir="auto">تحقق يدويًا من وجود إصدار أحدث.</span>
-                </div>
-              </div>
-
-              <div class="row">
-                <button type="button" class="push-btn" id="open-about" aria-label="فتح نافذة عن رفّ" aria-describedby="about-label">فتح النافذة</button>
-                <div class="row-label">
-                  <span class="label-title" id="about-label" dir="auto">نافذة «عن رفّ» الكاملة</span>
-                  <span class="label-sub" dir="auto">معلومات الإصدار والمطوّر وحقوق النشر.</span>
+                  <span class="label-title" id="about-label" dir="auto">نافذة «عن رفّ»</span>
+                  <span class="label-sub" dir="auto">الإصدار والمطوّر وحقوق النشر.</span>
                 </div>
               </div>
             </div>
@@ -504,7 +498,6 @@
         </div>
       </section>
     </div>
-
     <div
       class="settings-load-state"
       id="settings-load-state"
@@ -517,7 +510,6 @@
     </div>
 
     <footer class="bottom-row">
-      <button type="button" class="push-btn is-destructive" id="clear-history" disabled>مسح سجل الحافظة</button>
       <span
         class="status-note"
         id="data-status"
@@ -539,10 +531,11 @@
       aria-labelledby="confirm-title"
       aria-describedby="confirm-text"
     >
+      <span class="confirm-icon" id="confirm-icon" aria-hidden="true"></span>
       <div class="confirm-title" id="confirm-title">مسح سجل الحافظة؟</div>
       <p class="confirm-text" id="confirm-text">
-        سيتم حذف جميع العناصر غير المثبّتة من سجل الحافظة نهائيًا. لا يمكن
-        التراجع عن هذه العملية.
+        ستُحذف كل العناصر غير المثبّتة نهائيًا من هذا الجهاز، وتبقى المثبّتة.
+        لا يمكن التراجع.
       </p>
       <div class="confirm-actions">
         <button type="button" class="push-btn" id="confirm-cancel">إلغاء</button>

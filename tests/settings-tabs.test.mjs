@@ -241,12 +241,13 @@ test('compact tabbed Settings contract and interactions', async (t) => {
   });
 
   await t.test('each page retains its production controls and legacy columns are gone', () => {
+    // Page placement as approved at Gate 1 (2026-10-01): the shortcut opens
+    // رفّ (General); size, age and clearing belong to what Capture keeps.
     const expectedByPanel = {
-      general: ['launch-toggle', 'history-limit', 'appearance-segments'],
-      capture: ['capture-toggle'],
+      general: ['launch-toggle', 'hotkey-chip', 'hotkey-sub', 'appearance-segments'],
+      capture: ['capture-toggle', 'capture-status', 'history-limit', 'retention', 'clear-history'],
       privacy: [
-        'hotkey-chip',
-        'hotkey-sub',
+        'accessibility-status',
         'concealed-toggle',
         'manage-excluded',
         'excluded-manager',
@@ -260,6 +261,7 @@ test('compact tabbed Settings contract and interactions', async (t) => {
         'settings-repo',
         'settings-update',
         'settings-update-status',
+        'settings-privacy-policy',
         'open-about',
       ],
     };

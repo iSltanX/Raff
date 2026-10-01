@@ -1,4 +1,6 @@
-/* Settings — native title bar overlay, toolbar tabs, grouped cards. */
+/* Settings — native title bar overlay, toolbar tabs, grouped cards.
+   Figma «07» 268:8 / 269:343; components Toolbar Tab 256:189, Settings Row
+   267:321, Switch 255:143, Checkbox 255:156, Select 256:146. */
 
 html,
 body {
@@ -47,7 +49,7 @@ body {
   justify-content: center;
   gap: 2px;
   flex: none;
-  padding: 0 16px 8px;
+  padding: 0 var(--space-16) var(--space-8);
   border-bottom: 1px solid var(--line);
   background: var(--bg-window);
 }
@@ -56,9 +58,9 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
+  gap: var(--space-2);
   min-width: 68px;
-  padding: 6px 8px 4px;
+  padding: var(--space-6) var(--space-8) var(--space-4);
   border: 0;
   border-radius: var(--radius-md);
   background: transparent;
@@ -98,7 +100,7 @@ body {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 18px 24px 20px;
+  padding: var(--space-16) var(--space-24) var(--space-20);
 }
 
 .settings-page {
@@ -111,11 +113,11 @@ body {
 
 .settings-groups {
   display: grid;
-  gap: 18px;
+  gap: var(--space-16);
 }
 
 .group-title {
-  margin: 0 4px 6px;
+  margin: 0 var(--space-4) var(--space-6);
   font-size: var(--text-caption);
   font-weight: 600;
   color: var(--ink-3);
@@ -133,9 +135,9 @@ body {
   flex-direction: row-reverse;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: var(--space-16);
   min-height: 48px;
-  padding: 9px 14px;
+  padding: var(--space-8) var(--space-16);
 }
 
 .settings-rows > * + * {
@@ -158,7 +160,7 @@ body {
 }
 
 .label-sub.error {
-  color: var(--danger);
+  color: var(--danger-ink);
 }
 
 /* ─── Controls ────────────────────────────────────────────────────────── */
@@ -183,7 +185,7 @@ body {
   height: 18px;
   border-radius: 50%;
   background: var(--knob);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  box-shadow: var(--shadow-knob);
   transition: transform var(--t-base) var(--ease);
 }
 
@@ -201,7 +203,7 @@ body {
   height: 18px;
   flex: none;
   padding: 0;
-  border: 1px solid var(--line-strong);
+  border: 1px solid var(--control-off);
   border-radius: 5px;
   background: var(--bg-raised);
 }
@@ -258,7 +260,7 @@ body {
 .select {
   height: 28px;
   min-width: 120px;
-  padding: 0 10px 0 28px;
+  padding: 0 var(--space-12) 0 28px;
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
   background: var(--bg-raised);
@@ -301,11 +303,22 @@ body {
 }
 
 .push-btn:disabled {
-  opacity: 0.45;
+  border-color: transparent;
+  box-shadow: none;
+  color: var(--ink-disabled);
+}
+
+.push-btn:active:not(:disabled),
+.inline-retry:active {
+  background: var(--bg-pressed);
 }
 
 .push-btn.is-destructive {
-  color: var(--danger);
+  color: var(--danger-ink);
+}
+
+.push-btn.is-destructive:disabled {
+  color: var(--ink-disabled);
 }
 
 .push-btn.is-preferred {
@@ -383,7 +396,7 @@ body {
   border-radius: var(--radius-sm);
   background: transparent;
   font-size: var(--text-caption);
-  color: var(--danger);
+  color: var(--danger-ink);
 }
 
 .remove-excluded:hover {
@@ -410,7 +423,7 @@ body {
   gap: 8px;
   margin-bottom: 8px;
   font-size: var(--text-small);
-  color: var(--danger);
+  color: var(--danger-ink);
 }
 
 .learning-view {
@@ -512,7 +525,7 @@ body {
 }
 
 .settings-load-state.is-error {
-  color: var(--danger);
+  color: var(--danger-ink);
 }
 
 .bottom-row {
@@ -544,7 +557,7 @@ body {
 }
 
 .status-note.is-error {
-  color: var(--danger);
+  color: var(--danger-ink);
 }
 
 .confirm-overlay {
@@ -591,7 +604,7 @@ body {
   order: -1;
   border-color: transparent;
   background: var(--danger);
-  color: #fff;
+  color: var(--on-danger);
 }
 
 /* A bundle id typed by hand: same row shape as the picker above it. */
@@ -599,10 +612,9 @@ body {
   height: 28px;
   min-width: 120px;
   padding: 0 10px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-input);
   border-radius: var(--radius-md);
   background: var(--bg-raised);
-  box-shadow: var(--shadow-control);
   font-size: var(--text-small);
   color: var(--ink);
   -webkit-appearance: none;
@@ -621,4 +633,51 @@ body {
   margin: 6px 0 0;
   font-size: var(--text-small);
   color: var(--ink-3);
+}
+
+/* ─── Capture status row (Figma 268:182) ─────────────────────────────── */
+/* The switch above is the request; this row is the outcome. */
+
+.settings-rows > .capture-status {
+  justify-content: flex-start;
+  min-height: 40px;
+  background: var(--bg-sunken);
+}
+
+.capture-status .row-label {
+  flex: 1;
+}
+
+.capture-status-text {
+  font-size: var(--text-small);
+  font-weight: 600;
+}
+
+.capture-status-icon {
+  color: var(--ink-2);
+}
+
+.capture-status[data-tone='warning'] .capture-status-text { color: var(--warning-ink); }
+.capture-status[data-tone='warning'] .capture-status-icon { color: var(--warning); }
+.capture-status[data-tone='danger'] .capture-status-text { color: var(--danger-ink); }
+.capture-status[data-tone='danger'] .capture-status-icon { color: var(--danger); }
+
+.page-note {
+  margin: 0;
+  font-size: var(--text-small);
+  color: var(--ink-2);
+}
+
+.hotkey-badge.is-refused {
+  border-color: var(--danger);
+}
+
+.confirm-icon {
+  justify-self: center;
+  color: var(--danger);
+}
+
+.confirm-icon .icon {
+  width: 24px;
+  height: 24px;
 }

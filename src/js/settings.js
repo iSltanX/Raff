@@ -1,12 +1,11 @@
 // Settings window: reads the store, writes back full Settings objects.
 //
-// The visual language follows Figma «08 — Product Screens», screen ٥ (2:7983),
-// translated into a compact macOS preferences toolbar. One tab panel is shown
-// at a time so settings never become a long document or a two-column grid.
+// Figma «07 — Product UI · Settings» (268:8, 269:343): a compact macOS
+// preferences toolbar, one page at a time, grouped cards.
 
 import { api, on } from './store.js';
 import { arabicDigits, metaLine, hotkeyDisplay, hotkeyFromEvent } from './logic.js';
-import { CLEAR, createIcon } from './icons.js';
+import { ALERT, CAPTURE_OFF, CLEAR, PAUSE, createIcon } from './icons.js';
 
 // The native WKWebView menu is English ("Reload") — never shown in Raff.
 window.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -109,6 +108,8 @@ el('window-close').addEventListener('click', closeWindow);
 el('done-btn').addEventListener('click', closeWindow);
 el('open-about').addEventListener('click', () => api.openAbout());
 el('settings-repo').addEventListener('click', () => api.openRepository().catch(() => {}));
+el('settings-privacy-policy').addEventListener('click', () => api.openPrivacyPolicy().catch(() => {}));
+el('confirm-icon').replaceChildren(createIcon(ALERT));
 
 // ─── Load / sync ──────────────────────────────────────────────────────────
 
@@ -118,16 +119,16 @@ async function load() {
 
   const version = state?.version;
   el('settings-version').textContent = version
-    ? `الإصدار ${arabicDigits(version)} · \u2066Version ${version}\u2069`
+    ? `الإصدار \u2066${version}\u2069` // as the About window (Figma 269:593)
     : '';
 
   hotkeyChip.textContent = hotkeyDisplay(settings.hotkey);
   hotkeySub.textContent = HOTKEY_HINT;
   setChecked('launch-toggle', settings.launchAtLogin);
   setChecked('capture-toggle', settings.captureEnabled);
-  // `captureEnabled` above is the request; this is the outcome. They agree
-  // until the capture loop gives up, and that gap is the whole point of the row.
-  el('capture-status').hidden = state.captureAlive !== false;
+  // The switch is the request; this row is the outcome — the same status, in
+  // the same words, as the panel strip and the menu bar.
+  renderCaptureStatus(state);
   renderAccessibility(state.axTrusted === true);
   setChecked('concealed-toggle', settings.respectConcealed);
   setChecked('learning-toggle', settings.learningEnabled);
@@ -137,6 +138,48 @@ async function load() {
   renderExcluded();
 }
 
+/**
+ * What capture is actually doing, worst first: stopped by a fault, turned
+ * off, or paused. Hidden while رفّ is saving. One action where one helps.
+ */
+function renderCaptureStatus(state) {
+  const row = el('capture-status');
+  const action = el('capture-status-action');
+  const pause = state.capturePause ?? { kind: 'off' };
+  let status = null;
+  if (state.captureAlive === false) {
+    status = { tone: 'danger', icon: ALERT, text: 'توقّف الالتقاط بسبب خلل — لا يُحفظ ما تنسخه.', label: 'إعادة تشغيل رفّ', run: () => api.restartApp() };
+  } else if (state.settings?.captureEnabled === false) {
+    status = { tone: 'info', icon: CAPTURE_OFF, text: 'معطّل — لا يحفظ رفّ ما تنسخه حتى تفعّله.' };
+  } else if (pause.kind && pause.kind !== 'off') {
+    const text =
+      pause.kind === 'skipNext'
+        ? 'سيتجاهل رفّ النسخة التالية.'
+        : pause.kind === 'timed' && pause.minutesLeft
+          ? `موقوف مؤقتًا — يُستأنف بعد ${arabicDigits(pause.minutesLeft)} د.`
+          : 'موقوف مؤقتًا حتى إعادة التشغيل.';
+    status = { tone: 'warning', icon: PAUSE, text, label: 'استئناف الآن', run: () => api.resumeCapture() };
+  }
+  row.hidden = !status;
+  if (!status) return;
+  row.dataset.tone = status.tone;
+  el('capture-status-text').textContent = status.text;
+  el('capture-status-icon').replaceChildren(createIcon(status.icon));
+  action.hidden = !status.run;
+  action.textContent = status.label ?? '';
+  action.onclick = status.run
+    ? () => {
+        action.disabled = true;
+        Promise.resolve(status.run())
+          .then(() => load())
+          .catch(() => showDataStatus('تعذّر تنفيذ الطلب. حاول مرة أخرى.', { error: true, duration: 6000 }))
+          .finally(() => {
+            action.disabled = false;
+          });
+      }
+    : null;
+}
+
 /** The permission is a state worth showing either way: granted is the answer
  *  to "is auto-paste going to work?", and missing is the answer to "why did it
  *  stop?". Only the action disappears once there is nothing left to do. */
@@ -144,8 +187,8 @@ function renderAccessibility(trusted) {
   const row = el('accessibility-status');
   const action = el('accessibility-action');
   el('accessibility-sub').textContent = trusted
-    ? 'ممنوح. يلصق رفّ نيابةً عنك مباشرة.'
-    : 'اللصق التلقائي معطّل. يُنسخ العنصر إلى الحافظة لتلصقه بنفسك.';
+    ? 'ممنوح. يلصق رفّ في التطبيق الذي كنت فيه مباشرة.'
+    : 'اللصق التلقائي معطّل: يُنسخ العنصر لتلصقه أنت. ما تنسخه يُحفظ كالمعتاد.';
   action.hidden = trusted;
   row.hidden = false;
 }
