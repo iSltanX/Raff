@@ -52,3 +52,24 @@ test('Tauri packages the generated frontend instead of the design source tree', 
   assert.doesNotMatch(store, /^import\s+\{\s*mockInvoke\s*\}/mu);
   assert.match(store, /await import\('\.\/mock\.js'\)/u);
 });
+
+test('every asset the pages reference ships in the bundle', async () => {
+  // A mask or image missing from the allowlist renders as a blank square in
+  // the packaged app while the browser preview (which serves src/) looks fine.
+  const { readFileSync, readdirSync } = await import('node:fs');
+  const source = path.join(path.dirname(fileURLToPath(import.meta.url)), '../src');
+  const build = readFileSync(path.join(source, '../scripts/build-frontend.mjs'), 'utf8');
+  const shipped = new Set([...build.matchAll(/^\s+'([^']+)',$/gmu)].map((m) => m[1]));
+  const files = [
+    ...readdirSync(source).filter((f) => /\.(css|html)$/u.test(f)),
+    ...readdirSync(path.join(source, 'js')).filter((f) => f !== 'mock.js').map((f) => `js/${f}`),
+  ];
+  for (const file of files) {
+    const text = readFileSync(path.join(source, file), 'utf8');
+    for (const [, ref] of text.matchAll(/(?:url\(['"]?|src="|asset\(')((?:\.\.\/)?assets\/[A-Za-z0-9/_.-]+?)(?:\.svg|\.png)?['")]/gu)) {
+      const normalized = ref.replace(/^\.\.\//u, '');
+      const candidates = /\.(svg|png)$/u.test(normalized) ? [normalized] : [`${normalized}.svg`, `${normalized}.png`];
+      assert.ok(candidates.some((c) => shipped.has(c)), `${file} → ${normalized} is not in the production allowlist`);
+    }
+  }
+});

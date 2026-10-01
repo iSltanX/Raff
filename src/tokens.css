@@ -1,6 +1,7 @@
-/* رفّ — design tokens.
-   Palette «الميزان»: ash, marble, ink, silk and sage. Cairo sets Arabic,
-   Almarai sets Latin, numerals and key glyphs. Nothing else declares colour. */
+/* رفّ — design tokens («قريب ومرتب»، 2026-10).
+   Neutral greys (R=G=B), one olive-leaning sage, a clear ink. Cairo sets
+   Arabic; Almarai sets Latin, numerals and key glyphs. Nothing else declares
+   colour. Figma: «Raff · Theme» — each role's codeSyntax.WEB is its name here. */
 
 @font-face { font-family: 'Cairo'; src: url('fonts/Cairo-Regular.ttf') format('truetype'); font-weight: 400; font-display: block; }
 @font-face { font-family: 'Cairo'; src: url('fonts/Cairo-Medium.ttf') format('truetype'); font-weight: 500; font-display: block; }
@@ -14,60 +15,96 @@
 
   --font-ar: 'Cairo', system-ui, sans-serif;
   --font-latin: 'Almarai', 'Cairo', system-ui, sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', Menlo, monospace;
 
   /* Type scale */
+  /* A reference number the user may copy by eye (the report's #id). */
+  --text-figure: 28px;
+  --text-display: 20px;
   --text-title: 15px;
   --text-body: 13px;
   --text-small: 12px;
   --text-caption: 11px;
   --leading: 1.5;
 
+  /* Spacing — a closed scale; nothing in between. */
+  --space-2: 2px;
+  --space-4: 4px;
+  --space-6: 6px;
+  --space-8: 8px;
+  --space-12: 12px;
+  --space-16: 16px;
+  --space-20: 20px;
+  --space-24: 24px;
+  --space-32: 32px;
+  --space-40: 40px;
+
   /* Surfaces */
-  --bg-window: #f8f6f3;
-  --bg-canvas: #f0ede8;
-  --bg-raised: #fdfcfa;
-  --bg-sunken: rgba(28, 25, 23, 0.06);
-  --bg-glass: rgba(248, 246, 243, 0.8);
-  --bg-hover: rgba(28, 25, 23, 0.05);
-  --bg-selected: rgba(124, 140, 120, 0.18);
-  --bg-overlay: rgba(28, 25, 23, 0.28);
+  --bg-window: #fafafa;
+  --bg-canvas: #f3f3f3;
+  --bg-raised: #ffffff;
+  --bg-sunken: rgba(0, 0, 0, 0.055);
+  --bg-glass: rgba(250, 250, 250, 0.84);
+  --bg-hover: rgba(0, 0, 0, 0.045);
+  --bg-pressed: rgba(0, 0, 0, 0.08);
+  --bg-selected: #e5e9e0;
+  --bg-overlay: rgba(0, 0, 0, 0.28);
+  --bg-inverse: #1f1f1f;
+  --inverse-wash: rgba(255, 255, 255, 0.12);
+  --danger-on-inverse: #e89b92;
 
   /* Lines */
-  --line: rgba(28, 25, 23, 0.08);
-  --line-strong: #d6d0c8;
+  --line: rgba(0, 0, 0, 0.08);
+  --line-strong: #d9d9d9;
+  --line-edge: rgba(0, 0, 0, 0.08);
+  --line-input: #949494;
+  --control-off: #949494;
 
   /* Ink */
-  --ink: #1c1917;
-  --ink-2: #57524c;
-  --ink-3: #6d665f;
-  --ink-disabled: #afa89f;
+  --ink: #1a1a1a;
+  --ink-2: #474747;
+  --ink-3: #666666;
+  --ink-disabled: #b3b3b3;
+  --ink-inverse: #f3f3f3;
 
-  /* Accent — sage. `--accent` fills, `--accent-ink` writes. */
-  --accent: #5e6e5b;
-  --accent-hover: #4f5e4c;
-  --accent-ink: #56664f;
-  --accent-soft: #e3e8e0;
+  /* Accent — sage. `--accent` fills and draws; `--accent-ink` writes. */
+  --accent: #56644c;
+  --accent-hover: #46523e;
+  --accent-ink: #46523e;
+  --accent-soft: #e5e9e0;
   --on-accent: #ffffff;
-  --brand-sage: #7c8c78;
+  --accent-on-inverse: #a5b199;
+  --brand-ink: #1a1a1a;
+  --brand-sage: #86947b;
+  --focus: #6b7a60;
 
-  --danger: #a8432f;
-  --danger-soft: #f4e2dc;
-  --success: #4f6b4a;
-  --success-soft: #e3ebe0;
-  --focus: rgba(124, 140, 120, 0.55);
+  /* Status — one tone per state, wherever the state appears. */
+  --success: #56644c;
+  --success-ink: #46523e;
+  --success-soft: #f2f4ef;
+  --warning: #b0842c;
+  --warning-ink: #7d5b17;
+  --warning-soft: #f8f1e2;
+  --danger: #a83a2e;
+  --danger-ink: #a83a2e;
+  --danger-soft: #fbefed;
+  --on-danger: #ffffff;
 
-  --toggle-off: #d6d0c8;
+  --toggle-off: #949494;
   --knob: #ffffff;
 
-  /* Geometry */
-  --radius-xs: 4px;
-  --radius-sm: 6px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
+  /* Geometry — radius tiers by object, not by component. */
+  --radius-xs: 4px;  /* keycap, badge */
+  --radius-sm: 6px;  /* row action, thumbnail */
+  --radius-md: 8px;  /* button, field, kind well, row */
+  --radius-lg: 12px; /* card, callout, toast */
+  --radius-xl: 16px; /* panel, window */
   --radius-panel: 16px;
+  --radius-full: 999px;
 
-  --shadow-float: 0 1px 2px rgba(28, 25, 23, 0.08), 0 12px 32px rgba(28, 25, 23, 0.12);
-  --shadow-control: 0 1px 1px rgba(28, 25, 23, 0.06);
+  --shadow-float: 0 1px 2px rgba(0, 0, 0, 0.08), 0 12px 32px rgba(0, 0, 0, 0.14);
+  --shadow-control: 0 1px 1px rgba(0, 0, 0, 0.06);
+  --shadow-knob: 0 1px 2px rgba(0, 0, 0, 0.25);
 
   /* Motion */
   --t-fast: 120ms;
@@ -78,41 +115,56 @@
 :root[data-appearance='dark'] {
   color-scheme: dark;
 
-  --bg-window: #1c1a18;
-  --bg-canvas: #151412;
-  --bg-raised: #242220;
-  --bg-sunken: rgba(240, 237, 232, 0.07);
-  --bg-glass: rgba(28, 26, 24, 0.74);
-  --bg-hover: rgba(240, 237, 232, 0.06);
-  --bg-selected: rgba(154, 170, 149, 0.2);
-  --bg-overlay: rgba(0, 0, 0, 0.45);
+  --bg-window: #1f1f1f;
+  --bg-canvas: #151515;
+  --bg-raised: #262626;
+  --bg-sunken: rgba(255, 255, 255, 0.07);
+  --bg-glass: rgba(31, 31, 31, 0.78);
+  --bg-hover: rgba(255, 255, 255, 0.06);
+  --bg-pressed: rgba(255, 255, 255, 0.1);
+  --bg-selected: #2a3026;
+  --bg-overlay: rgba(0, 0, 0, 0.5);
+  --bg-inverse: #333333;
 
-  --line: rgba(240, 237, 232, 0.09);
-  --line-strong: #3d3935;
+  --line: rgba(255, 255, 255, 0.09);
+  --line-strong: #333333;
+  --line-edge: rgba(255, 255, 255, 0.14);
+  --line-input: #737373;
+  --control-off: #737373;
 
-  --ink: #f0ede8;
-  --ink-2: #b5aea6;
-  --ink-3: #8c857d;
-  --ink-disabled: #57524c;
+  --ink: #f3f3f3;
+  --ink-2: #cccccc;
+  --ink-3: #a0a0a0;
+  --ink-disabled: #5c5c5c;
+  --ink-inverse: #f3f3f3;
 
-  --accent: #9aaa95;
-  --accent-hover: #aebda9;
-  --accent-ink: #a8b8a3;
-  --accent-soft: #262c25;
-  --on-accent: #141612;
-  --brand-sage: #9aaa95;
+  --accent: #a5b199;
+  --accent-hover: #c3cdb9;
+  --accent-ink: #a5b199;
+  --accent-soft: #2a3026;
+  --on-accent: #1a1e17;
+  --accent-on-inverse: #a5b199;
+  --brand-ink: #f3f3f3;
+  --brand-sage: #a5b199;
+  --focus: #a5b199;
 
-  --danger: #e08a76;
-  --danger-soft: #3a221d;
-  --success: #9cc096;
-  --success-soft: #1f2a1e;
-  --focus: rgba(154, 170, 149, 0.6);
+  --success: #a5b199;
+  --success-ink: #a5b199;
+  --success-soft: #2a3026;
+  --warning: #e0bd73;
+  --warning-ink: #e0bd73;
+  --warning-soft: #332a18;
+  --danger: #e3877d;
+  --danger-ink: #e89b92;
+  --danger-soft: #3a1d19;
+  --on-danger: #101010;
 
-  --toggle-off: #3d3935;
-  --knob: #f0ede8;
+  --toggle-off: #737373;
+  --knob: #f3f3f3;
 
   --shadow-float: 0 1px 2px rgba(0, 0, 0, 0.4), 0 16px 40px rgba(0, 0, 0, 0.45);
   --shadow-control: 0 1px 1px rgba(0, 0, 0, 0.3);
+  --shadow-knob: 0 1px 2px rgba(0, 0, 0, 0.5);
 }
 
 *,
@@ -136,7 +188,8 @@ body {
 
 button,
 input,
-select {
+select,
+textarea {
   font: inherit;
   color: inherit;
 }
@@ -150,6 +203,15 @@ button {
   outline-offset: 2px;
 }
 
+/* macOS 12.0–12.2 ship WebKit before :focus-visible (15.4). There the ring
+   follows every focus — better than none for keyboard users. */
+@supports not selector(:focus-visible) {
+  :focus {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+  }
+}
+
 [hidden] {
   display: none !important;
 }
@@ -157,6 +219,15 @@ button {
 .latin,
 .is-latin,
 kbd {
+  font-family: var(--font-latin);
+}
+
+/* A Latin run, shortcut or number inside Arabic prose: an LTR island in
+   Almarai, so «⌘V» never reads «V⌘». */
+bdi,
+.ltr {
+  unicode-bidi: isolate;
+  direction: ltr;
   font-family: var(--font-latin);
 }
 

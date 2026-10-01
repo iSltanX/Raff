@@ -35,14 +35,19 @@ function contrast(a, b) {
   return (hi + 0.05) / (lo + 0.05);
 }
 
-test('the Mizan palette is the only palette, in both appearances', () => {
+test('the «قريب ومرتب» palette is the only palette, in both appearances', () => {
+  // Approved at Gate 1 (2026-10-01): neutral greys, one olive sage, clear ink.
+  // Figma «Raff · Theme» holds the same values; changing one is a design
+  // decision, made in Figma first.
   const tokens = read('src/tokens.css');
-  assert.equal(token(tokens, ':root', '--ink'), '#1c1917');
-  assert.equal(token(tokens, ':root', '--bg-canvas'), '#f0ede8');
-  assert.equal(token(tokens, ':root', '--bg-window'), '#f8f6f3');
-  assert.equal(token(tokens, ':root', '--brand-sage'), '#7c8c78');
-  assert.equal(token(tokens, ':root', '--line-strong'), '#d6d0c8');
-  assert.equal(token(tokens, ":root[data-appearance='dark']", '--ink'), '#f0ede8');
+  assert.equal(token(tokens, ':root', '--ink'), '#1a1a1a');
+  assert.equal(token(tokens, ':root', '--bg-canvas'), '#f3f3f3');
+  assert.equal(token(tokens, ':root', '--bg-window'), '#fafafa');
+  assert.equal(token(tokens, ':root', '--accent'), '#56644c');
+  assert.equal(token(tokens, ':root', '--brand-sage'), '#86947b');
+  assert.equal(token(tokens, ':root', '--line-strong'), '#d9d9d9');
+  assert.equal(token(tokens, ":root[data-appearance='dark']", '--ink'), '#f3f3f3');
+  assert.equal(token(tokens, ":root[data-appearance='dark']", '--bg-window'), '#1f1f1f');
 
   for (const file of [...CSS, ...HTML]) {
     const text = read(`src/${file}`).toLowerCase();
@@ -56,14 +61,21 @@ test('the Mizan palette is the only palette, in both appearances', () => {
 test('reading text keeps AA contrast on its surfaces in Light and Dark', () => {
   const tokens = read('src/tokens.css');
   for (const scope of [':root', ":root[data-appearance='dark']"]) {
-    for (const surface of ['--bg-window', '--bg-canvas']) {
-      for (const ink of ['--ink', '--ink-2', '--ink-3', '--accent-ink', '--danger']) {
+    for (const surface of ['--bg-window', '--bg-canvas', '--bg-raised']) {
+      for (const ink of ['--ink', '--ink-2', '--ink-3', '--accent-ink', '--danger-ink', '--warning-ink', '--success-ink']) {
         const ratio = contrast(token(tokens, scope, ink), token(tokens, scope, surface));
         assert.ok(ratio >= 4.5, `${scope} ${ink} on ${surface} is ${ratio.toFixed(2)}:1`);
       }
     }
-    const onAccent = contrast(token(tokens, scope, '--on-accent'), token(tokens, scope, '--accent'));
-    assert.ok(onAccent >= 4.5, `${scope} text on the accent fill is ${onAccent.toFixed(2)}:1`);
+    for (const [fg, bg] of [['--on-accent', '--accent'], ['--on-accent', '--accent-hover'], ['--on-danger', '--danger'], ['--ink-inverse', '--bg-inverse'], ['--accent-on-inverse', '--bg-inverse'], ['--danger-on-inverse', '--bg-inverse']]) {
+      const ratio = contrast(token(tokens, scope, fg) ?? token(tokens, ':root', fg), token(tokens, scope, bg));
+      assert.ok(ratio >= 4.5, `${scope} ${fg} on ${bg} is ${ratio.toFixed(2)}:1`);
+    }
+    // What identifies a control or its state needs 3:1 (WCAG 1.4.11).
+    for (const fg of ['--toggle-off', '--control-off', '--line-input', '--accent', '--focus']) {
+      const ratio = contrast(token(tokens, scope, fg), token(tokens, scope, '--bg-raised'));
+      assert.ok(ratio >= 3, `${scope} ${fg} on --bg-raised is ${ratio.toFixed(2)}:1`);
+    }
   }
 });
 
@@ -124,7 +136,8 @@ test('secondary windows use the native overlay title bar at their designed sizes
   assert.match(commands, /\.title_bar_style\(tauri::TitleBarStyle::Overlay\)/u);
   assert.match(commands, /\.hidden_title\(true\)/u);
   assert.doesNotMatch(commands, /decorations\(false\)/u);
-  for (const size of ['(560.0, 440.0)', '(320.0, 360.0)', '(460.0, 520.0)', '(360.0, 280.0)']) {
+  // About grew to 320×420 at Gate 1 for the report action (Figma 270:596).
+  for (const size of ['(560.0, 440.0)', '(320.0, 420.0)', '(460.0, 520.0)', '(360.0, 280.0)']) {
     assert.ok(commands.includes(size), `window size ${size}`);
   }
 });
