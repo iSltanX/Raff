@@ -2,7 +2,7 @@
   "name": "raff",
   "version": "5.1.0",
   "private": true,
-  "description": "رفّ — personal, local-only, keyboard-first clipboard manager for macOS",
+  "description": "رفّ — personal, keyboard-first clipboard manager for macOS; your clipboard stays on your Mac",
   "type": "module",
   "scripts": {
     "tauri": "tauri",
