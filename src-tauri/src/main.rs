@@ -1,5 +1,7 @@
-// رفّ (Raff) — personal, local-only, keyboard-first clipboard manager for macOS.
-// Background menu-bar app: no Dock icon, one global hotkey, zero network.
+// رفّ (Raff) — personal, keyboard-first clipboard manager for macOS.
+// Background menu-bar app: no Dock icon, one global hotkey. Clipboard content
+// never leaves the machine; the network is used only for update checks and
+// for a problem report the user previews and confirms.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod commands;
@@ -80,6 +82,48 @@ impl Pause {
     pub fn is_active(&self) -> bool {
         *self != Pause::Off
     }
+
+    /// What the interface may say about the pause: its kind and, for a timed
+    /// one, the whole minutes left. A timed pause that has run out is off,
+    /// even before the next copy or the expiry timer clears it.
+    pub fn view(&self) -> PauseView {
+        match *self {
+            Pause::Off => PauseView::default(),
+            Pause::SkipNext => PauseView { kind: "skipNext", ..PauseView::default() },
+            Pause::Until(None) => PauseView { kind: "untilRestart", ..PauseView::default() },
+            Pause::Until(Some(until)) => {
+                let left = until.saturating_duration_since(Instant::now());
+                if left.is_zero() {
+                    return PauseView::default();
+                }
+                PauseView { kind: "timed", minutes_left: Some(left.as_secs().div_ceil(60).max(1)) }
+            }
+        }
+    }
+}
+
+/// A pause as the panel, Settings and the menu describe it. Nothing about
+/// what was skipped — only that, and until when.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PauseView {
+    /// "off" | "skipNext" | "timed" | "untilRestart"
+    pub kind: &'static str,
+    pub minutes_left: Option<u64>,
+}
+
+impl Default for PauseView {
+    fn default() -> Self {
+        Self { kind: "off", minutes_left: None }
+    }
+}
+
+/// Whether to open the welcome on launch. Only whether it was ever shown
+/// matters: the capture question has nothing to do with the paste
+/// permission, so a permission already granted (a reinstall, say) must not
+/// skip it.
+pub fn should_open_welcome(first_run_shown: bool) -> bool {
+    !first_run_shown
 }
 
 /// The store guard, recovering a poisoned lock instead of propagating the panic.
@@ -151,11 +195,14 @@ fn main() {
             commands::open_settings,
             commands::open_about,
             commands::open_repository,
+            commands::open_privacy_policy,
             commands::ax_status,
             commands::request_accessibility,
             commands::open_accessibility_settings,
             commands::firstrun_done,
             commands::list_running_apps,
+            commands::resume_capture,
+            commands::restart_app,
             updater::check_for_update,
             updater::download_and_install_update,
             updater::restart_to_update,
@@ -174,6 +221,17 @@ fn main() {
                 api.prevent_close();
                 let _ = window.hide();
             }
+            // Closing the welcome is an answer too: it does not come back on
+            // every launch. «تم» marks it the same way, before closing.
+            tauri::WindowEvent::Destroyed if window.label() == "firstrun" => {
+                let state = window.state::<AppState>();
+                let mut store = lock_store(&state.store);
+                if !store.settings.first_run_shown {
+                    if let Err(err) = store.mark_first_run_shown_persisted() {
+                        eprintln!("raff: could not record the welcome as shown: {err}");
+                    }
+                }
+            }
             _ => {}
         })
         .setup(|app| {
@@ -183,7 +241,8 @@ fn main() {
             let store = storage::Store::load(data_dir);
             startup_trace::mark("storage_loaded");
             let hotkey = store.settings.hotkey.clone();
-            let first_run_pending = !store.settings.first_run_shown;
+            let open_welcome = should_open_welcome(store.settings.first_run_shown);
+            let capture_enabled = store.settings.capture_enabled;
             // Applied directly on `App` (not a cloned AppHandle): at this point
             // in `setup`, `App::set_theme` takes the synchronous runtime path
             // and sets NSApp.appearance immediately, before any window below
@@ -209,6 +268,7 @@ fn main() {
             // So the icon is truthful from the first frame, not from whenever
             // something first happens to ask.
             tray::note_permission(macos::ax_trusted());
+            tray::note_capture_enabled(capture_enabled);
             startup_trace::mark("tray_created_ICON_NOW_VISIBLE");
             if let Err(err) = commands::register_hotkey(&handle, &hotkey) {
                 eprintln!("raff: hotkey registration failed: {err}");
@@ -217,7 +277,7 @@ fn main() {
             monitor::start(handle.clone());
             startup_trace::mark("monitor_started");
 
-            if first_run_pending && !macos::ax_trusted() {
+            if open_welcome {
                 commands::open_firstrun_window(&handle);
             }
             startup_trace::mark("firstrun_checked");
@@ -284,6 +344,34 @@ mod tests {
         ));
         assert!(!elapsed.consume(), "an elapsed pause stops skipping");
         assert!(!elapsed.is_active(), "and stops calling itself a pause");
+    }
+
+    #[test]
+    fn the_welcome_opens_until_it_was_shown_whatever_the_permission() {
+        assert!(should_open_welcome(false));
+        assert!(!should_open_welcome(true));
+    }
+
+    #[test]
+    fn a_pause_is_described_without_anything_it_skipped() {
+        assert_eq!(Pause::Off.view().kind, "off");
+        assert_eq!(Pause::SkipNext.view().kind, "skipNext");
+        assert_eq!(Pause::Until(None).view().kind, "untilRestart");
+        let timed = Pause::for_minutes(Some(15)).view();
+        assert_eq!(timed.kind, "timed");
+        assert_eq!(timed.minutes_left, Some(15));
+        let json = serde_json::to_value(Pause::for_minutes(Some(60)).view()).unwrap();
+        let mut keys: Vec<_> = json.as_object().unwrap().keys().cloned().collect();
+        keys.sort();
+        assert_eq!(keys, ["kind", "minutesLeft"]);
+    }
+
+    #[test]
+    fn a_timed_pause_that_ran_out_reads_as_off_before_anything_clears_it() {
+        let elapsed = Pause::Until(Some(
+            Instant::now().checked_sub(Duration::from_secs(1)).unwrap(),
+        ));
+        assert_eq!(elapsed.view(), PauseView::default());
     }
 
     #[test]

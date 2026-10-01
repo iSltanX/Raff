@@ -86,6 +86,8 @@ pub struct StatePayload {
     /// False once the capture loop has given up. Distinct from
     /// `settings.capture_enabled`, which only says what the user asked for.
     pub capture_alive: bool,
+    /// A pause in force, if any — its kind and minutes left, nothing it skipped.
+    pub capture_pause: crate::PauseView,
 }
 
 /// What the Settings window actually needs: the preferences and the two states
@@ -101,6 +103,11 @@ pub struct SettingsPayload {
     pub ax_trusted: bool,
     pub version: String,
     pub capture_alive: bool,
+    pub capture_pause: crate::PauseView,
+}
+
+fn pause_view(state: &AppState) -> crate::PauseView {
+    crate::lock_pause(&state.pause).view()
 }
 
 #[tauri::command]
@@ -111,6 +118,7 @@ pub fn get_settings(app: AppHandle, state: State<AppState>) -> SettingsPayload {
         ax_trusted: ax_trusted_noted(),
         version: app.package_info().version.to_string(),
         capture_alive: state.capture_alive.load(std::sync::atomic::Ordering::SeqCst),
+        capture_pause: pause_view(&state),
     }
 }
 
@@ -128,6 +136,7 @@ pub fn get_state(app: AppHandle, state: State<AppState>) -> StatePayload {
         version: app.package_info().version.to_string(),
         unreadable_layer: store.unreadable_layer,
         capture_alive: state.capture_alive.load(std::sync::atomic::Ordering::SeqCst),
+        capture_pause: pause_view(&state),
     }
 }
 
@@ -359,9 +368,31 @@ pub fn update_settings(
     if settings.follow_system != old.follow_system || settings.appearance != old.appearance {
         sync_appearance(&app);
     }
+    crate::tray::note_capture_enabled(settings.capture_enabled);
 
     notify(&app);
     Ok(())
+}
+
+/// Turns capture on or off from outside Settings (the menu bar's «تفعيل
+/// الالتقاط»), through the same validated, persisted path.
+pub fn set_capture_enabled(app: &AppHandle, enabled: bool) -> Result<(), String> {
+    let state = app.state::<AppState>();
+    let mut next = crate::lock_store(&state.store).settings.clone();
+    next.capture_enabled = enabled;
+    update_settings(app.clone(), state, next)
+}
+
+/// Ends a pause from the panel strip or Settings.
+#[tauri::command]
+pub fn resume_capture() {
+    crate::tray::resume_capture();
+}
+
+/// «إعادة تشغيل رفّ» — the remedy when the capture loop has stopped.
+#[tauri::command]
+pub fn restart_app(app: AppHandle) {
+    app.restart();
 }
 
 fn validate_settings(settings: &Settings) -> Result<(), String> {
@@ -593,6 +624,12 @@ pub fn open_repository() {
     macos::open_repository();
 }
 
+/// Opens PRIVACY.md. Takes no argument, like `open_repository`.
+#[tauri::command]
+pub fn open_privacy_policy() {
+    macos::open_privacy_policy();
+}
+
 /// The panel header's gear (Figma «08», Header-Actions 2:7695).
 #[tauri::command]
 pub fn open_settings(app: AppHandle) {
@@ -632,7 +669,7 @@ pub fn open_about_window(app: &AppHandle) {
             "about",
             "about.html",
             "عن رفّ",
-            (320.0, 360.0),
+            (320.0, 420.0),
         );
     });
 }

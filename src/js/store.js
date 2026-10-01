@@ -36,6 +36,7 @@ export const api = {
   openSettings: () => invoke('open_settings'),
   openAbout: () => invoke('open_about'),
   openRepository: () => invoke('open_repository'),
+  openPrivacyPolicy: () => invoke('open_privacy_policy'),
   axStatus: () => invoke('ax_status'),
   requestAccessibility: () => invoke('request_accessibility'),
   openAccessibilitySettings: () => invoke('open_accessibility_settings'),
@@ -46,6 +47,9 @@ export const api = {
   restartToUpdate: () => invoke('restart_to_update'),
   consumeUpdateIntent: () => invoke('consume_update_intent'),
   openUpdates: () => invoke('open_updates'),
+  // Capture status actions shared by the panel strip, Settings and the menu.
+  resumeCapture: () => invoke('resume_capture'),
+  restartApp: () => invoke('restart_app'),
 };
 
 export const on = (event, handler) => listen(event, handler);
