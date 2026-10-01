@@ -39,10 +39,11 @@
     </div>
 
     <div class="update-actions">
-      <button type="button" class="btn" id="u-ok" hidden>حسنًا</button>
-      <button type="button" class="btn btn-primary" id="u-download" hidden>تنزيل التحديث وتثبيته</button>
-      <button type="button" class="btn btn-primary" id="u-restart" hidden>إعادة التشغيل</button>
+      <!-- RTL: the primary action ends the row (leftmost), as everywhere. -->
+      <button type="button" class="btn btn-quiet" id="u-ok" hidden>حسنًا</button>
       <button type="button" class="btn" id="u-retry" hidden>إعادة المحاولة</button>
+      <button type="button" class="btn btn-primary" id="u-download" hidden>تنزيل وتثبيت</button>
+      <button type="button" class="btn btn-primary" id="u-restart" hidden>إعادة التشغيل</button>
     </div>
   </main>
   <script type="module" src="js/update.js"></script>

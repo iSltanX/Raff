@@ -1,4 +1,4 @@
-// The «عن رفّ» window — Figma «08 — Product Screens», screen ٦ (2:8059).
+// The «عن رفّ» window — Figma «07 — Product UI» About 270:596.
 //
 // Everything on this window is static except three things: the compact version
 // label (read from the running app), the repository control (the URL
@@ -47,7 +47,7 @@ async function loadVersion() {
     const state = await api.getState();
     const version = state?.version;
     if (!version) return; // no version, no line — never a fake number
-    versionEl.textContent = `Version ${version}`;
+    versionEl.textContent = `الإصدار \u2066${version}\u2069`;
   } catch {
     // A version we could not read is simply not shown.
   }
@@ -60,11 +60,16 @@ el('repo-link').addEventListener('click', (e) => {
   api.openRepository().catch(() => {});
 });
 
+el('privacy-link').addEventListener('click', () => {
+  api.openPrivacyPolicy().catch(() => {});
+});
+
 // ─── Update check — Actions-Bottom (2:8072) ───────────────────────────────
 
+// The line stays rendered (its room is reserved): a live region unhidden and
+// filled in the same tick is often missed by VoiceOver.
 function setStatus(text) {
   statusEl.textContent = text;
-  statusEl.hidden = !text;
   shellEl.classList.toggle('has-status', Boolean(text));
 }
 

@@ -1,4 +1,4 @@
-/* Update — one calm column: icon, status, release notes, actions. */
+/* Figma «07» Update 271:626. Update — one calm column: icon, status, release notes, actions. */
 
 html,
 body {
@@ -34,7 +34,7 @@ body {
 }
 
 .update-status.error {
-  color: var(--danger);
+  color: var(--danger-ink);
 }
 
 .update-available {
