@@ -184,7 +184,7 @@ fn main() {
         // surfaces the panel.
         builder = builder.plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
             eprintln!("raff: relaunch forwarded, argv: {argv:?}");
-            startup_trace::mark(&format!("SINGLE_INSTANCE_FORWARD argv={argv:?}"));
+            startup_trace::mark("SINGLE_INSTANCE_FORWARD");
             if argv.iter().any(|a| a == "--settings") {
                 commands::open_settings_window(app);
             } else {
@@ -284,6 +284,7 @@ fn main() {
                 Some(dir) => dir,
                 None => app.path().app_data_dir()?,
             };
+            startup_trace::set_dir(&data_dir);
             startup_trace::mark("app_data_dir_resolved");
             let store = storage::Store::load(data_dir);
             startup_trace::mark("storage_loaded");

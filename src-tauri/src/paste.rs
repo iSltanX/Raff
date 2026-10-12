@@ -64,7 +64,7 @@ pub fn write_item_to_clipboard(app: &AppHandle, id: &str, plain: bool) -> bool {
 /// The boolean distinguishes a real synthesized paste from clipboard-only
 /// fallback, using a fresh Accessibility check instead of stale panel state.
 pub async fn paste_item(app: &AppHandle, id: &str, plain: bool) -> Result<bool, String> {
-    crate::startup_trace::mark(&format!("PASTE row_click_invoke id={id}"));
+    crate::startup_trace::mark("PASTE row_click_invoke");
     if !write_item_to_clipboard(app, id, plain) {
         crate::startup_trace::mark("PASTE write_item_to_clipboard FAILED (unknown id)");
         return Err(crate::commands::err::NOT_FOUND.into());
@@ -81,7 +81,9 @@ pub async fn paste_item(app: &AppHandle, id: &str, plain: bool) -> Result<bool, 
 
     let state = app.state::<AppState>();
     let previous_pid = crate::lock_previous_app(&state.previous_app).take();
-    crate::startup_trace::mark(&format!("PASTE previous_pid={previous_pid:?}"));
+    crate::startup_trace::mark_with(|| {
+        format!("PASTE previous app remembered={}", previous_pid.is_some())
+    });
 
     let handle = app.clone();
     let id = id.to_string();
@@ -96,26 +98,29 @@ pub async fn paste_item(app: &AppHandle, id: &str, plain: bool) -> Result<bool, 
                     "PASTE panel_hide done; panel.is_visible()={:?}",
                     handle.get_webview_panel(panel::PANEL_LABEL).map(|p| p.is_visible())
                 ));
-                if let Some(pid) = previous_pid {
-                    crate::startup_trace::mark(&format!("PASTE activate_app requested pid={pid}"));
-                    macos::activate_app(pid);
+                if let Some(previous) = previous_pid {
+                    crate::startup_trace::mark("PASTE activate_app requested");
+                    macos::activate_app(previous);
                     crate::startup_trace::mark("PASTE activate_app call returned");
                 } else {
-                    crate::startup_trace::mark("PASTE NO previous_pid to activate — previous_app was never captured or already consumed");
+                    crate::startup_trace::mark("PASTE no previous app to activate — never remembered or already consumed");
                 }
-                let frontmost_now = macos::frontmost_app();
-                crate::startup_trace::mark(&format!(
-                    "PASTE frontmost immediately after activate: pid={} bundle={}",
-                    frontmost_now.pid, frontmost_now.bundle_id
-                ));
+                crate::startup_trace::mark_with(|| {
+                    format!(
+                        "PASTE front is the previous app immediately after activate: {}",
+                        previous_pid == Some(macos::frontmost_app().pid)
+                    )
+                });
                 let handle2 = handle.clone();
                 std::thread::spawn(move || {
                     std::thread::sleep(Duration::from_millis(ACTIVATE_DELAY_MS));
                     let front_before_paste = macos::frontmost_app();
-                    crate::startup_trace::mark(&format!(
-                        "PASTE frontmost after {ACTIVATE_DELAY_MS}ms wait: pid={} bundle={}",
-                        front_before_paste.pid, front_before_paste.bundle_id
-                    ));
+                    crate::startup_trace::mark_with(|| {
+                        format!(
+                            "PASTE front is the previous app after {ACTIVATE_DELAY_MS}ms wait: {}",
+                            previous_pid == Some(front_before_paste.pid)
+                        )
+                    });
                     let still_trusted = macos::ax_trusted();
                     let sent = if still_trusted { macos::send_cmd_v() } else { false };
                     crate::startup_trace::mark(&format!(

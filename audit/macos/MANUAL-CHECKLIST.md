@@ -20,7 +20,7 @@ npm run tauri dev
 >
 > المتغيرات الثلاثة تُتجاهل في نسخ release (`cfg!(debug_assertions)`). تحقق من `echo $RAFF_DATA_DIR` قبل أي خطوة تكتب ملفات.
 >
-> علامة التتبع `/tmp/raff-trace-on` تفعّل التتبع حتى في release (RAFF-AUD-006). لا تنشئها إلا عمدًا، واحذفها بعد ذلك.
+> علامة التتبع `/tmp/raff-trace-on` تفعّل التتبع في نسخ debug وحدها (أُصلح RAFF-AUD-006). يُكتب السجل في `$RAFF_DATA_DIR/startup-trace.log` بصلاحيات 0600، ولا شيء في `/tmp`.
 
 الفحوص الآلية: `bash audit/macos/run-native-checks.sh` (اختياريًا `--mutants`).
 
@@ -386,6 +386,6 @@ npm run tauri dev
 ## التنظيف
 
 ```bash
-rm -rf "$RAFF_DATA_DIR"; rm -f /tmp/raff-trace-on /tmp/raff-startup-trace.log
+rm -rf "$RAFF_DATA_DIR"; rm -f /tmp/raff-trace-on
 # احذف أي LaunchAgent أنشأته نسخة debug في السيناريو 20
 ```
