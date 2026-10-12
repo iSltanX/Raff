@@ -1,0 +1,35 @@
+clean: baseline fail=0 audit fail=0
+M1 KILLED baseline_fail=2 audit_fail=2 — حذف طيّ الألف في normalizeArabic
+    baseline: normalizeArabic folds the alef forms and the dotless ya
+    baseline: search folding matches across alef and ya spellings both ways
+    audit:    normalizeArabic: الناتج خالٍ من كل ما يُطوى
+    audit:    المتجهات ما زالت تطابق normalizeArabic الحالي (حماية من تقادم الملف)
+M2 KILLED baseline_fail=2 audit_fail=2 — حذف إزالة التشكيل في normalizeArabic
+    baseline: normalizeArabic strips tashkeel and tatweel
+    baseline: filterItems matches text and source app, diacritic-insensitive
+    audit:    normalizeArabic: الناتج خالٍ من كل ما يُطوى
+    audit:    المتجهات ما زالت تطابق normalizeArabic الحالي (حماية من تقادم الملف)
+M3 KILLED baseline_fail=2 audit_fail=2 — حذف طيّ الألف المقصورة
+    baseline: normalizeArabic folds the alef forms and the dotless ya
+    baseline: search folding matches across alef and ya spellings both ways
+    audit:    normalizeArabic: الناتج خالٍ من كل ما يُطوى
+    audit:    المتجهات ما زالت تطابق normalizeArabic الحالي (حماية من تقادم الملف)
+M4 KILLED baseline_fail=2 audit_fail=2 — تجاهل alsoMatchIds في filterItems
+    baseline: panel: search reaches the text the preview cut off
+    audit:    رد قديم يصل بعد الأحدث لا يُطبَّق
+    audit:    العودة إلى استعلام سابق لا تستعمل نتيجة قديمة له
+M5 KILLED baseline_fail=3 audit_fail=0 — errorMessage يعيد String(err)
+    baseline: panel: a backend failure is shown in Raff’s own words
+M6 KILLED baseline_fail=2 audit_fail=0 — حذف فحص الرمز القديم بعد getState في refresh
+    baseline: panel lifecycle: copy/paste an old item, hide, reopen — the list must survive
+M7 KILLED-BY-AUDIT baseline_fail=0 audit_fail=2 — حذف فحص deepSearchToken
+    audit:    رد قديم يصل بعد الأحدث لا يُطبَّق
+    audit:    العودة إلى استعلام سابق لا تستعمل نتيجة قديمة له
+M8 KILLED baseline_fail=1 audit_fail=3 — عرض نص المقطع عبر innerHTML
+    baseline: icons are drawn as masks and never injected as markup
+    audit:    فحص ساكن: لا واجهات شبكة في شيفرة الواجهة
+    audit:    لا عناصر محقونة داخل القائمة
+    audit:    الحمولة تظهر حرفيًا كنص
+M9 KILLED baseline_fail=1 audit_fail=0 — إضافة mock.js إلى قائمة السماح في البناء
+    baseline: frontend distribution contains exactly the production allowlist
+worktree clean after restore: yes
