@@ -24,8 +24,10 @@ pub const ENDPOINT: &str = "https://app-reports.isultantf.workers.dev/v1/reports
 /// The window's limit (Gate 1). The contract allows 2000.
 pub const MAX_DESCRIPTION_CHARS: usize = 1000;
 const SEND_TIMEOUT: Duration = Duration::from_secs(20);
-/// When a 429 carries no Retry-After (or an HTTP date), wait an hour (the
-/// per-IP window). A hostile or broken value is capped at a day.
+/// When a 429 carries no usable Retry-After (none, an HTTP date, or not a
+/// number), wait an hour (the per-IP window). A number of seconds is taken as
+/// given — `0` means now (RFC 9110 §10.2.3) — and capped at a day, however
+/// large it is.
 const DEFAULT_RETRY_AFTER_S: u64 = 3600;
 const MAX_RETRY_AFTER_S: u64 = 86_400;
 
@@ -133,7 +135,11 @@ pub enum SendOutcome {
     /// 201, or 200 for a replayed key.
     Sent { id: u64 },
     /// 400 / 413 / 415 — sending again would not change the answer.
-    Rejected { code: u16, error: Option<String>, field: Option<String> },
+    Rejected {
+        code: u16,
+        error: Option<String>,
+        field: Option<String>,
+    },
     /// 429 — try again after `retry_after_s`.
     #[serde(rename_all = "camelCase")]
     RateLimited { retry_after_s: u64 },
@@ -157,7 +163,13 @@ fn os_version() -> String {
                 .output()
                 .ok()
                 .and_then(|o| String::from_utf8(o.stdout).ok())
-                .map(|s| s.trim().chars().filter(|c| c.is_ascii_digit() || *c == '.').take(16).collect())
+                .map(|s| {
+                    s.trim()
+                        .chars()
+                        .filter(|c| c.is_ascii_digit() || *c == '.')
+                        .take(16)
+                        .collect()
+                })
                 .filter(|s: &String| !s.is_empty())
                 .unwrap_or_else(|| "unknown".into())
         })
@@ -185,10 +197,20 @@ fn freeze(
     os_version: String,
     endpoint: &str,
 ) -> Result<Frozen, String> {
-    let kind = KINDS.iter().copied().find(|k| *k == kind).ok_or(err::INVALID)?;
+    let kind = KINDS
+        .iter()
+        .copied()
+        .find(|k| *k == kind)
+        .ok_or(err::INVALID)?;
     let category = match category.filter(|c| !c.is_empty()) {
         None => None,
-        Some(c) => Some(CATEGORIES.iter().copied().find(|k| *k == c).ok_or(err::INVALID)?),
+        Some(c) => Some(
+            CATEGORIES
+                .iter()
+                .copied()
+                .find(|k| *k == c)
+                .ok_or(err::INVALID)?,
+        ),
     };
     let description = description.trim().to_string();
     let length = description.chars().count();
@@ -269,12 +291,17 @@ fn ensure_crypto_provider() {
 }
 
 fn retry_after_seconds(value: Option<&reqwest::header::HeaderValue>) -> u64 {
-    value
-        .and_then(|v| v.to_str().ok())
-        .and_then(|v| v.trim().parse::<u64>().ok())
-        .filter(|s| *s > 0)
-        .unwrap_or(DEFAULT_RETRY_AFTER_S)
-        .min(MAX_RETRY_AFTER_S)
+    let Some(text) = value.and_then(|v| v.to_str().ok()).map(str::trim) else {
+        return DEFAULT_RETRY_AFTER_S;
+    };
+    // delay-seconds is 1*DIGIT: anything else (a date, a sign, a fraction) is
+    // not a number of seconds at all.
+    if text.is_empty() || !text.bytes().all(|b| b.is_ascii_digit()) {
+        return DEFAULT_RETRY_AFTER_S;
+    }
+    // Digits too many for u64 are still seconds — a great many of them.
+    text.parse::<u64>()
+        .map_or(MAX_RETRY_AFTER_S, |seconds| seconds.min(MAX_RETRY_AFTER_S))
 }
 
 /// One POST of a frozen body. Separate from the session so it is tested
@@ -313,10 +340,18 @@ async fn send_to(endpoint: &str, body: &str, key: &str, timeout: Duration) -> Se
         },
         400 | 413 | 415 => SendOutcome::Rejected {
             code,
-            error: json.get("error").and_then(|v| v.as_str()).map(|s| s.chars().take(64).collect()),
-            field: json.get("field").and_then(|v| v.as_str()).map(|s| s.chars().take(64).collect()),
+            error: json
+                .get("error")
+                .and_then(|v| v.as_str())
+                .map(|s| s.chars().take(64).collect()),
+            field: json
+                .get("field")
+                .and_then(|v| v.as_str())
+                .map(|s| s.chars().take(64).collect()),
         },
-        429 => SendOutcome::RateLimited { retry_after_s: retry_after },
+        429 => SendOutcome::RateLimited {
+            retry_after_s: retry_after,
+        },
         _ => SendOutcome::Failed { reason: "server" },
     }
 }
@@ -388,12 +423,19 @@ pub async fn report_send(window: tauri::WebviewWindow) -> Result<SendOutcome, St
     let (body, key, blocked, epoch) = {
         let session = lock();
         let frozen = session.frozen.as_ref().ok_or(err::NOT_PREPARED)?;
-        (frozen.body.clone(), frozen.key.clone(), session.blocked_until, session.epoch)
+        (
+            frozen.body.clone(),
+            frozen.key.clone(),
+            session.blocked_until,
+            session.epoch,
+        )
     };
     if let Some(until) = blocked {
         let left = until.saturating_duration_since(Instant::now()).as_secs();
         if left > 0 {
-            return Ok(SendOutcome::RateLimited { retry_after_s: left });
+            return Ok(SendOutcome::RateLimited {
+                retry_after_s: left,
+            });
         }
     }
     let began = Instant::now();
@@ -417,8 +459,7 @@ pub async fn report_send(window: tauri::WebviewWindow) -> Result<SendOutcome, St
         // A rate limit is the server's answer about this Mac, whatever window
         // is open now.
         SendOutcome::RateLimited { retry_after_s } => {
-            session.blocked_until =
-                Instant::now().checked_add(Duration::from_secs(*retry_after_s));
+            session.blocked_until = Instant::now().checked_add(Duration::from_secs(*retry_after_s));
         }
         _ => {}
     }
@@ -438,7 +479,11 @@ pub async fn report_copy(app: AppHandle, window: tauri::WebviewWindow) -> Result
 
 /// «نسخ الرقم» — `#id`, through the same skipped write.
 #[tauri::command]
-pub fn report_copy_number(app: AppHandle, window: tauri::WebviewWindow, id: u64) -> Result<(), String> {
+pub fn report_copy_number(
+    app: AppHandle,
+    window: tauri::WebviewWindow,
+    id: u64,
+) -> Result<(), String> {
     require_window(&window, &["report"])?;
     write_clipboard(&app, &format!("#{id}"))
 }
@@ -498,7 +543,9 @@ pub async fn report_pick_image(window: tauri::WebviewWindow) -> Result<Option<Im
 fn read_capped(path: &std::path::Path) -> Result<Vec<u8>, report_image::ImageError> {
     use std::io::Read;
     let file = std::fs::File::open(path).map_err(|_| report_image::ImageError::Unreadable)?;
-    let meta = file.metadata().map_err(|_| report_image::ImageError::Unreadable)?;
+    let meta = file
+        .metadata()
+        .map_err(|_| report_image::ImageError::Unreadable)?;
     if !meta.is_file() {
         return Err(report_image::ImageError::Unreadable);
     }
@@ -525,10 +572,11 @@ async fn pick_image() -> Result<Option<ImageMeta>, String> {
         .ok()
         .flatten();
     let Some(path) = path else { return Ok(None) };
-    let bytes = tauri::async_runtime::spawn_blocking(move || read_capped(std::path::Path::new(&path)))
-        .await
-        .map_err(|_| report_image::ImageError::Unreadable.code().to_string())?
-        .map_err(|e| e.code().to_string())?;
+    let bytes =
+        tauri::async_runtime::spawn_blocking(move || read_capped(std::path::Path::new(&path)))
+            .await
+            .map_err(|_| report_image::ImageError::Unreadable.code().to_string())?
+            .map_err(|e| e.code().to_string())?;
     prepare_off_main(bytes, false).await.map(Some)
 }
 
@@ -578,14 +626,24 @@ mod tests {
     fn diag() -> Diagnostics {
         let dir = std::env::temp_dir().join(format!("raff-report-test-{}", uuid::Uuid::new_v4()));
         let store = crate::storage::Store::load(dir.clone());
-        let diagnostics = diagnostics::from_parts(&store, true, crate::Pause::Off, Some(true), vec![], 1);
+        let diagnostics =
+            diagnostics::from_parts(&store, true, crate::Pause::Off, Some(true), vec![], 1);
         let _ = std::fs::remove_dir_all(dir);
         diagnostics
     }
 
     fn frozen(description: &str, image: Option<&Prepared>) -> Frozen {
-        freeze("bug", Some("hotkey"), description, diag(), image, "5.1.0".into(), "15.4".into(), ENDPOINT)
-            .expect("valid")
+        freeze(
+            "bug",
+            Some("hotkey"),
+            description,
+            diag(),
+            image,
+            "5.1.0".into(),
+            "15.4".into(),
+            ENDPOINT,
+        )
+        .expect("valid")
     }
 
     struct Seen {
@@ -596,7 +654,12 @@ mod tests {
     /// A one-shot local HTTP server: answers with `status`, `extra` headers
     /// and `body`, and reports what it received. `respond: false` accepts and
     /// never answers (a timeout).
-    fn server(status: &str, extra: &str, body: &str, respond: bool) -> (String, mpsc::Receiver<Seen>) {
+    fn server(
+        status: &str,
+        extra: &str,
+        body: &str,
+        respond: bool,
+    ) -> (String, mpsc::Receiver<Seen>) {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let url = format!("http://{}/v1/reports", listener.local_addr().unwrap());
         let (tx, rx) = mpsc::channel();
@@ -609,18 +672,28 @@ mod tests {
                 let n = stream.read(&mut chunk).unwrap();
                 buf.extend_from_slice(&chunk[..n]);
                 if let Some(i) = buf.windows(4).position(|w| w == b"\r\n\r\n") {
-                    break (String::from_utf8_lossy(&buf[..i]).to_string(), buf[i + 4..].to_vec());
+                    break (
+                        String::from_utf8_lossy(&buf[..i]).to_string(),
+                        buf[i + 4..].to_vec(),
+                    );
                 }
             };
             let length: usize = head
                 .lines()
-                .find_map(|l| l.to_ascii_lowercase().strip_prefix("content-length:").map(|v| v.trim().parse().unwrap()))
+                .find_map(|l| {
+                    l.to_ascii_lowercase()
+                        .strip_prefix("content-length:")
+                        .map(|v| v.trim().parse().unwrap())
+                })
                 .unwrap_or(0);
             while rest.len() < length {
                 let n = stream.read(&mut chunk).unwrap();
                 rest.extend_from_slice(&chunk[..n]);
             }
-            let _ = tx.send(Seen { head, body: String::from_utf8_lossy(&rest).to_string() });
+            let _ = tx.send(Seen {
+                head,
+                body: String::from_utf8_lossy(&rest).to_string(),
+            });
             if respond {
                 let reply = format!(
                     "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\n{extra}Connection: close\r\n\r\n{body}",
@@ -644,7 +717,10 @@ mod tests {
         let (url, seen) = server("201 Created", "", r#"{"id":12}"#, true);
         assert_eq!(send(&url, &f), SendOutcome::Sent { id: 12 });
         let seen = seen.recv().unwrap();
-        assert_eq!(seen.body, f.body, "the request body is the frozen preview, byte for byte");
+        assert_eq!(
+            seen.body, f.body,
+            "the request body is the frozen preview, byte for byte"
+        );
         let head = seen.head.to_ascii_lowercase();
         assert!(head.contains("content-type: application/json"));
         assert!(head.contains(&format!("idempotency-key: {}", f.key)));
@@ -654,17 +730,46 @@ mod tests {
     fn a_replayed_key_answers_200_with_the_same_number() {
         let f = frozen("مرة ثانية بعد ضياع الرد", None);
         let (url, seen) = server("200 OK", "", r#"{"id":12}"#, true);
-        assert_eq!(send(&url, &f), SendOutcome::Sent { id: 12 }, "200 is a replay, not a failure");
-        assert!(seen.recv().unwrap().head.to_ascii_lowercase().contains(&format!("idempotency-key: {}", f.key)));
+        assert_eq!(
+            send(&url, &f),
+            SendOutcome::Sent { id: 12 },
+            "200 is a replay, not a failure"
+        );
+        assert!(seen
+            .recv()
+            .unwrap()
+            .head
+            .to_ascii_lowercase()
+            .contains(&format!("idempotency-key: {}", f.key)));
     }
 
     #[test]
     fn a_retry_after_is_capped_and_a_date_falls_back_to_the_hour() {
         let f = frozen("كثير جدًا", None);
-        let (url, _) = server("429 Too Many Requests", "Retry-After: 999999999999\r\n", "", true);
-        assert_eq!(send(&url, &f), SendOutcome::RateLimited { retry_after_s: MAX_RETRY_AFTER_S });
-        let (url, _) = server("429 Too Many Requests", "Retry-After: Wed, 21 Oct 2026 07:28:00 GMT\r\n", "", true);
-        assert_eq!(send(&url, &f), SendOutcome::RateLimited { retry_after_s: DEFAULT_RETRY_AFTER_S });
+        let (url, _) = server(
+            "429 Too Many Requests",
+            "Retry-After: 999999999999\r\n",
+            "",
+            true,
+        );
+        assert_eq!(
+            send(&url, &f),
+            SendOutcome::RateLimited {
+                retry_after_s: MAX_RETRY_AFTER_S
+            }
+        );
+        let (url, _) = server(
+            "429 Too Many Requests",
+            "Retry-After: Wed, 21 Oct 2026 07:28:00 GMT\r\n",
+            "",
+            true,
+        );
+        assert_eq!(
+            send(&url, &f),
+            SendOutcome::RateLimited {
+                retry_after_s: DEFAULT_RETRY_AFTER_S
+            }
+        );
     }
 
     #[test]
@@ -675,24 +780,42 @@ mod tests {
         let (url, _) = server("307 Temporary Redirect", &location, "", true);
         assert_eq!(send(&url, &f), SendOutcome::Failed { reason: "server" });
         assert!(
-            seen_elsewhere.recv_timeout(Duration::from_millis(300)).is_err(),
+            seen_elsewhere
+                .recv_timeout(Duration::from_millis(300))
+                .is_err(),
             "the body never reaches the host a redirect names"
         );
     }
 
     #[test]
     fn a_closed_window_fences_off_late_work_but_keeps_a_rate_limit() {
-        let image = || Prepared { mime: "image/png", bytes: vec![1], width: 1, height: 1, thumb: String::new() };
+        let image = || Prepared {
+            mime: "image/png",
+            bytes: vec![1],
+            width: 1,
+            height: 1,
+            thumb: String::new(),
+        };
         let before = lock().epoch;
         lock().blocked_until = Instant::now().checked_add(Duration::from_secs(60));
         reset();
         {
             let session = lock();
-            assert_eq!(session.epoch, before.wrapping_add(1), "a reset starts a new epoch");
-            assert!(session.blocked_until.is_some(), "the server's limit outlives the window");
+            assert_eq!(
+                session.epoch,
+                before.wrapping_add(1),
+                "a reset starts a new epoch"
+            );
+            assert!(
+                session.blocked_until.is_some(),
+                "the server's limit outlives the window"
+            );
         }
         store_image(before, image());
-        assert!(lock().image.is_none(), "an image decoded for the closed window is dropped");
+        assert!(
+            lock().image.is_none(),
+            "an image decoded for the closed window is dropped"
+        );
         store_image(before.wrapping_add(1), image());
         assert!(lock().image.is_some(), "one for the open window is kept");
         reset();
@@ -709,16 +832,44 @@ mod tests {
     #[test]
     fn rejections_carry_the_reason_and_are_final() {
         for (status, body, code, error, field) in [
-            ("400 Bad Request", r#"{"error":"invalid_field","field":"description"}"#, 400, Some("invalid_field"), Some("description")),
-            ("400 Bad Request", r#"{"error":"unknown_product"}"#, 400, Some("unknown_product"), None),
-            ("413 Payload Too Large", r#"{"error":"too_large"}"#, 413, Some("too_large"), None),
-            ("415 Unsupported Media Type", r#"{"error":"unsupported_media_type"}"#, 415, Some("unsupported_media_type"), None),
+            (
+                "400 Bad Request",
+                r#"{"error":"invalid_field","field":"description"}"#,
+                400,
+                Some("invalid_field"),
+                Some("description"),
+            ),
+            (
+                "400 Bad Request",
+                r#"{"error":"unknown_product"}"#,
+                400,
+                Some("unknown_product"),
+                None,
+            ),
+            (
+                "413 Payload Too Large",
+                r#"{"error":"too_large"}"#,
+                413,
+                Some("too_large"),
+                None,
+            ),
+            (
+                "415 Unsupported Media Type",
+                r#"{"error":"unsupported_media_type"}"#,
+                415,
+                Some("unsupported_media_type"),
+                None,
+            ),
         ] {
             let f = frozen("مرفوض", None);
             let (url, _) = server(status, "", body, true);
             assert_eq!(
                 send(&url, &f),
-                SendOutcome::Rejected { code, error: error.map(Into::into), field: field.map(Into::into) },
+                SendOutcome::Rejected {
+                    code,
+                    error: error.map(Into::into),
+                    field: field.map(Into::into)
+                },
                 "{status}"
             );
         }
@@ -727,10 +878,43 @@ mod tests {
     #[test]
     fn a_rate_limit_reports_when_to_try_again() {
         let f = frozen("كثير", None);
-        let (url, _) = server("429 Too Many Requests", "Retry-After: 120\r\n", r#"{"error":"rate_limited"}"#, true);
-        assert_eq!(send(&url, &f), SendOutcome::RateLimited { retry_after_s: 120 });
-        let (url, _) = server("429 Too Many Requests", "", r#"{"error":"rate_limited"}"#, true);
-        assert_eq!(send(&url, &f), SendOutcome::RateLimited { retry_after_s: DEFAULT_RETRY_AFTER_S });
+        let (url, _) = server(
+            "429 Too Many Requests",
+            "Retry-After: 120\r\n",
+            r#"{"error":"rate_limited"}"#,
+            true,
+        );
+        assert_eq!(
+            send(&url, &f),
+            SendOutcome::RateLimited { retry_after_s: 120 }
+        );
+        let (url, _) = server(
+            "429 Too Many Requests",
+            "",
+            r#"{"error":"rate_limited"}"#,
+            true,
+        );
+        assert_eq!(
+            send(&url, &f),
+            SendOutcome::RateLimited {
+                retry_after_s: DEFAULT_RETRY_AFTER_S
+            }
+        );
+    }
+
+    #[test]
+    fn a_retry_after_of_zero_means_now_not_in_an_hour() {
+        let f = frozen("أعد الآن", None);
+        let (url, _) = server(
+            "429 Too Many Requests",
+            "Retry-After: 0\r\n",
+            r#"{"error":"rate_limited"}"#,
+            true,
+        );
+        assert_eq!(
+            send(&url, &f),
+            SendOutcome::RateLimited { retry_after_s: 0 }
+        );
     }
 
     #[test]
@@ -738,7 +922,11 @@ mod tests {
         let f = frozen("عطل", None);
         for status in ["500 Internal Server Error", "502 Bad Gateway"] {
             let (url, _) = server(status, "", "", true);
-            assert_eq!(send(&url, &f), SendOutcome::Failed { reason: "server" }, "{status}");
+            assert_eq!(
+                send(&url, &f),
+                SendOutcome::Failed { reason: "server" },
+                "{status}"
+            );
         }
         let (url, _) = server("201 Created", "", "", false);
         assert_eq!(send(&url, &f), SendOutcome::Failed { reason: "timeout" });
@@ -756,7 +944,13 @@ mod tests {
         let _ = send(&url1, &f);
         let (url2, seen2) = server("201 Created", "", r#"{"id":3}"#, true);
         assert_eq!(send(&url2, &f), SendOutcome::Sent { id: 3 });
-        let key = |s: Seen| s.head.lines().find(|l| l.to_ascii_lowercase().starts_with("idempotency-key")).unwrap().to_string();
+        let key = |s: Seen| {
+            s.head
+                .lines()
+                .find(|l| l.to_ascii_lowercase().starts_with("idempotency-key"))
+                .unwrap()
+                .to_string()
+        };
         assert_eq!(key(seen1.recv().unwrap()), key(seen2.recv().unwrap()));
         let g = frozen("بلاغ مختلف", None);
         assert_ne!(f.key, g.key);
@@ -770,7 +964,16 @@ mod tests {
         let mut keys: Vec<_> = v.as_object().unwrap().keys().cloned().collect();
         keys.sort();
         let mut expected = vec![
-            "app_version", "arch", "category", "description", "diagnostics", "kind", "locale", "os", "os_version", "product",
+            "app_version",
+            "arch",
+            "category",
+            "description",
+            "diagnostics",
+            "kind",
+            "locale",
+            "os",
+            "os_version",
+            "product",
         ];
         if cfg!(debug_assertions) {
             expected.push("test");
@@ -780,18 +983,30 @@ mod tests {
         assert_eq!(v["product"], "raff");
         assert_eq!(v["os"], "macos");
         assert_eq!(v["locale"], "ar");
-        assert_eq!(v.get("test").is_some(), cfg!(debug_assertions), "test: true in debug builds only");
+        assert_eq!(
+            v.get("test").is_some(),
+            cfg!(debug_assertions),
+            "test: true in debug builds only"
+        );
     }
 
     #[test]
     fn the_window_limits_are_enforced_before_freezing() {
         let d = || diag();
-        let ok = |k: &str, c: Option<&str>, t: &str| freeze(k, c, t, d(), None, "5.1.0".into(), "15.4".into(), ENDPOINT).is_ok();
+        let ok = |k: &str, c: Option<&str>, t: &str| {
+            freeze(k, c, t, d(), None, "5.1.0".into(), "15.4".into(), ENDPOINT).is_ok()
+        };
         assert!(!ok("bug", None, "   "), "an empty description");
-        assert!(!ok("bug", None, &"ب".repeat(MAX_DESCRIPTION_CHARS + 1)), "over 1000 characters");
+        assert!(
+            !ok("bug", None, &"ب".repeat(MAX_DESCRIPTION_CHARS + 1)),
+            "over 1000 characters"
+        );
         assert!(ok("bug", None, &"ب".repeat(MAX_DESCRIPTION_CHARS)));
         assert!(!ok("feature", None, "وصف"), "an unknown kind");
-        assert!(!ok("bug", Some("clipboard-content"), "وصف"), "an unknown category");
+        assert!(
+            !ok("bug", Some("clipboard-content"), "وصف"),
+            "an unknown category"
+        );
         assert!(ok("suggestion", None, "وصف"));
     }
 
@@ -812,7 +1027,10 @@ mod tests {
         assert!(f.body.contains("\"data\":\""), "the body carries the image");
         let copied = copy_text(&f.body);
         let v: serde_json::Value = serde_json::from_str(&copied).unwrap();
-        assert_eq!(v["attachments"][0], serde_json::json!({ "type": "image/png", "bytes": img.bytes.len() }));
+        assert_eq!(
+            v["attachments"][0],
+            serde_json::json!({ "type": "image/png", "bytes": img.bytes.len() })
+        );
         assert!(!copied.contains("\"data\""));
         assert!(copied.contains('\n'), "pretty-printed");
     }
@@ -846,16 +1064,34 @@ mod audit_tests {
         assert_eq!(ra("-5"), DEFAULT_RETRY_AFTER_S);
         assert_eq!(ra("1.5"), DEFAULT_RETRY_AFTER_S);
         assert_eq!(ra("abc"), DEFAULT_RETRY_AFTER_S);
-        assert_eq!(ra("99999999999999999999999"), DEFAULT_RETRY_AFTER_S, "تجاوز u64 يعود للساعة لا للحد الأقصى");
+        assert_eq!(
+            ra("99999999999999999999999"),
+            MAX_RETRY_AFTER_S,
+            "تجاوز u64 ثوانٍ كثيرة، فيُقصّ إلى الحد الأقصى (RAFF-AUD-009)"
+        );
+    }
+
+    /// RAFF-AUD-009 edges, exactly: delay-seconds is 1*DIGIT, so a leading
+    /// zero is still seconds, a sign is not (a `+5` that used to mean 5 now
+    /// means "not a number", the hour), and anything wider than u64 is the cap.
+    #[test]
+    fn retry_after_edges_are_exact() {
+        assert_eq!(ra("0"), 0);
+        assert_eq!(ra("007"), 7);
+        assert_eq!(ra(""), DEFAULT_RETRY_AFTER_S);
+        assert_eq!(ra("   "), DEFAULT_RETRY_AFTER_S);
+        assert_eq!(ra("+5"), DEFAULT_RETRY_AFTER_S);
+        assert_eq!(ra("5 s"), DEFAULT_RETRY_AFTER_S);
+        assert_eq!(ra("86399"), 86_399);
+        assert_eq!(ra("18446744073709551615"), MAX_RETRY_AFTER_S, "u64::MAX");
+        assert_eq!(
+            ra("18446744073709551616"),
+            MAX_RETRY_AFTER_S,
+            "u64::MAX + 1"
+        );
     }
 
     #[test]
-    fn aud009_characterization_retry_after_zero_becomes_an_hour() {
-        assert_eq!(ra("0"), DEFAULT_RETRY_AFTER_S);
-    }
-
-    #[test]
-    #[ignore = "RAFF-AUD-009: Retry-After: 0 (أعد فورًا وفق RFC 9110) يُعامَل كقيمة غير صالحة فيصير 3600 ثانية"]
     fn aud009_retry_after_zero_is_short() {
         assert!(ra("0") <= 1);
     }

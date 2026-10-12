@@ -157,6 +157,11 @@ test('changing your mind after «أوقفه» turns capture back on', async () =
   doc.getElementById('capture-accept').click();
   await settle(12);
   assert.deepEqual(saves(), [false, true], '«أبقِه يعمل» undoes the stop instead of leaving it saved');
+  assert.deepEqual(
+    calls.filter((call) => call.command === 'update_settings').map((call) => call.args.settings),
+    [{ captureEnabled: false }, { captureEnabled: true }],
+    'each answer saves the capture decision and nothing else (H6)'
+  );
 
   doc.getElementById('back').click();
   doc.getElementById('capture-accept').click();

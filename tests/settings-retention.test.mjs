@@ -60,7 +60,7 @@ test('settings: retention is a choice, and its wording is honest', async (t) => 
           });
         }
         if (command === 'update_settings') {
-          settings = structuredClone(args.settings);
+          settings = { ...settings, ...structuredClone(args.settings) };
           return Promise.resolve(null);
         }
         if (command === 'list_running_apps') return Promise.resolve([]);
@@ -100,10 +100,10 @@ test('settings: retention is a choice, and its wording is honest', async (t) => 
 
     const saved = calls.filter((call) => call.command === 'update_settings');
     assert.equal(saved.length, 1);
-    assert.equal(saved[0].args.settings.retentionDays, 7);
+    assert.deepEqual(saved[0].args.settings, { retentionDays: 7 }, 'only the window is sent');
     assert.equal(
-      saved[0].args.settings.historyLimit,
-      SETTINGS.historyLimit,
+      doc.getElementById('history-limit').value,
+      String(SETTINGS.historyLimit),
       'and leaves the count where it was — the two limits coexist'
     );
   });

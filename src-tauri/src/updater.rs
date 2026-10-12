@@ -16,7 +16,7 @@
 //! the *phases* through distinct progress events instead of splitting commands.
 
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Mutex;
+use std::sync::{Mutex, MutexGuard};
 
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
@@ -128,6 +128,14 @@ impl UpdaterState {
             }),
         }
     }
+
+    /// The state guard, recovering a poisoned lock as `lock_store` does: one
+    /// panic mid-update must not turn every later check into a panic too.
+    fn lock(&self) -> MutexGuard<'_, Inner> {
+        self.inner
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
 }
 
 // ─── Frontend-facing result of a check ────────────────────────────────────────
@@ -234,7 +242,7 @@ struct ErrorPayload {
 pub async fn check_for_update(app: AppHandle) -> Result<UpdateCheck, String> {
     {
         let state = app.state::<UpdaterState>();
-        let mut inner = state.inner.lock().unwrap();
+        let mut inner = state.lock();
         if !inner.machine.begin_check() {
             return Err("هناك عملية تحديث جارية بالفعل.".into());
         }
@@ -254,7 +262,7 @@ pub async fn check_for_update(app: AppHandle) -> Result<UpdateCheck, String> {
     );
 
     let state = app.state::<UpdaterState>();
-    let mut inner = state.inner.lock().unwrap();
+    let mut inner = state.lock();
     inner.machine.end_check();
     match outcome {
         Ok(Some(update)) => {
@@ -288,7 +296,7 @@ async fn do_check(app: &AppHandle) -> tauri_plugin_updater::Result<Option<Update
 pub async fn download_and_install_update(app: AppHandle) -> Result<(), String> {
     let update = {
         let state = app.state::<UpdaterState>();
-        let mut inner = state.inner.lock().unwrap();
+        let mut inner = state.lock();
         let has_pending = inner.pending.is_some();
         match inner.machine.begin_install(has_pending) {
             StartInstall::Ok => inner
@@ -339,7 +347,7 @@ pub async fn download_and_install_update(app: AppHandle) -> Result<(), String> {
     let result = update.download_and_install(on_chunk, on_finish).await;
 
     let state = app.state::<UpdaterState>();
-    let mut inner = state.inner.lock().unwrap();
+    let mut inner = state.lock();
     match result {
         Ok(()) => {
             inner.machine.end_install(true);
@@ -376,7 +384,7 @@ pub async fn download_and_install_update(app: AppHandle) -> Result<(), String> {
 pub async fn restart_to_update(app: AppHandle) -> Result<(), String> {
     {
         let state = app.state::<UpdaterState>();
-        let inner = state.inner.lock().unwrap();
+        let inner = state.lock();
         if !inner.machine.can_restart() {
             return Err("لا يوجد تحديث مثبَّت لإعادة التشغيل.".into());
         }

@@ -97,14 +97,14 @@
    "input": "ΟΔΟΣ",
    "note": "سيغما نهائية",
    "expected": "οδος",
-   "perCharModel": "οδοσ",
+   "perCharModel": "οδος",
    "divergence": "RAFF-AUD-007"
   },
   {
    "input": "ΣΑΣ",
    "note": "سيغما نهائية مكررة",
    "expected": "σας",
-   "perCharModel": "σασ",
+   "perCharModel": "σας",
    "divergence": "RAFF-AUD-007"
   },
   {
@@ -118,7 +118,7 @@
    "input": "ΑΣ Β",
    "note": "سيغما قبل مسافة",
    "expected": "ας β",
-   "perCharModel": "ασ β",
+   "perCharModel": "ας β",
    "divergence": "RAFF-AUD-007"
   },
   {
@@ -328,7 +328,7 @@
    "input": "3آΩΣاظُرع6٦نzه3أىتً05ض",
    "note": "مولَّد #25 (seed 0x5eed)",
    "expected": "3اωςاظرع66نzه3ايت05ض",
-   "perCharModel": "3اωσاظرع66نzه3ايت05ض",
+   "perCharModel": "3اωςاظرع66نzه3ايت05ض",
    "divergence": "RAFF-AUD-007"
   },
   {
@@ -1329,7 +1329,7 @@
    "input": "3ذ́٧C٢ثو٧٢حقzΣهدΩ",
    "note": "مولَّد #168 (seed 0x5eed)",
    "expected": "3ذ́7c2ثو72حقzςهدω",
-   "perCharModel": "3ذ́7c2ثو72حقzσهدω",
+   "perCharModel": "3ذ́7c2ثو72حقzςهدω",
    "divergence": "RAFF-AUD-007"
   },
   {
@@ -1582,6 +1582,86 @@
   {
    "input": " x",
    "jsTrim": "x"
+  },
+  {
+   "input": "x",
+   "jsTrim": "x"
+  },
+  {
+   "input": "\u000bx\u000b",
+   "jsTrim": "x"
+  },
+  {
+   "input": "\fx\f",
+   "jsTrim": "x"
+  },
+  {
+   "input": "\rx\r",
+   "jsTrim": "x"
+  },
+  {
+   "input": " x ",
+   "jsTrim": "x"
+  },
+  {
+   "input": " x ",
+   "jsTrim": "x"
+  },
+  {
+   "input": " x ",
+   "jsTrim": "x"
+  },
+  {
+   "input": " x ",
+   "jsTrim": "x"
+  },
+  {
+   "input": " x ",
+   "jsTrim": "x"
+  },
+  {
+   "input": " x ",
+   "jsTrim": "x"
+  },
+  {
+   "input": " x ",
+   "jsTrim": "x"
+  },
+  {
+   "input": " x ",
+   "jsTrim": "x"
+  },
+  {
+   "input": " x ",
+   "jsTrim": "x"
+  },
+  {
+   "input": " x ",
+   "jsTrim": "x"
+  },
+  {
+   "input": " x ",
+   "jsTrim": "x"
+  },
+  {
+   "input": " x ",
+   "jsTrim": "x"
+  },
+  {
+   "input": " x ",
+   "jsTrim": "x"
+  },
+  {
+   "input": " x ",
+   "jsTrim": "x"
+  },
+  {
+   "input": " x ",
+   "jsTrim": "x"
+  },
+  {
+   "input": "᠎x",
+   "jsTrim": "᠎x"
   }
  ]
 }

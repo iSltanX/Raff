@@ -2,6 +2,9 @@
   "name": "raff",
   "version": "6.0.0",
   "private": true,
+  "engines": {
+    "node": ">=24"
+  },
   "description": "رفّ — personal, keyboard-first clipboard manager for macOS; your clipboard stays on your Mac",
   "type": "module",
   "scripts": {

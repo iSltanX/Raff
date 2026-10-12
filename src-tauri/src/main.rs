@@ -19,7 +19,7 @@ mod updater;
 
 use std::sync::atomic::{AtomicBool, AtomicI64};
 use std::sync::{Mutex, MutexGuard};
-use std::time::{Duration, Instant};
+use std::time::{Duration, SystemTime};
 
 use tauri::Manager;
 use tauri_plugin_autostart::MacosLauncher;
@@ -51,14 +51,27 @@ pub enum Pause {
     Off,
     /// Skip the next clipboard change, then clear.
     SkipNext,
-    /// Skip everything until this instant; `None` means until Raff restarts.
-    Until(Option<Instant>),
+    /// Skip everything until this time of day; `None` means until Raff
+    /// restarts.
+    ///
+    /// Wall-clock time, not `Instant`: on macOS `Instant` is
+    /// `CLOCK_UPTIME_RAW`, which stops while the Mac sleeps, so «١٥ دقيقة»
+    /// followed by a closed lid used to come back still paused for whatever
+    /// was left. The price is that moving the clock by hand moves the end too.
+    Until(Option<SystemTime>),
+}
+
+/// What is left of a pause that ends at `until`, or zero once it has passed.
+pub fn pause_left(until: SystemTime) -> Duration {
+    until
+        .duration_since(SystemTime::now())
+        .unwrap_or(Duration::ZERO)
 }
 
 impl Pause {
     /// Starts a pause of `minutes`, or until restart when `None`.
     pub fn for_minutes(minutes: Option<u64>) -> Self {
-        Pause::Until(minutes.map(|m| Instant::now() + Duration::from_secs(m * 60)))
+        Pause::Until(minutes.map(|m| SystemTime::now() + Duration::from_secs(m * 60)))
     }
 
     /// Whether the change being looked at must be skipped, advancing the
@@ -72,7 +85,7 @@ impl Pause {
             }
             Pause::Until(None) => true,
             Pause::Until(Some(until)) => {
-                if Instant::now() < until {
+                if !pause_left(until).is_zero() {
                     true
                 } else {
                     *self = Pause::Off;
@@ -92,14 +105,23 @@ impl Pause {
     pub fn view(&self) -> PauseView {
         match *self {
             Pause::Off => PauseView::default(),
-            Pause::SkipNext => PauseView { kind: "skipNext", ..PauseView::default() },
-            Pause::Until(None) => PauseView { kind: "untilRestart", ..PauseView::default() },
+            Pause::SkipNext => PauseView {
+                kind: "skipNext",
+                ..PauseView::default()
+            },
+            Pause::Until(None) => PauseView {
+                kind: "untilRestart",
+                ..PauseView::default()
+            },
             Pause::Until(Some(until)) => {
-                let left = until.saturating_duration_since(Instant::now());
+                let left = pause_left(until);
                 if left.is_zero() {
                     return PauseView::default();
                 }
-                PauseView { kind: "timed", minutes_left: Some(left.as_secs().div_ceil(60).max(1)) }
+                PauseView {
+                    kind: "timed",
+                    minutes_left: Some(left.as_secs().div_ceil(60).max(1)),
+                }
             }
         }
     }
@@ -117,7 +139,10 @@ pub struct PauseView {
 
 impl Default for PauseView {
     fn default() -> Self {
-        Self { kind: "off", minutes_left: None }
+        Self {
+            kind: "off",
+            minutes_left: None,
+        }
     }
 }
 
@@ -149,6 +174,14 @@ pub fn lock_store(store: &Mutex<storage::Store>) -> MutexGuard<'_, storage::Stor
         .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
+/// The remembered front app, under the same policy: a panic while it was held
+/// must not cost every later panel open and paste a panic of its own.
+pub fn lock_previous_app(previous_app: &Mutex<Option<i32>>) -> MutexGuard<'_, Option<i32>> {
+    previous_app
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
 /// Debug builds only: `RAFF_DATA_DIR` points the store somewhere else, so a
 /// development run never reads or writes the installed رفّ's history.
 fn dev_data_dir() -> Option<std::path::PathBuf> {
@@ -176,7 +209,7 @@ fn main() {
         // surfaces the panel.
         builder = builder.plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
             eprintln!("raff: relaunch forwarded, argv: {argv:?}");
-            startup_trace::mark(&format!("SINGLE_INSTANCE_FORWARD argv={argv:?}"));
+            startup_trace::mark("SINGLE_INSTANCE_FORWARD");
             if argv.iter().any(|a| a == "--settings") {
                 commands::open_settings_window(app);
             } else {
@@ -276,6 +309,7 @@ fn main() {
                 Some(dir) => dir,
                 None => app.path().app_data_dir()?,
             };
+            startup_trace::set_dir(&data_dir);
             startup_trace::mark("app_data_dir_resolved");
             let store = storage::Store::load(data_dir);
             startup_trace::mark("storage_loaded");
@@ -360,7 +394,10 @@ mod tests {
     fn skip_next_spends_itself_on_exactly_one_change() {
         let mut pause = Pause::SkipNext;
         assert!(pause.consume(), "the copy the user is worried about");
-        assert!(!pause.consume(), "and the one after it is captured normally");
+        assert!(
+            !pause.consume(),
+            "and the one after it is captured normally"
+        );
         assert_eq!(pause, Pause::Off);
     }
 
@@ -378,9 +415,7 @@ mod tests {
         let mut pause = Pause::for_minutes(Some(15));
         assert!(pause.consume());
 
-        let mut elapsed = Pause::Until(Some(
-            Instant::now().checked_sub(Duration::from_secs(1)).unwrap(),
-        ));
+        let mut elapsed = Pause::Until(Some(SystemTime::now() - Duration::from_secs(1)));
         assert!(!elapsed.consume(), "an elapsed pause stops skipping");
         assert!(!elapsed.is_active(), "and stops calling itself a pause");
     }
@@ -407,10 +442,29 @@ mod tests {
 
     #[test]
     fn a_timed_pause_that_ran_out_reads_as_off_before_anything_clears_it() {
-        let elapsed = Pause::Until(Some(
-            Instant::now().checked_sub(Duration::from_secs(1)).unwrap(),
-        ));
+        let elapsed = Pause::Until(Some(SystemTime::now() - Duration::from_secs(1)));
         assert_eq!(elapsed.view(), PauseView::default());
+    }
+
+    /// H10: the end of a timed pause is a time of day, so hours the Mac spent
+    /// asleep count towards it. `Instant` (`CLOCK_UPTIME_RAW` on macOS) would
+    /// not have moved through them. The sleep itself cannot happen in a unit
+    /// test; scenario 10 of the manual checklist covers it on a real Mac.
+    #[test]
+    fn a_timed_pause_ends_at_a_time_of_day() {
+        let before = SystemTime::now();
+        let Pause::Until(Some(until)) = Pause::for_minutes(Some(15)) else {
+            panic!("a timed pause has an end");
+        };
+        let after = SystemTime::now();
+        assert!(until >= before + Duration::from_secs(15 * 60));
+        assert!(until <= after + Duration::from_secs(15 * 60));
+
+        // A Mac that slept through the end finds it over, on the first look.
+        let mut slept_through = Pause::Until(Some(before - Duration::from_secs(2 * 60 * 60)));
+        assert_eq!(slept_through.view(), PauseView::default());
+        assert!(!slept_through.consume());
+        assert_eq!(slept_through, Pause::Off);
     }
 
     #[test]
@@ -434,5 +488,53 @@ mod tests {
         // memory stays usable and capture must not die with the panic.
         let guard = lock_store(&store);
         assert!(guard.history.is_empty());
+    }
+
+    /// The policy above, held in every module rather than only for the store
+    /// (RAFF-AUD-004): production code never unwraps a lock it takes.
+    #[test]
+    fn no_production_code_unwraps_a_lock() {
+        let modules = [
+            ("commands.rs", include_str!("commands.rs")),
+            ("diagnostics.rs", include_str!("diagnostics.rs")),
+            ("macos.rs", include_str!("macos.rs")),
+            ("main.rs", include_str!("main.rs")),
+            ("monitor.rs", include_str!("monitor.rs")),
+            ("panel.rs", include_str!("panel.rs")),
+            ("paste.rs", include_str!("paste.rs")),
+            ("report.rs", include_str!("report.rs")),
+            ("report_image.rs", include_str!("report_image.rs")),
+            ("startup_trace.rs", include_str!("startup_trace.rs")),
+            ("storage.rs", include_str!("storage.rs")),
+            ("tray.rs", include_str!("tray.rs")),
+            ("updater.rs", include_str!("updater.rs")),
+        ];
+        for (name, source) in modules {
+            // Up to the first test module — not the first `#[cfg(test)]`, which
+            // may be a one-line test hook inside production code.
+            let production = source.split("\n#[cfg(test)]\nmod ").next().unwrap();
+            assert!(
+                production.len() < source.len(),
+                "{name} has a test module to stop at"
+            );
+            let compact: String = production.chars().filter(|c| !c.is_whitespace()).collect();
+            for raw in [".lock().unwrap()", ".lock().expect("] {
+                assert!(
+                    !compact.contains(raw),
+                    "{name} still takes a lock with `{raw}`"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn a_poisoned_previous_app_lock_still_yields_a_usable_guard() {
+        let previous_app = Mutex::new(Some(7));
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _guard = previous_app.lock().unwrap();
+            panic!("a panel show panicked while holding the front app");
+        }));
+        assert!(previous_app.is_poisoned());
+        assert_eq!(lock_previous_app(&previous_app).take(), Some(7));
     }
 }

@@ -78,10 +78,9 @@ test('first run: «أوقفه» actually stops capture', async (t) => {
 
     const saved = calls.filter((call) => call.command === 'update_settings');
     assert.equal(saved.length, 1, 'exactly one save');
-    assert.equal(saved[0].args.settings.captureEnabled, false);
-    assert.equal(
-      saved[0].args.settings.hotkey,
-      SETTINGS.hotkey,
+    assert.deepEqual(
+      saved[0].args.settings,
+      { captureEnabled: false },
       'and nothing else was invented on the way'
     );
   });

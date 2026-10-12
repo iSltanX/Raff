@@ -424,4 +424,56 @@
    - `cargo llvm-cov` لتغطية Rust؛
    - استخراج نواة `update_settings` لاختبار H6.
 
+## 13. حالة المعالجة بعد التدقيق
+
+أُضيف هذا القسم بعد التدقيق، مع طلب الدمج [#5](https://github.com/iSltanX/Raff/pull/5) المبني على هذا الفرع. ما سبقه سجل التدقيق كما كُتب، ولم يُعدَّل. ولم يُغيَّر شيء تحت `audit/evidence/`.
+
+| البند | الحالة | الالتزامات | ما يثبتها الآن |
+|---|---|---|---|
+| RAFF-AUD-001 | مُصلَح، ومعه شق H4 الأصلي | `3266f5f` | `aud001_unpin_at_cap_keeps_item_or_refuses_without_side_effects`، و`unpinning_applies_the_whole_retention_policy_not_just_the_count` |
+| RAFF-AUD-002 | مُصلَح | `20d47a7`، `f49dd41` | `aud002_corrupt_settings_is_surfaced`، و`unreadable_settings_hold_capture_off_until_the_user_turns_it_back_on`، واختبارا JS للوحة والإعدادات |
+| RAFF-AUD-003 | مُصلَح | `3bbc937`، `972adea` | `aud003_every_recovery_copy_is_kept`، و`a_second_unreadable_history_does_not_replace_the_first_copy` |
+| RAFF-AUD-004 | مُصلَح، والفحص يشمل الوحدات كلها | `76e3bee` | `aud004_no_raw_unwrap_lock`، و`no_production_code_unwraps_a_lock` |
+| RAFF-AUD-006 | مُصلَح | `7267aff`، `c468239` | `aud006_trace_is_debug_only`، واختبارات 0600 والرابط الرمزي |
+| RAFF-AUD-007 | مُصلَح، وJS هو المرجع | `1d642c9` | `aud007_normalize_parity_for_divergent_vectors`، و5 اختبارات JS كانت todo |
+| RAFF-AUD-008 | مُصلَح | `adc8345` | `aud008_trim_parity_with_js`، و2 اختبار JS كانا todo |
+| RAFF-AUD-009 | مُصلَح | `88c7195`، `5d6bb1d` | `aud009_retry_after_zero_is_short`، و`report-retry-after-zero.test.mjs` |
+| C09 ‏rustls | مُصلَح (0.23.45) | `f2ba196` | `cargo audit`: لا ثغرات |
+| C10 ‏undici وsource-map-js | مُصلَح | `c23d857` | `npm audit`: لا ثغرات |
+| C08 التنسيق | مُصلَح، وفي CI | `a599ffa`، `b785f5e` | `cargo fmt --check` |
+| H3 | مُصلَح جزئيًا كما قُرِّر: الإعدادات ويوميّتا الحذف والتثبيت، دون السجل | `476f7da` | `settings_and_journals_are_flushed_and_a_capture_is_not` |
+| H6 | مُصلَح: الحقول المتغيّرة فقط | `d22056c` | `settings-menu-bar-capture-survives.test.mjs`، و`a_patch_changes_only_its_own_fields` |
+| H7 | ليس عيبًا كما وُصف (نافذة أضيق موثّقة في #5) | `651f014` | `two_own_writes_before_one_poll_are_skipped_and_the_next_copy_is_not` |
+| H10 | مُصلَح بساعة الحائط | `bd418af` | `a_timed_pause_ends_at_a_time_of_day`. والسكون الحقيقي يبقى للسيناريو 10 |
+| H12 ‏Node 20 | مُصلَح: Node 24 في CI والإصدار، و`engines` | `362ab0f`، `06677a9` | انظر أدناه |
+| تباين الوضع الداكن (P4) | مُصلَح لـ`.row-time` و`.preview-title.is-link` | `f459b44` | `panel-dark-contrast.test.mjs` |
+
+**ما تبيّن بعد التدقيق:**
+
+- **CI على Node 20 لم يكن يشغّل الحزمة كاملة.**
+  - في تشغيلات CI على #4 أعطى `npm test` ‏321 و316 و317 و321 اختبارًا بدل 324، وكلها «ناجحة»، وعلّق تشغيل خامس أكثر من ثلاث ساعات في خطوة اختبارات الواجهة.
+  - محليًا على Node 20.20.2 أُسقط في كل تشغيلة 7 إلى 28 اختبارًا من 336.
+  - على Node 24 في CI على #5: ‏340 من 340 و160 في Rust، وهو العدد المحلي نفسه.
+  - لذلك فخلاصة C11 وC24 في §5، أي «الحزمة تنجح»، صحيحة لما شُغِّل، لكنها لم تكن تشمل كل الاختبارات على Node 20.
+- **`audit/macos/run-native-checks.sh`:**
+  - صار يرفض Node أقدم من 24.
+  - توقّع `cargo test -- --ignored` فيه صار 0.
+  - صار `check-cfg-test-hunks` خلف `--audit-phase`، لأنه يحرس قاعدة مرحلة التدقيق، والإصلاحات تكسرها عمدًا.
+- **القائمة اليدوية** حُدّثت للسيناريوهات 10 و26 و27 والتتبّع.
+
+**الفحوص اليدوية غير المنفّذة:**
+
+- **لم يُنفَّذ أي سيناريو** من `audit/macos/MANUAL-CHECKLIST.md` على جهاز حقيقي. وفيها 31 سيناريو: الـ29 الأصلية، و30 للتباين، و31 للتتبّع.
+- C22 وC23 في §5 ما زالا **PENDING-NATIVE**.
+- نجاح CI و`npm test` و`cargo test` لا يغني عنها:
+  - لا شيء منها يشغّل WKWebView الحقيقي، ولا `NSPasteboard`، ولا شريط القوائم، ولا سكون النظام، ولا أذونات macOS.
+  - الأولوية في رأس القائمة: 10 و26 و27 و28 و29 و30 و31.
+
+**ما بقي مفتوحًا:**
+- **ليست عيوبًا مرقّمة:** `.preview-missing` ‏(3.08:1 داكنًا)، ونتائج P4 الوصولية الأخرى (`label-content-name-mismatch` و`heading-order` وغياب `h1`).
+- **غير مختبَر وحدويًا:**
+  - أمر `update_settings` نفسه يحتاج `AppHandle`. أما الدمج فمختبَر في `SettingsPatch::applied_to`، والتحقق على الناتج مضمون بالنوع.
+  - حلقة إعادة النظر كل 30 ثانية في `tray.rs`، ويغطيها السيناريو 10.
+- **قيود H7 وH3:** النافذة الأضيق في H7 تحتاج سمة `Pasteboard` (RAFF-IDEA-04) لتُختبر، وسجل الحافظة باقٍ دون تفريغ في H3 عن قصد.
+
 </div>
