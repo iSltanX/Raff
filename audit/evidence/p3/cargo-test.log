@@ -1,0 +1,183 @@
+127 |       let delegate = panel_delegate!(RaffPanelDelegate {
+128 | |         window_did_resign_key,
+129 | |         window_did_move
+130 | |     });
+127 |       let delegate = panel_delegate!(RaffPanelDelegate {
+128 | |         window_did_resign_key,
+129 | |         window_did_move
+130 | |     });
+127 |       let delegate = panel_delegate!(RaffPanelDelegate {
+128 | |         window_did_resign_key,
+129 | |         window_did_move
+130 | |     });
+10 | use tauri_nspanel::cocoa::appkit::NSWindowCollectionBehavior;
+121 |         NSWindowCollectionBehavior::NSWindowCollectionBehaviorCanJoinAllSpaces
+122 |             | NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary
+123 |             | NSWindowCollectionBehavior::NSWindowCollectionBehaviorStationary,
+127 |       let delegate = panel_delegate!(RaffPanelDelegate {
+128 | |         window_did_resign_key,
+129 | |         window_did_move
+130 | |     });
+127 |       let delegate = panel_delegate!(RaffPanelDelegate {
+128 | |         window_did_resign_key,
+129 | |         window_did_move
+130 | |     });
+442 |         app.activateWithOptions(NSApplicationActivationOptions::ActivateIgnoringOtherApps);
+121 |         NSWindowCollectionBehavior::NSWindowCollectionBehaviorCanJoinAllSpaces
+122 |             | NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary
+123 |             | NSWindowCollectionBehavior::NSWindowCollectionBehaviorStationary,
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.75s
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+     Running unittests src/main.rs (target/debug/deps/raff-5742317ce0a60c87)
+running 149 tests
+test commands::audit_tests::aud004_no_raw_unwrap_lock ... ignored, RAFF-AUD-004: update_settings يستخدم state.store.lock().unwrap() فيذعر إن كان القفل مسمومًا
+test commands::audit_tests::observation_bidi_controls_pass_bundle_validation ... ok
+test commands::tests::a_storage_failure_crosses_ipc_as_a_kind_not_as_its_detail ... ok
+test commands::audit_tests::aud004_characterization_one_raw_unwrap_lock_remains ... ok
+test commands::audit_tests::validate_settings_boundaries ... ok
+test diagnostics::tests::an_unknown_value_is_null_not_a_guess ... ok
+test diagnostics::tests::an_outcome_carries_codes_and_times_only ... ok
+test macos::tests::an_empty_log_attributes_nothing ... ok
+test diagnostics::tests::the_recent_log_is_bounded ... ok
+test diagnostics::tests::the_field_list_is_closed ... ok
+test macos::tests::an_excluded_app_inside_the_window_is_caught_even_when_it_is_not_the_last_one ... ok
+test macos::tests::an_excluded_app_that_held_the_front_all_along_is_caught ... ok
+test macos::tests::an_excluded_app_left_before_the_window_opened_is_not_caught ... ok
+test macos::tests::every_do_not_record_marker_is_honoured ... ok
+test macos::tests::the_source_is_who_held_the_front_when_the_window_opened ... ok
+test commands::tests::search_folds_spelling_the_same_way_the_panel_does ... ok
+test monitor::tests::a_pasteboard_that_changed_mid_read_is_not_stored ... ok
+test diagnostics::tests::no_content_names_or_identifiers_reach_the_report ... ok
+test commands::tests::get_image_prefers_the_persisted_thumbnail ... ok
+test commands::tests::get_image_falls_back_when_the_recorded_thumbnail_is_missing ... ok
+test commands::tests::search_reaches_past_the_preview_the_panel_can_see ... ok
+test monitor::tests::a_settled_pasteboard_is_still_stored ... ok
+test panel::tests::centers_first_position_in_visible_area ... ok
+test panel::tests::clamp_supports_monitors_left_of_primary ... ok
+test panel::tests::reopen_is_never_suppressed_before_any_resign_has_happened ... ok
+test panel::tests::reopen_is_suppressed_immediately_after_a_resign_triggered_hide ... ok
+test panel::tests::reopen_is_suppressed_right_up_to_the_guard_boundary ... ok
+test panel::tests::reopen_proceeds_for_an_unrelated_click_long_after_any_resign ... ok
+test panel::tests::reopen_proceeds_once_the_guard_window_has_fully_elapsed ... ok
+test panel::tests::restored_position_is_clamped_inside_positive_screen ... ok
+test paste::tests::a_keystroke_aimed_at_the_wrong_app_is_not_a_successful_paste ... ok
+test paste::tests::nothing_claimed_about_the_target_leaves_nothing_to_contradict ... ok
+test paste::tests::the_old_conditions_still_have_to_hold ... ok
+test paste::tests::the_target_being_in_front_is_what_makes_it_a_paste ... ok
+test monitor::tests::one_panic_does_not_end_the_capture_loop ... ok
+test report::audit_tests::aud009_retry_after_zero_is_short ... ignored, RAFF-AUD-009: Retry-After: 0 (أعد فورًا وفق RFC 9110) يُعامَل كقيمة غير صالحة فيصير 3600 ثانية
+test monitor::tests::a_run_of_panics_gives_the_loop_up ... ok
+test report::tests::a_closed_window_fences_off_late_work_but_keeps_a_rate_limit ... ok
+test monitor::tests::the_pixel_budget_is_decided_from_the_header_alone ... ok
+test report::audit_tests::aud009_characterization_retry_after_zero_becomes_an_hour ... ok
+test report::audit_tests::retry_after_parsing_table ... ok
+test monitor::tests::an_image_within_the_pixel_budget_is_still_captured ... ok
+test report::tests::a_created_report_returns_its_number_and_sends_exactly_the_frozen_bytes ... ok
+test report::tests::a_replayed_key_answers_200_with_the_same_number ... ok
+test report::tests::a_rate_limit_reports_when_to_try_again ... ok
+test report::tests::a_retry_after_is_capped_and_a_date_falls_back_to_the_hour ... ok
+test monitor::tests::recopying_an_image_whose_file_vanished_writes_it_again ... ok
+test report::tests::a_success_without_a_number_is_treated_as_retryable ... ok
+test report::tests::the_body_follows_the_contract_and_nothing_more ... ok
+test report::tests::the_endpoint_is_fixed_unless_a_debug_build_overrides_it ... ok
+test report::tests::a_retry_reuses_the_key_and_a_new_payload_gets_a_new_one ... ok
+test report::tests::the_window_limits_are_enforced_before_freezing ... ok
+test report_image::tests::an_oversized_input_is_refused_before_decoding ... ok
+test report::tests::copying_replaces_image_data_with_its_type_and_size ... ok
+test report::tests::rejections_carry_the_reason_and_are_final ... ok
+test report_image::tests::jpeg_input_is_accepted_and_re_encoded ... ok
+test report_image::tests::the_format_is_read_from_the_signature_only ... ok
+test startup_trace::audit_tests::aud006_characterization_trace_arming_is_not_debug_gated ... ok
+test startup_trace::audit_tests::aud006_trace_is_debug_only ... ignored, RAFF-AUD-006: أي عملية محلية تنشئ /tmp/raff-trace-on تفعّل التتبع في إصدار الشحن
+test report_image::tests::re_encoding_drops_metadata_and_the_name ... ok
+test storage::audit_tests::aud001_characterization_unpin_at_cap_returns_err_and_drops_item_from_memory ... ok
+test report_image::tests::only_facts_and_a_thumbnail_cross_ipc ... ok
+test storage::audit_tests::aud001_unpin_at_cap_keeps_item_or_refuses_without_side_effects ... ignored, RAFF-AUD-001: إلغاء تثبيت عنصر قديم والتاريخ ممتلئ يفقده
+test storage::audit_tests::aud002_corrupt_settings_is_surfaced ... ignored, RAFF-AUD-002: فساد settings.json يعيد الإعدادات الافتراضية بصمت (يُستأنف الالتقاط وتُفقد الاستثناءات)
+test storage::audit_tests::aud003_every_recovery_copy_is_kept ... ignored, RAFF-AUD-003: اسم .json.corrupt ثابت فتُستبدل نسخة الاستعادة الأولى
+test storage::audit_tests::aud007_normalize_parity_for_divergent_vectors ... ignored, RAFF-AUD-007: سيغما اليونانية الختامية تختلف بين toLowerCase في JS وto_lowercase لكل حرف في Rust
+test storage::audit_tests::aud008_trim_parity_with_js ... ignored, RAFF-AUD-008: String.prototype.trim في JS يزيل U+FEFF وstr::trim في Rust لا يزيله
+test storage::audit_tests::aud003_characterization_second_corruption_overwrites_first_recovery_copy ... ok
+test storage::audit_tests::aud002_characterization_corrupt_settings_silently_reverts_to_defaults ... ok
+test storage::audit_tests::fault_capture_write_failure_rolls_back_memory_and_disk ... ok
+test storage::audit_tests::fault_pin_journal_failure_leaves_item_unpinned_everywhere ... ok
+test storage::audit_tests::fault_settings_write_failure_restores_settings ... ok
+test storage::audit_tests::h1_corrupt_history_or_pinned_is_flagged_copied_aside_and_images_survive ... ok
+test monitor::tests::thumbnail_filename_is_returned_only_after_a_successful_write ... ok
+test storage::audit_tests::perf_probe_capture_at_limit_with_heavy_rows ... ignored, perf-probe: قياس فقط
+test storage::audit_tests::perf_probe_normalize_large_text ... ignored, perf-probe: قياس فقط
+test storage::audit_tests::normalize_parity_with_js_for_all_non_divergent_vectors ... ok
+test storage::tests::a_learning_bump_waits_for_the_flush_instead_of_rewriting_the_layer ... ok
+test storage::tests::a_recovery_copy_keeps_its_images_on_the_boot_after_the_one_that_healed_history ... ok
+test storage::tests::a_reordered_pinned_shelf_is_still_in_that_order_after_a_restart ... ok
+test monitor::tests::retina_thumbnail_fits_without_cropping ... ok
+test storage::tests::a_set_that_is_not_the_pinned_shelf_is_refused_and_changes_nothing ... ok
+test storage::tests::a_second_delete_commits_the_first_receipt_and_image_cleanup ... ok
+test storage::tests::a_stale_layer_write_never_lands_on_top_of_a_newer_one ... ok
+test storage::tests::a_week_long_retention_sweeps_at_boot_with_no_capture_at_all ... ok
+test storage::tests::an_old_fingerprint_is_recomputed_from_its_file_at_boot ... ok
+test storage::tests::an_old_fingerprint_with_no_file_left_is_dropped_not_guessed ... ok
+test storage::tests::caps_history ... ok
+test storage::tests::clear_history_keeps_pinned ... ok
+test storage::tests::clear_history_leaves_settings_and_pinned_signals_alone ... ok
+test storage::tests::clear_learning_resets_signals ... ok
+test storage::tests::committed_delete_survives_restart_and_cleans_its_journal ... ok
+test storage::tests::corrupt_file_is_preserved ... ok
+test storage::tests::corrupt_history_preserves_all_images_for_recovery ... ok
+test storage::tests::dedupe_refreshes_latest_source_and_rich_representations ... ok
+test storage::tests::dedupes_and_moves_to_top ... ok
+test storage::tests::detects_code ... ok
+test storage::tests::detects_links ... ok
+test storage::tests::failed_delete_journal_write_rolls_back_without_a_success_receipt ... ok
+test storage::tests::failed_persisted_pin_rolls_back_and_returns_an_error ... ok
+test storage::tests::interrupted_pin_move_converges_without_duplicate_or_loss ... ok
+test storage::tests::a_failed_capture_write_restores_the_model_from_its_undo_record ... ok
+test storage::tests::interrupted_pinned_undo_preserves_the_restored_item ... ok
+test storage::tests::links_cover_the_schemes_and_bare_domains_people_actually_copy ... ok
+test storage::tests::no_retention_set_keeps_everything_the_count_allows ... ok
+test storage::tests::panel_placement_round_trips_independently_of_settings ... ok
+test storage::tests::pin_roundtrip ... ok
+test storage::tests::prose_that_merely_contains_a_link_stays_text ... ok
+test storage::tests::interrupted_unpin_reapplies_history_cap_before_file_cleanup ... ok
+test storage::tests::reversible_delete_restores_exact_history_index_and_full_state ... ok
+test storage::tests::settings_from_older_versions_get_appearance_defaults ... ok
+test storage::tests::reversible_delete_restores_exact_pinned_index_and_pin_state ... ok
+test storage::tests::shrinking_limit_trims_immediately ... ok
+test storage::tests::the_fingerprint_is_this_project_s_own_and_is_written_down ... ok
+test storage::tests::startup_removes_only_unreferenced_image_files ... ok
+test storage::tests::undo_history_order_survives_a_recaptured_former_neighbor ... ok
+test storage::tests::undo_uses_neighbors_after_a_new_capture_instead_of_a_stale_index ... ok
+test storage::tests::unknown_legacy_settings_fields_are_tolerated_then_retired ... ok
+test tests::a_pause_is_described_without_anything_it_skipped ... ok
+test tests::a_pause_until_restart_never_lets_anything_through ... ok
+test tests::a_poisoned_store_lock_still_yields_a_usable_guard ... ok
+test tests::a_timed_pause_holds_until_it_elapses_and_then_clears_itself ... ok
+test tests::a_timed_pause_that_ran_out_reads_as_off_before_anything_clears_it ... ok
+test tests::skip_next_spends_itself_on_exactly_one_change ... ok
+test tests::the_welcome_opens_until_it_was_shown_whatever_the_permission ... ok
+test tray::tests::a_failed_loop_outranks_everything ... ok
+test tray::tests::a_pause_is_its_own_shape ... ok
+test tray::tests::capture_the_user_turned_off_is_shown_and_outranks_a_pause ... ok
+test tray::tests::every_state_has_its_own_bundled_glyph ... ok
+test tray::tests::the_status_sentence_names_the_state_without_mentioning_the_permission ... ok
+test updater::tests::available_payload_shape ... ok
+test updater::tests::error_payload_shape ... ok
+test updater::tests::failed_install_returns_to_retryable_idle ... ok
+test updater::tests::fresh_machine_is_idle ... ok
+test updater::tests::install_needs_check_not_in_flight ... ok
+test updater::tests::install_without_a_pending_update_is_rejected ... ok
+test updater::tests::menu_intent_is_consumed_once ... ok
+test updater::tests::restart_requires_a_completed_install ... ok
+test updater::tests::second_concurrent_check_is_rejected ... ok
+test updater::tests::second_concurrent_install_is_rejected ... ok
+test updater::tests::successful_install_stages_restart_and_blocks_reinstall ... ok
+test updater::tests::up_to_date_payload_shape ... ok
+test report::tests::a_redirect_is_not_followed_with_the_report ... ok
+test storage::audit_tests::concurrent_persist_capture_loses_nothing ... ok
+test storage::audit_tests::model_based_sequences_preserve_invariants_and_reload_equality ... ok
+test report::tests::server_errors_timeouts_and_closed_ports_are_retryable ... ok
+test storage::tests::the_size_budget_trims_a_history_that_is_still_under_the_count_limit ... ok
+test storage::tests::a_single_row_larger_than_the_budget_is_still_kept ... ok
+test report_image::tests::a_large_noisy_image_is_shrunk_under_the_limit ... ok
+test result: ok. 139 passed; 0 failed; 10 ignored; 0 measured; 0 filtered out; finished in 27.67s
+exit=0

@@ -1,0 +1,6 @@
+✔ src-tauri/src/commands.rs: 77 سطرًا مضافًا، كلها داخل #[cfg(test)] mod audit_tests (السطر 893)
+✔ src-tauri/src/report.rs: 36 سطرًا مضافًا، كلها داخل #[cfg(test)] mod audit_tests (السطر 830)
+✔ src-tauri/src/startup_trace.rs: 27 سطرًا مضافًا، كلها داخل #[cfg(test)] mod audit_tests (السطر 97)
+✔ src-tauri/src/storage.rs: 455 سطرًا مضافًا، كلها داخل #[cfg(test)] mod audit_tests (السطر 2573)
+
+كل كتل Rust داخل cfg(test) ولا ملفات منتج أخرى معدّلة.

@@ -92,3 +92,29 @@ pub fn mark(stage: &str) {
     }
     eprintln!("raff-trace {elapsed:>10.2} ms  {stage}");
 }
+
+// وحدة اختبارات التدقيق (RAFF-COPILOT-AUDIT). اختبارات فقط.
+#[cfg(test)]
+mod audit_tests {
+    fn enabled_fn_source() -> String {
+        let src = include_str!("startup_trace.rs");
+        let product = src.split("#[cfg(test)]").next().unwrap();
+        let start = product.find("fn enabled()").unwrap();
+        let end = start + product[start..].find("\n}\n").unwrap();
+        product[start..end].to_string()
+    }
+
+    #[test]
+    fn aud006_characterization_trace_arming_is_not_debug_gated() {
+        let body = enabled_fn_source();
+        assert!(body.contains("MARKER"), "يُفعَّل بوجود ملف علامة");
+        assert!(!body.contains("debug_assertions"), "لا تقييد بإصدار التطوير");
+        assert_eq!(super::MARKER, "/tmp/raff-trace-on");
+    }
+
+    #[test]
+    #[ignore = "RAFF-AUD-006: أي عملية محلية تنشئ /tmp/raff-trace-on تفعّل التتبع في إصدار الشحن"]
+    fn aud006_trace_is_debug_only() {
+        assert!(enabled_fn_source().contains("debug_assertions"));
+    }
+}

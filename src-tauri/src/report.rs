@@ -825,3 +825,38 @@ mod tests {
         }
     }
 }
+
+// وحدة اختبارات التدقيق (RAFF-COPILOT-AUDIT). اختبارات فقط.
+#[cfg(test)]
+mod audit_tests {
+    use super::*;
+    use reqwest::header::HeaderValue;
+
+    fn ra(v: &'static str) -> u64 {
+        retry_after_seconds(Some(&HeaderValue::from_static(v)))
+    }
+
+    #[test]
+    fn retry_after_parsing_table() {
+        assert_eq!(retry_after_seconds(None), DEFAULT_RETRY_AFTER_S);
+        assert_eq!(ra("1"), 1);
+        assert_eq!(ra(" 120 "), 120);
+        assert_eq!(ra("86400"), MAX_RETRY_AFTER_S);
+        assert_eq!(ra("86401"), MAX_RETRY_AFTER_S);
+        assert_eq!(ra("-5"), DEFAULT_RETRY_AFTER_S);
+        assert_eq!(ra("1.5"), DEFAULT_RETRY_AFTER_S);
+        assert_eq!(ra("abc"), DEFAULT_RETRY_AFTER_S);
+        assert_eq!(ra("99999999999999999999999"), DEFAULT_RETRY_AFTER_S, "تجاوز u64 يعود للساعة لا للحد الأقصى");
+    }
+
+    #[test]
+    fn aud009_characterization_retry_after_zero_becomes_an_hour() {
+        assert_eq!(ra("0"), DEFAULT_RETRY_AFTER_S);
+    }
+
+    #[test]
+    #[ignore = "RAFF-AUD-009: Retry-After: 0 (أعد فورًا وفق RFC 9110) يُعامَل كقيمة غير صالحة فيصير 3600 ثانية"]
+    fn aud009_retry_after_zero_is_short() {
+        assert!(ra("0") <= 1);
+    }
+}

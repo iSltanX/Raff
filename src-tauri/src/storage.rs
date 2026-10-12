@@ -2564,3 +2564,457 @@ mod tests {
         assert_eq!(s.history[0].paste_count, 0);
     }
 }
+
+// ---------------------------------------------------------------------------
+// وحدة اختبارات التدقيق (RAFF-COPILOT-AUDIT). اختبارات فقط؛ لا تغيّر سلوك المنتج.
+// الاختبارات المعلَّمة #[ignore = "RAFF-AUD-00N: ..."] تعيد إنتاج خلل مؤكد،
+// وتفشل حتى يُصلَح. تُشغَّل بـ: cargo test audit_tests -- --ignored
+// ---------------------------------------------------------------------------
+#[cfg(test)]
+mod audit_tests {
+    use super::*;
+    use std::sync::{Arc, Mutex};
+
+    fn tmp_dir(tag: &str) -> PathBuf {
+        std::env::temp_dir().join(format!("raff-audit-{tag}-{}", uuid::Uuid::new_v4()))
+    }
+
+    fn cap(s: &mut Store, text: &str) -> CaptureResult {
+        s.capture(
+            detect_kind(text),
+            text.into(),
+            None,
+            None,
+            None,
+            None,
+            None,
+            ("Audit".into(), "com.audit".into()),
+        )
+    }
+
+    fn cap_persist(store: &Mutex<Store>, text: &str) -> Result<CaptureOutcome, String> {
+        let result = cap(&mut crate::lock_store(store), text);
+        persist_capture(store, result)
+    }
+
+    fn ids(items: &[ClipItem]) -> Vec<String> {
+        items.iter().map(|i| i.id.clone()).collect()
+    }
+
+    /// xorshift64 بذرة ثابتة: تسلسلات حتمية قابلة للإعادة.
+    struct Rng(u64);
+    impl Rng {
+        fn next(&mut self) -> u64 {
+            let mut x = self.0;
+            x ^= x << 13;
+            x ^= x >> 7;
+            x ^= x << 17;
+            self.0 = x;
+            x
+        }
+        fn below(&mut self, n: u64) -> u64 {
+            self.next() % n
+        }
+    }
+
+    /// يحضّر حالة RAFF-AUD-001: تاريخ ممتلئ عند الحد، وعنصر مثبّت أقدم من كل ما فيه.
+    fn full_history_with_old_pinned(dir: &Path) -> (Store, String) {
+        let mut s = Store::load(dir.to_path_buf());
+        s.settings.history_limit = 2;
+        cap(&mut s, "pinned-old");
+        let pinned_id = s.history[0].id.clone();
+        assert!(s.set_pin_persisted(&pinned_id, true).unwrap());
+        s.find_mut(&pinned_id).unwrap().created_at = 1;
+        s.save_pinned();
+        cap(&mut s, "recent-a");
+        cap(&mut s, "recent-b");
+        s.save_history();
+        assert_eq!(s.history.len(), 2);
+        (s, pinned_id)
+    }
+
+    // --- H4 / RAFF-AUD-001 ------------------------------------------------
+
+    #[test]
+    fn aud001_characterization_unpin_at_cap_returns_err_and_drops_item_from_memory() {
+        let dir = tmp_dir("aud001c");
+        let (mut s, pinned_id) = full_history_with_old_pinned(&dir);
+        let result = s.set_pin_persisted(&pinned_id, false);
+        // السلوك الحالي (موثَّق لا مُقَر): خطأ، والعنصر لم يعد في أي طبقة في الذاكرة.
+        assert!(result.is_err(), "السلوك الحالي يعيد Err: {result:?}");
+        assert!(s.find(&pinned_id).is_none(), "العنصر اختفى من الذاكرة");
+        // وأي كتابة لاحقة لطبقة المثبتات تجعل الفقد دائمًا على القرص.
+        cap(&mut s, "another");
+        let other = s.history[0].id.clone();
+        s.set_pin_persisted(&other, true).unwrap();
+        let reloaded = Store::load(dir.clone());
+        assert!(reloaded.find(&pinned_id).is_none(), "الفقد صار دائمًا بعد إعادة التحميل");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    #[ignore = "RAFF-AUD-001: إلغاء تثبيت عنصر قديم والتاريخ ممتلئ يفقده"]
+    fn aud001_unpin_at_cap_keeps_item_or_refuses_without_side_effects() {
+        let dir = tmp_dir("aud001");
+        let (mut s, pinned_id) = full_history_with_old_pinned(&dir);
+        let before = (ids(&s.history), ids(&s.pinned));
+        match s.set_pin_persisted(&pinned_id, false) {
+            Ok(_) => assert!(s.find(&pinned_id).is_some(), "نجاح يجب ألا يفقد العنصر"),
+            Err(_) => assert_eq!(
+                (ids(&s.history), ids(&s.pinned)),
+                before,
+                "الرفض يجب أن يعيد الطبقتين كما كانتا"
+            ),
+        }
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // --- H1 / H2 / RAFF-AUD-002 / RAFF-AUD-003: مصفوفة الفساد ------------------
+
+    fn corruption_payloads() -> Vec<(&'static str, Vec<u8>)> {
+        vec![
+            ("empty", Vec::new()),
+            ("truncated", b"[{\"id\":\"x\",\"type\":\"te".to_vec()),
+            ("wrong-type", b"{\"not\":\"an array\"}".to_vec()),
+            ("binary", vec![0xff, 0xfe, 0x00, 0x13, 0x37]),
+            ("nul-only", vec![0u8; 64]),
+            ("bom-empty-array", b"\xef\xbb\xbf[]".to_vec()),
+        ]
+    }
+
+    #[test]
+    fn h1_corrupt_history_or_pinned_is_flagged_copied_aside_and_images_survive() {
+        for layer in [HISTORY_FILE, PINNED_FILE] {
+            for (name, bytes) in corruption_payloads() {
+                let dir = tmp_dir("h1");
+                fs::create_dir_all(dir.join(IMAGES_DIR)).unwrap();
+                let image = dir.join(IMAGES_DIR).join("orphan-candidate.png");
+                fs::write(&image, b"png").unwrap();
+                fs::write(dir.join(layer), &bytes).unwrap();
+
+                let s = Store::load(dir.clone());
+
+                assert!(s.unreadable_layer, "{layer}/{name}: يجب رفع علامة الطبقة غير المقروءة");
+                let copy = dir.join(layer).with_extension("json.corrupt");
+                assert_eq!(fs::read(&copy).unwrap(), bytes, "{layer}/{name}: النسخة الجانبية مطابقة");
+                assert_eq!(fs::read(dir.join(layer)).unwrap(), bytes, "{layer}/{name}: الأصل لم يُستبدل عند الإقلاع");
+                assert!(image.exists(), "{layer}/{name}: لا تنظيف للصور اليتيمة مع طبقة غير مقروءة");
+                let _ = fs::remove_dir_all(dir);
+            }
+        }
+    }
+
+    #[test]
+    fn aud002_characterization_corrupt_settings_silently_reverts_to_defaults() {
+        let dir = tmp_dir("aud002c");
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join(SETTINGS_FILE), b"{\"captureEnabled\": false, \"excludedApps\": [\"com.bank\"").unwrap();
+        let s = Store::load(dir.clone());
+        // السلوك الحالي: الالتقاط يعود مفعّلًا، والاستثناءات تُفرَّغ، ولا علامة للواجهة.
+        assert!(s.settings.capture_enabled);
+        assert!(s.settings.excluded_apps.is_empty());
+        assert!(!s.unreadable_layer);
+        assert!(dir.join("settings.json.corrupt").exists(), "على الأقل تُحفظ نسخة جانبية");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    #[ignore = "RAFF-AUD-002: فساد settings.json يعيد الإعدادات الافتراضية بصمت (يُستأنف الالتقاط وتُفقد الاستثناءات)"]
+    fn aud002_corrupt_settings_is_surfaced() {
+        let dir = tmp_dir("aud002");
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join(SETTINGS_FILE), b"{oops").unwrap();
+        let s = Store::load(dir.clone());
+        assert!(s.unreadable_layer, "فساد الإعدادات يجب أن يصل إلى الواجهة كما في الطبقتين الأخريين");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    fn two_successive_corruptions(dir: &Path) {
+        fs::create_dir_all(dir).unwrap();
+        fs::write(dir.join(HISTORY_FILE), b"FIRST-CORRUPTION").unwrap();
+        let s = Store::load(dir.to_path_buf());
+        drop(s);
+        fs::write(dir.join(HISTORY_FILE), b"SECOND-CORRUPTION").unwrap();
+        let _ = Store::load(dir.to_path_buf());
+    }
+
+    #[test]
+    fn aud003_characterization_second_corruption_overwrites_first_recovery_copy() {
+        let dir = tmp_dir("aud003c");
+        two_successive_corruptions(&dir);
+        assert_eq!(fs::read(dir.join("history.json.corrupt")).unwrap(), b"SECOND-CORRUPTION");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    #[ignore = "RAFF-AUD-003: اسم .json.corrupt ثابت فتُستبدل نسخة الاستعادة الأولى"]
+    fn aud003_every_recovery_copy_is_kept() {
+        let dir = tmp_dir("aud003");
+        two_successive_corruptions(&dir);
+        let mut found_first = false;
+        for entry in fs::read_dir(&dir).unwrap().flatten() {
+            if fs::read(entry.path()).map(|b| b == b"FIRST-CORRUPTION").unwrap_or(false) {
+                found_first = true;
+            }
+        }
+        assert!(found_first, "نسخة الفساد الأول يجب أن تبقى في مكان ما");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // --- حقن الأعطال: مجلد مكان ملف .tmp يجعل الكتابة تفشل ---------------------
+
+    #[test]
+    fn fault_capture_write_failure_rolls_back_memory_and_disk() {
+        let dir = tmp_dir("fault-cap");
+        let store = Mutex::new(Store::load(dir.clone()));
+        cap_persist(&store, "kept").unwrap();
+        let before = ids(&crate::lock_store(&store).history);
+        fs::create_dir(dir.join("history.json.tmp")).unwrap();
+
+        let result = cap_persist(&store, "doomed");
+
+        assert!(result.is_err());
+        assert_eq!(ids(&crate::lock_store(&store).history), before, "الذاكرة تعود كما كانت");
+        fs::remove_dir(dir.join("history.json.tmp")).unwrap();
+        assert_eq!(ids(&Store::load(dir.clone()).history), before, "القرص لم يتغيّر");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn fault_settings_write_failure_restores_settings() {
+        let dir = tmp_dir("fault-set");
+        let mut s = Store::load(dir.clone());
+        s.save_settings();
+        fs::create_dir(dir.join("settings.json.tmp")).unwrap();
+        let mut next = s.settings.clone();
+        next.capture_enabled = false;
+        next.excluded_apps = vec!["com.bank".into()];
+
+        assert!(s.update_settings_persisted(next).is_err());
+        assert!(s.settings.capture_enabled, "الإعداد يعود في الذاكرة");
+        assert!(s.settings.excluded_apps.is_empty());
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn fault_pin_journal_failure_leaves_item_unpinned_everywhere() {
+        let dir = tmp_dir("fault-pin");
+        let mut s = Store::load(dir.clone());
+        cap(&mut s, "x");
+        s.save_history();
+        let id = s.history[0].id.clone();
+        fs::create_dir(dir.join("pending-pin.json.tmp")).unwrap();
+        assert!(s.set_pin_persisted(&id, true).is_err());
+        assert!(!s.find(&id).unwrap().is_pinned);
+        fs::remove_dir(dir.join("pending-pin.json.tmp")).unwrap();
+        let r = Store::load(dir.clone());
+        assert!(r.pinned.is_empty() && r.history.len() == 1);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // --- اختبار قائم على نموذج: تسلسلات عشوائية ببذرة ثابتة + تطابق إعادة التحميل --
+
+    fn check_invariants(s: &Store, step: usize, op: &str) {
+        let mut seen = std::collections::HashSet::new();
+        for item in s.history.iter().chain(s.pinned.iter()) {
+            assert!(seen.insert(item.id.clone()), "خطوة {step} ({op}): معرّف مكرر {}", item.id);
+        }
+        assert!(s.history.iter().all(|i| !i.is_pinned), "خطوة {step} ({op}): عنصر مثبت في التاريخ");
+        assert!(s.pinned.iter().all(|i| i.is_pinned), "خطوة {step} ({op}): عنصر غير مثبت في الرف");
+        assert!(s.history.len() <= s.settings.history_limit.max(1), "خطوة {step} ({op}): تجاوز الحد");
+    }
+
+    fn run_model(seed: u64, steps: usize) {
+        let dir = tmp_dir("model");
+        let store = Mutex::new(Store::load(dir.clone()));
+        {
+            let mut s = crate::lock_store(&store);
+            let mut settings = s.settings.clone();
+            settings.history_limit = 1000;
+            s.update_settings_persisted(settings).unwrap();
+        }
+        let mut rng = Rng(seed);
+        let mut pending_token: Option<String> = None;
+        for step in 0..steps {
+            let roll = rng.below(100);
+            let op;
+            if roll < 45 {
+                op = "capture";
+                let text = format!("item-{}", rng.below(60));
+                cap_persist(&store, &text).unwrap();
+            } else {
+                let mut s = crate::lock_store(&store);
+                let all: Vec<String> = ids(&s.history).into_iter().chain(ids(&s.pinned)).collect();
+                if all.is_empty() {
+                    continue;
+                }
+                let target = all[rng.below(all.len() as u64) as usize].clone();
+                if roll < 65 {
+                    op = "pin-toggle";
+                    let desired = !s.find(&target).unwrap().is_pinned;
+                    s.set_pin_persisted(&target, desired).unwrap();
+                } else if roll < 80 {
+                    op = "delete";
+                    pending_token = Some(s.delete_reversible(&target).unwrap());
+                } else if roll < 88 {
+                    op = "undo";
+                    if let Some(token) = pending_token.take() {
+                        s.undo_delete(&token).unwrap();
+                    }
+                } else if roll < 94 {
+                    op = "commit";
+                    if let Some(token) = pending_token.take() {
+                        s.commit_delete(&token).unwrap();
+                    }
+                } else {
+                    op = "reorder";
+                    let mut order = ids(&s.pinned);
+                    order.reverse();
+                    s.reorder_pinned_persisted(&order).unwrap();
+                }
+            }
+            let s = crate::lock_store(&store);
+            check_invariants(&s, step, op);
+            if step % 10 == 9 {
+                let r = Store::load(dir.clone());
+                assert_eq!(ids(&r.history), ids(&s.history), "بذرة {seed} خطوة {step} ({op}): التاريخ بعد إعادة التحميل");
+                assert_eq!(ids(&r.pinned), ids(&s.pinned), "بذرة {seed} خطوة {step} ({op}): الرف بعد إعادة التحميل");
+            }
+        }
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn model_based_sequences_preserve_invariants_and_reload_equality() {
+        for seed in [0x5eed_u64, 0xC0FFEE, 0xBADD_CAFE, 42, 7] {
+            run_model(seed, 200);
+        }
+    }
+
+    // --- التزامن: التقاطات متوازية عبر persist_capture --------------------------
+
+    #[test]
+    fn concurrent_persist_capture_loses_nothing() {
+        let dir = tmp_dir("conc");
+        let store = Arc::new(Mutex::new(Store::load(dir.clone())));
+        {
+            let mut s = crate::lock_store(&store);
+            let mut settings = s.settings.clone();
+            settings.history_limit = 1000;
+            s.update_settings_persisted(settings).unwrap();
+        }
+        let threads: Vec<_> = (0..8)
+            .map(|t| {
+                let store = Arc::clone(&store);
+                std::thread::spawn(move || {
+                    for i in 0..40 {
+                        cap_persist(&store, &format!("t{t}-i{i}")).unwrap();
+                    }
+                })
+            })
+            .collect();
+        for t in threads {
+            t.join().unwrap();
+        }
+        let mem = ids(&crate::lock_store(&store).history);
+        assert_eq!(mem.len(), 320);
+        let disk = Store::load(dir.clone());
+        assert_eq!(ids(&disk.history), mem, "القرص يطابق الذاكرة بعد كتابات متزامنة");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // --- تكافؤ التطبيع JS ↔ Rust عبر متجهات مشتركة -----------------------------
+
+    fn vectors() -> serde_json::Value {
+        serde_json::from_str(include_str!("../../audit/fixtures/normalize-vectors.json")).unwrap()
+    }
+
+    #[test]
+    fn normalize_parity_with_js_for_all_non_divergent_vectors() {
+        let v = vectors();
+        let mut checked = 0;
+        for vec in v["vectors"].as_array().unwrap() {
+            let input = vec["input"].as_str().unwrap();
+            let got = normalize_for_search(input);
+            if vec["divergence"].is_null() {
+                assert_eq!(got, vec["expected"].as_str().unwrap(), "تباين غير متوقع للمدخل {input:?}");
+            } else {
+                // نموذج JS لخفض الحالة حرفًا حرفًا يجب أن يطابق Rust تمامًا.
+                assert_eq!(got, vec["perCharModel"].as_str().unwrap(), "نموذج per-char لا يطابق Rust: {input:?}");
+            }
+            checked += 1;
+        }
+        assert!(checked >= 200);
+    }
+
+    #[test]
+    #[ignore = "RAFF-AUD-007: سيغما اليونانية الختامية تختلف بين toLowerCase في JS وto_lowercase لكل حرف في Rust"]
+    fn aud007_normalize_parity_for_divergent_vectors() {
+        let v = vectors();
+        for vec in v["vectors"].as_array().unwrap() {
+            if !vec["divergence"].is_null() {
+                let input = vec["input"].as_str().unwrap();
+                assert_eq!(normalize_for_search(input), vec["expected"].as_str().unwrap(), "{input:?}");
+            }
+        }
+    }
+
+    #[test]
+    #[ignore = "RAFF-AUD-008: String.prototype.trim في JS يزيل U+FEFF وstr::trim في Rust لا يزيله"]
+    fn aud008_trim_parity_with_js() {
+        let v = vectors();
+        for t in v["trimVectors"].as_array().unwrap() {
+            let input = t["input"].as_str().unwrap();
+            assert_eq!(input.trim(), t["jsTrim"].as_str().unwrap(), "{input:?}");
+        }
+    }
+
+    // --- مجسّات أداء (تقيس ولا تحكم؛ تُشغَّل يدويًا) ----------------------------
+
+    #[test]
+    #[ignore = "perf-probe: قياس فقط"]
+    fn perf_probe_capture_at_limit_with_heavy_rows() {
+        let dir = tmp_dir("perf");
+        let store = Mutex::new(Store::load(dir.clone()));
+        {
+            let mut s = crate::lock_store(&store);
+            let mut settings = s.settings.clone();
+            settings.history_limit = 1000;
+            s.update_settings_persisted(settings).unwrap();
+        }
+        let filler = "ع".repeat(16 * 1024);
+        let t0 = std::time::Instant::now();
+        {
+            let mut s = crate::lock_store(&store);
+            for i in 0..1000 {
+                cap(&mut s, &format!("{i}-{filler}"));
+            }
+            s.save_history();
+        }
+        let fill = t0.elapsed();
+        let mut worst = std::time::Duration::ZERO;
+        for i in 0..20 {
+            let t = std::time::Instant::now();
+            cap_persist(&store, &format!("extra-{i}-{filler}")).unwrap();
+            worst = worst.max(t.elapsed());
+        }
+        let size = fs::metadata(dir.join(HISTORY_FILE)).unwrap().len();
+        let t = std::time::Instant::now();
+        let r = Store::load(dir.clone());
+        let load = t.elapsed();
+        println!(
+            "perf: fill1000={fill:?} worst_capture_at_limit={worst:?} history_bytes={size} load={load:?} rows={}",
+            r.history.len()
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    #[ignore = "perf-probe: قياس فقط"]
+    fn perf_probe_normalize_large_text() {
+        let text = "أَهْلًا بِكُمْ ٠١٢٣ Hello ".repeat(40_000);
+        let t = std::time::Instant::now();
+        let out = normalize_for_search(&text);
+        println!("perf: normalize {} bytes -> {} bytes in {:?}", text.len(), out.len(), t.elapsed());
+    }
+}

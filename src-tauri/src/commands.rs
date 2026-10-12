@@ -888,3 +888,79 @@ mod tests {
         );
     }
 }
+
+// وحدة اختبارات التدقيق (RAFF-COPILOT-AUDIT). اختبارات فقط.
+#[cfg(test)]
+mod audit_tests {
+    use super::*;
+
+    fn valid() -> Settings {
+        Settings::default()
+    }
+
+    #[test]
+    fn validate_settings_boundaries() {
+        assert!(validate_settings(&valid()).is_ok());
+        for limit in [0usize, 1, 199, 201, 499, 999, 1001, usize::MAX] {
+            let mut s = valid();
+            s.history_limit = limit;
+            assert!(validate_settings(&s).is_err(), "history_limit={limit}");
+        }
+        for days in [1u32, 6, 8, 29, 31, 89, 91, u32::MAX] {
+            let mut s = valid();
+            s.retention_days = days;
+            assert!(validate_settings(&s).is_err(), "retention_days={days}");
+        }
+        let mut s = valid();
+        s.hotkey = "a".repeat(128);
+        assert!(validate_settings(&s).is_ok(), "128 حرفًا مسموح");
+        s.hotkey = "a".repeat(129);
+        assert!(validate_settings(&s).is_err());
+        s.hotkey.clear();
+        assert!(validate_settings(&s).is_err());
+
+        let mut s = valid();
+        s.excluded_apps = (0..128).map(|i| format!("com.app{i}")).collect();
+        assert!(validate_settings(&s).is_ok(), "128 تطبيقًا مسموح");
+        s.excluded_apps.push("com.extra".into());
+        assert!(validate_settings(&s).is_err());
+        for bad in ["", "com.a b", "com.a\u{0000}", "com.a\t", "com.\u{00A0}x", "com.\u{2028}x"] {
+            let mut s = valid();
+            s.excluded_apps = vec![bad.into()];
+            assert!(validate_settings(&s).is_err(), "{bad:?}");
+        }
+        let mut s = valid();
+        s.excluded_apps = vec!["a".repeat(255)];
+        assert!(validate_settings(&s).is_ok());
+        s.excluded_apps = vec!["a".repeat(256)];
+        assert!(validate_settings(&s).is_err());
+    }
+
+    #[test]
+    fn observation_bidi_controls_pass_bundle_validation() {
+        // U+202E (RLO) ليس control ولا whitespace في Rust، فيقبله المدقق.
+        // ملاحظة فقط: معرّف الحزمة لا يُعرض كنص منسَّق في واجهة الالتقاط.
+        let mut s = valid();
+        s.excluded_apps = vec!["com.\u{202E}evil".into()];
+        assert!(validate_settings(&s).is_ok());
+    }
+
+    /// RAFF-AUD-004: موضع واحد في الملف يقفل المخزن بـ unwrap بدل crate::lock_store.
+    fn raw_unwrap_lock_sites() -> usize {
+        let src = include_str!("commands.rs");
+        let product = src.split("#[cfg(test)]").next().unwrap();
+        let compact: String = product.chars().filter(|c| !c.is_whitespace()).collect();
+        compact.matches("store.lock().unwrap()").count()
+    }
+
+    #[test]
+    fn aud004_characterization_one_raw_unwrap_lock_remains() {
+        assert_eq!(raw_unwrap_lock_sites(), 1);
+    }
+
+    #[test]
+    #[ignore = "RAFF-AUD-004: update_settings يستخدم state.store.lock().unwrap() فيذعر إن كان القفل مسمومًا"]
+    fn aud004_no_raw_unwrap_lock() {
+        assert_eq!(raw_unwrap_lock_sites(), 0);
+    }
+}
