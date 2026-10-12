@@ -327,6 +327,25 @@ pub fn normalize_for_search(text: &str) -> String {
     folded.to_lowercase()
 }
 
+/// Trims a search query exactly as `String.prototype.trim` does in `logic.js`.
+///
+/// `str::trim` goes by Unicode's White_Space; JavaScript has its own list. It
+/// also strips U+FEFF — a byte-order mark is how text pasted from some files
+/// begins — and leaves U+0085 alone. Trimmed two ways, one query is two.
+pub fn trim_query(query: &str) -> &str {
+    query.trim_matches(|ch| {
+        matches!(
+            ch,
+            // WhiteSpace: TAB, VT, FF, ZWNBSP and every Zs space...
+            '\t' | '\u{000B}' | '\u{000C}' | '\u{FEFF}'
+                | ' ' | '\u{00A0}' | '\u{1680}' | '\u{2000}'..='\u{200A}'
+                | '\u{202F}' | '\u{205F}' | '\u{3000}'
+                // ...and LineTerminator.
+                | '\n' | '\r' | '\u{2028}' | '\u{2029}'
+        )
+    })
+}
+
 /// Schemes the «روابط» filter recognises.
 ///
 /// An explicit list, not "anything with a colon": `C:\\Users`, `12:30` and
@@ -3239,12 +3258,11 @@ mod audit_tests {
     }
 
     #[test]
-    #[ignore = "RAFF-AUD-008: String.prototype.trim في JS يزيل U+FEFF وstr::trim في Rust لا يزيله"]
     fn aud008_trim_parity_with_js() {
         let v = vectors();
         for t in v["trimVectors"].as_array().unwrap() {
             let input = t["input"].as_str().unwrap();
-            assert_eq!(input.trim(), t["jsTrim"].as_str().unwrap(), "{input:?}");
+            assert_eq!(trim_query(input), t["jsTrim"].as_str().unwrap(), "{input:?}");
         }
     }
 

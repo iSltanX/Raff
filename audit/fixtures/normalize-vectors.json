@@ -1582,6 +1582,10 @@
   {
    "input": " x",
    "jsTrim": "x"
+  },
+  {
+   "input": "x",
+   "jsTrim": "x"
   }
  ]
 }

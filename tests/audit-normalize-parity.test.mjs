@@ -46,18 +46,16 @@ test('السيغما النهائية في البحث الفوري: οδος ي�
   assert.equal(filterItems(items, 'οδος').length, 1);
 });
 
-// trim: JS يزيل U+FEFF وRust str::trim لا يزيله (Rust يعتمد خاصية White_Space فقط).
-const RUST_WHITESPACE = /^[\t\n\v\f\r \u0085\u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000]+|[\t\n\v\f\r \u0085\u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000]+$/gu;
+// trim: نموذج storage::trim_query في Rust (RAFF-AUD-008). كان str::trim يعتمد خاصية
+// White_Space فيترك U+FEFF ويقصّ U+0085؛ صار يقصّ قائمة JS نفسها: WhiteSpace
+// (TAB وVT وFF وU+FEFF وكل Zs) وLineTerminator.
+const RUST_TRIM_SET = '\\t\\v\\f\\uFEFF \\u00A0\\u1680\\u2000-\\u200A\\u202F\\u205F\\u3000\\n\\r\\u2028\\u2029';
+const RUST_WHITESPACE = new RegExp(`^[${RUST_TRIM_SET}]+|[${RUST_TRIM_SET}]+$`, 'gu');
 const rustTrimModel = (s) => s.replace(RUST_WHITESPACE, '');
 
 for (const v of fixture.trimVectors) {
-  const same = v.jsTrim === rustTrimModel(v.input);
-  test(
-    `trim ${JSON.stringify(v.input)}`,
-    same ? {} : { todo: 'RAFF-AUD-008: JS trim يزيل U+FEFF وRust لا يزيله' },
-    () => {
-      assert.equal(v.input.trim(), v.jsTrim);
-      assert.equal(v.jsTrim, rustTrimModel(v.input));
-    }
-  );
+  test(`trim ${JSON.stringify(v.input)}`, () => {
+    assert.equal(v.input.trim(), v.jsTrim);
+    assert.equal(v.jsTrim, rustTrimModel(v.input));
+  });
 }

@@ -156,11 +156,16 @@ pub fn get_state(app: AppHandle, state: State<AppState>) -> StatePayload {
 /// what keeps that bounded.
 #[tauri::command]
 pub fn search_items(state: State<AppState>, query: String) -> Vec<String> {
-    let needle = crate::storage::normalize_for_search(query.trim());
+    matching_ids(&crate::lock_store(&state.store), &query)
+}
+
+/// `search_items` without the lock: the query trimmed and folded the way the
+/// panel's own filter does it, then every row's full text.
+fn matching_ids(store: &Store, query: &str) -> Vec<String> {
+    let needle = crate::storage::normalize_for_search(crate::storage::trim_query(query));
     if needle.is_empty() {
         return Vec::new();
     }
-    let store = crate::lock_store(&state.store);
     store
         .pinned
         .iter()
@@ -773,17 +778,7 @@ mod tests {
 
     /// The store-side half of `search_items`: everything except taking the lock.
     fn ids_matching(store: &Store, query: &str) -> Vec<String> {
-        let needle = crate::storage::normalize_for_search(query.trim());
-        if needle.is_empty() {
-            return Vec::new();
-        }
-        store
-            .pinned
-            .iter()
-            .chain(store.history.iter())
-            .filter(|item| crate::storage::normalize_for_search(&item.text).contains(&needle))
-            .map(|item| item.id.clone())
-            .collect()
+        matching_ids(store, query)
     }
 
     fn store_with_rows(texts: &[&str]) -> Store {
@@ -811,6 +806,14 @@ mod tests {
         let store = store_with_rows(&["\u{039F}\u{0394}\u{039F}\u{03A3}"]); // ΟΔΟΣ
         assert_eq!(ids_matching(&store, "\u{03BF}\u{03B4}\u{03BF}\u{03C2}").len(), 1); // οδος
         assert!(ids_matching(&store, "\u{03BF}\u{03B4}\u{03BF}\u{03C3}").is_empty()); // οδοσ
+    }
+
+    /// A query pasted with a byte-order mark is the query without it, as in
+    /// the panel (RAFF-AUD-008).
+    #[test]
+    fn a_leading_byte_order_mark_is_trimmed_from_the_query() {
+        let store = store_with_rows(&["\u{0631}\u{0641}\u{0651}"]); // رفّ
+        assert_eq!(ids_matching(&store, "\u{FEFF}\u{0631}\u{0641}").len(), 1);
     }
 
     #[test]

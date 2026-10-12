@@ -92,6 +92,8 @@ const out = vectors.map((v) => {
 
 const trimVectors = [
   ' أ ', '\tx\n', '\u00A0x\u00A0', '\u3000x', '\uFEFFx', 'x\uFEFF', '\u200Bx', '\u2028x',
+  // U+0085: White_Space في Rust وليس مسافة في JS، فلا يُقصّ في الجهتين.
+  '\u0085x',
 ].map((input) => ({
   input,
   jsTrim: input.trim(),
