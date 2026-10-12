@@ -257,7 +257,7 @@
 <details>
 <summary><b>البناء من المصدر</b></summary><br>
 
-**المتطلبات:** Rust (stable)، وNode 20 أو أحدث، وأدوات سطر أوامر Xcode.
+**المتطلبات:** Rust (stable)، وNode 24 أو أحدث (LTS الحالي، وهو ما يستعمله CI؛ على Node 20 يُسقط <span dir="ltr">`npm test`</span> اختبارات بصمت)، وأدوات سطر أوامر Xcode.
 
 | الأمر | ما يفعله |
 | --- | --- |
