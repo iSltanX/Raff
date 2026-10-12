@@ -80,7 +80,7 @@ pub async fn paste_item(app: &AppHandle, id: &str, plain: bool) -> Result<bool, 
     }
 
     let state = app.state::<AppState>();
-    let previous_pid = state.previous_app.lock().unwrap().take();
+    let previous_pid = crate::lock_previous_app(&state.previous_app).take();
     crate::startup_trace::mark(&format!("PASTE previous_pid={previous_pid:?}"));
 
     let handle = app.clone();

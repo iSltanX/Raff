@@ -363,12 +363,8 @@ pub fn update_settings(
     // Persist only after fallible system integration succeeds. If storage
     // fails, restore both external side effects so Settings cannot claim a
     // configuration macOS or the next launch will not actually honor.
-    if let Err(err) = state
-        .store
-        .lock()
-        .unwrap()
-        .update_settings_persisted(settings.clone())
-    {
+    let persisted = crate::lock_store(&state.store).update_settings_persisted(settings.clone());
+    if let Err(err) = persisted {
         if autostart_changed {
             let autolaunch = app.autolaunch();
             let _ = if old.launch_at_login {
@@ -961,12 +957,6 @@ mod audit_tests {
     }
 
     #[test]
-    fn aud004_characterization_one_raw_unwrap_lock_remains() {
-        assert_eq!(raw_unwrap_lock_sites(), 1);
-    }
-
-    #[test]
-    #[ignore = "RAFF-AUD-004: update_settings يستخدم state.store.lock().unwrap() فيذعر إن كان القفل مسمومًا"]
     fn aud004_no_raw_unwrap_lock() {
         assert_eq!(raw_unwrap_lock_sites(), 0);
     }

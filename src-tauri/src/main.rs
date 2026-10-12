@@ -149,6 +149,14 @@ pub fn lock_store(store: &Mutex<storage::Store>) -> MutexGuard<'_, storage::Stor
         .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
+/// The remembered front app, under the same policy: a panic while it was held
+/// must not cost every later panel open and paste a panic of its own.
+pub fn lock_previous_app(previous_app: &Mutex<Option<i32>>) -> MutexGuard<'_, Option<i32>> {
+    previous_app
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
 /// Debug builds only: `RAFF_DATA_DIR` points the store somewhere else, so a
 /// development run never reads or writes the installed رفّ's history.
 fn dev_data_dir() -> Option<std::path::PathBuf> {
@@ -434,5 +442,44 @@ mod tests {
         // memory stays usable and capture must not die with the panic.
         let guard = lock_store(&store);
         assert!(guard.history.is_empty());
+    }
+
+    /// The policy above, held in every module rather than only for the store
+    /// (RAFF-AUD-004): production code never unwraps a lock it takes.
+    #[test]
+    fn no_production_code_unwraps_a_lock() {
+        let modules = [
+            ("commands.rs", include_str!("commands.rs")),
+            ("diagnostics.rs", include_str!("diagnostics.rs")),
+            ("macos.rs", include_str!("macos.rs")),
+            ("main.rs", include_str!("main.rs")),
+            ("monitor.rs", include_str!("monitor.rs")),
+            ("panel.rs", include_str!("panel.rs")),
+            ("paste.rs", include_str!("paste.rs")),
+            ("report.rs", include_str!("report.rs")),
+            ("report_image.rs", include_str!("report_image.rs")),
+            ("startup_trace.rs", include_str!("startup_trace.rs")),
+            ("storage.rs", include_str!("storage.rs")),
+            ("tray.rs", include_str!("tray.rs")),
+            ("updater.rs", include_str!("updater.rs")),
+        ];
+        for (name, source) in modules {
+            let production = source.split("#[cfg(test)]").next().unwrap();
+            let compact: String = production.chars().filter(|c| !c.is_whitespace()).collect();
+            for raw in [".lock().unwrap()", ".lock().expect("] {
+                assert!(!compact.contains(raw), "{name} still takes a lock with `{raw}`");
+            }
+        }
+    }
+
+    #[test]
+    fn a_poisoned_previous_app_lock_still_yields_a_usable_guard() {
+        let previous_app = Mutex::new(Some(7));
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _guard = previous_app.lock().unwrap();
+            panic!("a panel show panicked while holding the front app");
+        }));
+        assert!(previous_app.is_poisoned());
+        assert_eq!(lock_previous_app(&previous_app).take(), Some(7));
     }
 }
