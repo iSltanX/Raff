@@ -956,6 +956,27 @@ impl Store {
         dropped
     }
 
+    /// `prune_history`, except that the row `id` is never one that goes.
+    ///
+    /// An unpinned row returns to history at its recency position, and when it
+    /// is older than everything a full history holds, that position is past
+    /// the end: the count limit would drop the very row the user just asked to
+    /// keep. It stays — one over the limit if need be — until the next prune
+    /// (a capture, the hourly sweep, launch) weighs it like any other row.
+    fn prune_history_sparing(&mut self, id: &str) -> Vec<ClipItem> {
+        let mut dropped = self.prune_history();
+        if let Some(at) = dropped.iter().position(|item| item.id == id) {
+            let item = dropped.remove(at);
+            let to = self
+                .history
+                .iter()
+                .position(|candidate| candidate.created_at < item.created_at)
+                .unwrap_or(self.history.len());
+            self.history.insert(to, item);
+        }
+        dropped
+    }
+
     /// The oldest `created_at` still covered, or `None` when the user keeps
     /// things until a count or size limit says otherwise.
     fn oldest_allowed_ms(&self) -> Option<u64> {
@@ -1264,6 +1285,8 @@ impl Store {
     /// (a crash can at worst leave a recoverable duplicate, never lose the
     /// item); any write failure restores both vectors and best-effort rewrites
     /// their previous durable snapshots before returning an error to the UI.
+    /// History is trimmed by the whole retention policy (`prune_history`),
+    /// never by the row being moved.
     pub fn set_pin_persisted(&mut self, id: &str, desired: bool) -> Result<bool, String> {
         self.try_finish_pending_pin()?;
         let was_pinned = self
@@ -1279,17 +1302,14 @@ impl Store {
             return Err("تعذّر تغيير حالة التثبيت".into());
         }
 
-        let limit = self.settings.history_limit.max(1);
-        let dropped = if self.history.len() > limit {
-            self.history.split_off(limit)
-        } else {
-            Vec::new()
-        };
+        let dropped = self.prune_history_sparing(id);
 
-        let moved = self
-            .find(id)
-            .cloned()
-            .ok_or_else(|| "العنصر غير موجود".to_string())?;
+        // From here on every early return puts both layers back first.
+        let Some(moved) = self.find(id).cloned() else {
+            self.history = old_history;
+            self.pinned = old_pinned;
+            return Err("العنصر غير موجود".into());
+        };
         self.pending_pin = Some(PendingPin {
             item: moved,
             desired,
@@ -1928,6 +1948,80 @@ mod tests {
         assert!(recovered.pinned.is_empty());
         assert!(recovered.find(&old_id).is_none());
         assert!(!dir.join(PENDING_PIN_FILE).exists());
+    }
+
+    /// A full history, and a pinned row older than everything in it — so the
+    /// recency position it returns to on unpin is past the count limit.
+    fn full_history_and_an_older_pinned_row() -> (Store, String) {
+        let mut s = store();
+        s.settings.history_limit = 2;
+        capture_text(&mut s, "pinned long ago");
+        let id = s.history[0].id.clone();
+        s.set_pin_persisted(&id, true).unwrap();
+        s.find_mut(&id).unwrap().created_at = 1;
+        s.save_pinned();
+        capture_text(&mut s, "recent a");
+        capture_text(&mut s, "recent b");
+        s.save_history();
+        (s, id)
+    }
+
+    fn layer_on_disk(s: &Store, file: &str) -> Vec<ClipItem> {
+        serde_json::from_slice(&fs::read(s.dir.join(file)).unwrap()).unwrap()
+    }
+
+    #[test]
+    fn unpinning_into_a_full_history_keeps_the_row_in_memory_and_on_disk() {
+        let (mut s, id) = full_history_and_an_older_pinned_row();
+        let recent: Vec<String> = s.history.iter().map(|item| item.id.clone()).collect();
+
+        assert_eq!(s.set_pin_persisted(&id, false), Ok(false));
+
+        assert!(!s.find(&id).expect("the unpinned row is still there").is_pinned);
+        assert_eq!(
+            s.history.last().map(|item| item.id.as_str()),
+            Some(id.as_str()),
+            "at its recency position, one over the limit"
+        );
+        assert!(
+            recent.iter().all(|other| s.find(other).is_some()),
+            "and nothing else was dropped to make room for it"
+        );
+        assert!(
+            layer_on_disk(&s, HISTORY_FILE).iter().any(|item| item.id == id),
+            "written down, not only kept in memory"
+        );
+        assert!(layer_on_disk(&s, PINNED_FILE).is_empty());
+        assert!(!s.dir.join(PENDING_PIN_FILE).exists());
+    }
+
+    #[test]
+    fn the_next_capture_weighs_an_unpinned_row_like_any_other() {
+        let (mut s, id) = full_history_and_an_older_pinned_row();
+        s.set_pin_persisted(&id, false).unwrap();
+
+        capture_text(&mut s, "recent c");
+
+        assert_eq!(s.history.len(), 2, "back within the limit");
+        assert!(s.find(&id).is_none(), "the oldest row is the one that goes");
+    }
+
+    #[test]
+    fn unpinning_applies_the_whole_retention_policy_not_just_the_count() {
+        let mut s = store();
+        s.settings.retention_days = 7;
+        capture_text(&mut s, "to pin and back");
+        let id = s.history[0].id.clone();
+        s.set_pin_persisted(&id, true).unwrap();
+        capture_text(&mut s, "past the window");
+        let expired = s.history[0].id.clone();
+        s.find_mut(&expired).unwrap().created_at = now_ms() - 9 * 24 * 60 * 60 * 1000;
+
+        s.set_pin_persisted(&id, false).unwrap();
+
+        assert!(s.find(&expired).is_none(), "the age limit applies here as well");
+        assert!(!layer_on_disk(&s, HISTORY_FILE).iter().any(|item| item.id == expired));
+        assert!(s.find(&id).is_some());
     }
 
     #[test]
@@ -2636,24 +2730,6 @@ mod audit_tests {
     // --- H4 / RAFF-AUD-001 ------------------------------------------------
 
     #[test]
-    fn aud001_characterization_unpin_at_cap_returns_err_and_drops_item_from_memory() {
-        let dir = tmp_dir("aud001c");
-        let (mut s, pinned_id) = full_history_with_old_pinned(&dir);
-        let result = s.set_pin_persisted(&pinned_id, false);
-        // السلوك الحالي (موثَّق لا مُقَر): خطأ، والعنصر لم يعد في أي طبقة في الذاكرة.
-        assert!(result.is_err(), "السلوك الحالي يعيد Err: {result:?}");
-        assert!(s.find(&pinned_id).is_none(), "العنصر اختفى من الذاكرة");
-        // وأي كتابة لاحقة لطبقة المثبتات تجعل الفقد دائمًا على القرص.
-        cap(&mut s, "another");
-        let other = s.history[0].id.clone();
-        s.set_pin_persisted(&other, true).unwrap();
-        let reloaded = Store::load(dir.clone());
-        assert!(reloaded.find(&pinned_id).is_none(), "الفقد صار دائمًا بعد إعادة التحميل");
-        let _ = fs::remove_dir_all(dir);
-    }
-
-    #[test]
-    #[ignore = "RAFF-AUD-001: إلغاء تثبيت عنصر قديم والتاريخ ممتلئ يفقده"]
     fn aud001_unpin_at_cap_keeps_item_or_refuses_without_side_effects() {
         let dir = tmp_dir("aud001");
         let (mut s, pinned_id) = full_history_with_old_pinned(&dir);
