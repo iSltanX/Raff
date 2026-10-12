@@ -24,8 +24,10 @@ pub const ENDPOINT: &str = "https://app-reports.isultantf.workers.dev/v1/reports
 /// The window's limit (Gate 1). The contract allows 2000.
 pub const MAX_DESCRIPTION_CHARS: usize = 1000;
 const SEND_TIMEOUT: Duration = Duration::from_secs(20);
-/// When a 429 carries no Retry-After (or an HTTP date), wait an hour (the
-/// per-IP window). A hostile or broken value is capped at a day.
+/// When a 429 carries no usable Retry-After (none, an HTTP date, or not a
+/// number), wait an hour (the per-IP window). A number of seconds is taken as
+/// given — `0` means now (RFC 9110 §10.2.3) — and capped at a day, however
+/// large it is.
 const DEFAULT_RETRY_AFTER_S: u64 = 3600;
 const MAX_RETRY_AFTER_S: u64 = 86_400;
 
@@ -269,12 +271,17 @@ fn ensure_crypto_provider() {
 }
 
 fn retry_after_seconds(value: Option<&reqwest::header::HeaderValue>) -> u64 {
-    value
-        .and_then(|v| v.to_str().ok())
-        .and_then(|v| v.trim().parse::<u64>().ok())
-        .filter(|s| *s > 0)
-        .unwrap_or(DEFAULT_RETRY_AFTER_S)
-        .min(MAX_RETRY_AFTER_S)
+    let Some(text) = value.and_then(|v| v.to_str().ok()).map(str::trim) else {
+        return DEFAULT_RETRY_AFTER_S;
+    };
+    // delay-seconds is 1*DIGIT: anything else (a date, a sign, a fraction) is
+    // not a number of seconds at all.
+    if text.is_empty() || !text.bytes().all(|b| b.is_ascii_digit()) {
+        return DEFAULT_RETRY_AFTER_S;
+    }
+    // Digits too many for u64 are still seconds — a great many of them.
+    text.parse::<u64>()
+        .map_or(MAX_RETRY_AFTER_S, |seconds| seconds.min(MAX_RETRY_AFTER_S))
 }
 
 /// One POST of a frozen body. Separate from the session so it is tested
@@ -734,6 +741,13 @@ mod tests {
     }
 
     #[test]
+    fn a_retry_after_of_zero_means_now_not_in_an_hour() {
+        let f = frozen("أعد الآن", None);
+        let (url, _) = server("429 Too Many Requests", "Retry-After: 0\r\n", r#"{"error":"rate_limited"}"#, true);
+        assert_eq!(send(&url, &f), SendOutcome::RateLimited { retry_after_s: 0 });
+    }
+
+    #[test]
     fn server_errors_timeouts_and_closed_ports_are_retryable() {
         let f = frozen("عطل", None);
         for status in ["500 Internal Server Error", "502 Bad Gateway"] {
@@ -846,16 +860,10 @@ mod audit_tests {
         assert_eq!(ra("-5"), DEFAULT_RETRY_AFTER_S);
         assert_eq!(ra("1.5"), DEFAULT_RETRY_AFTER_S);
         assert_eq!(ra("abc"), DEFAULT_RETRY_AFTER_S);
-        assert_eq!(ra("99999999999999999999999"), DEFAULT_RETRY_AFTER_S, "تجاوز u64 يعود للساعة لا للحد الأقصى");
+        assert_eq!(ra("99999999999999999999999"), MAX_RETRY_AFTER_S, "تجاوز u64 ثوانٍ كثيرة، فيُقصّ إلى الحد الأقصى (RAFF-AUD-009)");
     }
 
     #[test]
-    fn aud009_characterization_retry_after_zero_becomes_an_hour() {
-        assert_eq!(ra("0"), DEFAULT_RETRY_AFTER_S);
-    }
-
-    #[test]
-    #[ignore = "RAFF-AUD-009: Retry-After: 0 (أعد فورًا وفق RFC 9110) يُعامَل كقيمة غير صالحة فيصير 3600 ثانية"]
     fn aud009_retry_after_zero_is_short() {
         assert!(ra("0") <= 1);
     }
