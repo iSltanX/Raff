@@ -105,14 +105,23 @@ impl Pause {
     pub fn view(&self) -> PauseView {
         match *self {
             Pause::Off => PauseView::default(),
-            Pause::SkipNext => PauseView { kind: "skipNext", ..PauseView::default() },
-            Pause::Until(None) => PauseView { kind: "untilRestart", ..PauseView::default() },
+            Pause::SkipNext => PauseView {
+                kind: "skipNext",
+                ..PauseView::default()
+            },
+            Pause::Until(None) => PauseView {
+                kind: "untilRestart",
+                ..PauseView::default()
+            },
             Pause::Until(Some(until)) => {
                 let left = pause_left(until);
                 if left.is_zero() {
                     return PauseView::default();
                 }
-                PauseView { kind: "timed", minutes_left: Some(left.as_secs().div_ceil(60).max(1)) }
+                PauseView {
+                    kind: "timed",
+                    minutes_left: Some(left.as_secs().div_ceil(60).max(1)),
+                }
             }
         }
     }
@@ -130,7 +139,10 @@ pub struct PauseView {
 
 impl Default for PauseView {
     fn default() -> Self {
-        Self { kind: "off", minutes_left: None }
+        Self {
+            kind: "off",
+            minutes_left: None,
+        }
     }
 }
 
@@ -382,7 +394,10 @@ mod tests {
     fn skip_next_spends_itself_on_exactly_one_change() {
         let mut pause = Pause::SkipNext;
         assert!(pause.consume(), "the copy the user is worried about");
-        assert!(!pause.consume(), "and the one after it is captured normally");
+        assert!(
+            !pause.consume(),
+            "and the one after it is captured normally"
+        );
         assert_eq!(pause, Pause::Off);
     }
 
@@ -498,7 +513,10 @@ mod tests {
             let production = source.split("#[cfg(test)]").next().unwrap();
             let compact: String = production.chars().filter(|c| !c.is_whitespace()).collect();
             for raw in [".lock().unwrap()", ".lock().expect("] {
-                assert!(!compact.contains(raw), "{name} still takes a lock with `{raw}`");
+                assert!(
+                    !compact.contains(raw),
+                    "{name} still takes a lock with `{raw}`"
+                );
             }
         }
     }

@@ -123,7 +123,9 @@ pub fn get_settings(app: AppHandle, state: State<AppState>) -> SettingsPayload {
         ax_trusted: ax_trusted_noted(),
         version: app.package_info().version.to_string(),
         unreadable_settings: store.unreadable_settings,
-        capture_alive: state.capture_alive.load(std::sync::atomic::Ordering::SeqCst),
+        capture_alive: state
+            .capture_alive
+            .load(std::sync::atomic::Ordering::SeqCst),
         capture_pause: pause_view(&state),
     }
 }
@@ -142,7 +144,9 @@ pub fn get_state(app: AppHandle, state: State<AppState>) -> StatePayload {
         version: app.package_info().version.to_string(),
         unreadable_layer: store.unreadable_shelf,
         unreadable_settings: store.unreadable_settings,
-        capture_alive: state.capture_alive.load(std::sync::atomic::Ordering::SeqCst),
+        capture_alive: state
+            .capture_alive
+            .load(std::sync::atomic::Ordering::SeqCst),
         capture_pause: pause_view(&state),
     }
 }
@@ -228,7 +232,9 @@ pub fn toggle_pin(
 ) -> Result<bool, String> {
     let is_pinned = {
         let mut store = crate::lock_store(&state.store);
-        store.set_pin_persisted(&id, is_pinned).map_err(save_failed)?
+        store
+            .set_pin_persisted(&id, is_pinned)
+            .map_err(save_failed)?
     };
     notify(&app);
     Ok(is_pinned)
@@ -589,13 +595,7 @@ const WINDOW_REVEAL_FALLBACK_MS: u64 = 1500;
 /// Every secondary window uses the native title bar in overlay mode: real
 /// traffic lights and window dragging from macOS, with the page drawing the
 /// whole content area underneath.
-fn open_window_when_ready(
-    app: &AppHandle,
-    label: &str,
-    page: &str,
-    title: &str,
-    size: (f64, f64),
-) {
+fn open_window_when_ready(app: &AppHandle, label: &str, page: &str, title: &str, size: (f64, f64)) {
     if let Some(w) = app.get_webview_window(label) {
         // Visible → just focus it. Hidden → it is still loading; the
         // page-load handler (or the watchdog below) will reveal it.
@@ -689,13 +689,7 @@ pub fn open_settings_window(app: &AppHandle) {
 pub fn open_about_window(app: &AppHandle) {
     let handle = app.clone();
     let _ = app.run_on_main_thread(move || {
-        open_window_when_ready(
-            &handle,
-            "about",
-            "about.html",
-            "عن رفّ",
-            (320.0, 420.0),
-        );
+        open_window_when_ready(&handle, "about", "about.html", "عن رفّ", (320.0, 420.0));
     });
 }
 
@@ -720,13 +714,7 @@ pub fn open_report_window(app: &AppHandle) {
 }
 
 pub fn open_firstrun_window(app: &AppHandle) {
-    open_window_when_ready(
-        app,
-        "firstrun",
-        "firstrun.html",
-        "رفّ",
-        (460.0, 520.0),
-    );
+    open_window_when_ready(app, "firstrun", "firstrun.html", "رفّ", (460.0, 520.0));
 }
 
 /// Small, tab-less window dedicated to the update cycle (opened by the tray's
@@ -750,13 +738,7 @@ pub fn open_update_window(app: &AppHandle) {
             let _ = w.set_focus();
             return;
         }
-        open_window_when_ready(
-            &handle,
-            "update",
-            "update.html",
-            "تحديث رفّ",
-            (360.0, 280.0),
-        );
+        open_window_when_ready(&handle, "update", "update.html", "تحديث رفّ", (360.0, 280.0));
     });
 }
 
@@ -804,8 +786,12 @@ mod tests {
     #[test]
     fn a_final_sigma_is_found_by_the_same_query_on_both_sides() {
         let store = store_with_rows(&["\u{039F}\u{0394}\u{039F}\u{03A3}"]); // ΟΔΟΣ
-        assert_eq!(ids_matching(&store, "\u{03BF}\u{03B4}\u{03BF}\u{03C2}").len(), 1); // οδος
-        assert!(ids_matching(&store, "\u{03BF}\u{03B4}\u{03BF}\u{03C3}").is_empty()); // οδοσ
+        assert_eq!(
+            ids_matching(&store, "\u{03BF}\u{03B4}\u{03BF}\u{03C2}").len(),
+            1
+        ); // οδος
+        assert!(ids_matching(&store, "\u{03BF}\u{03B4}\u{03BF}\u{03C3}").is_empty());
+        // οδοσ
     }
 
     /// A query pasted with a byte-order mark is the query without it, as in
@@ -823,7 +809,9 @@ mod tests {
         );
         // The distinctive word sits at character 2500 — well past the cut.
         let mut text = "\u{0645} ".repeat(1_250);
-        text.push_str("\u{0634}\u{0641}\u{0631}\u{0629}\u{0627}\u{0644}\u{062e}\u{0632}\u{0646}\u{0629}");
+        text.push_str(
+            "\u{0634}\u{0641}\u{0631}\u{0629}\u{0627}\u{0644}\u{062e}\u{0632}\u{0646}\u{0629}",
+        );
         text.push_str(&"\u{0645} ".repeat(250));
         assert!(text.chars().count() > 3_000);
         store.capture(
@@ -839,7 +827,10 @@ mod tests {
         let id = store.history[0].id.clone();
 
         assert_eq!(
-            ids_matching(&store, "\u{0634}\u{0641}\u{0631}\u{0629}\u{0627}\u{0644}\u{062e}\u{0632}\u{0646}\u{0629}"),
+            ids_matching(
+                &store,
+                "\u{0634}\u{0641}\u{0631}\u{0629}\u{0627}\u{0644}\u{062e}\u{0632}\u{0646}\u{0629}"
+            ),
             vec![id],
             "the shelf is searched, not the preview"
         );
@@ -875,9 +866,7 @@ mod tests {
             1,
             "a query written with bare alef still finds it"
         );
-        assert!(
-            ids_matching(&store, "\u{0645}\u{062f}\u{0631}\u{0633}\u{0647}").is_empty()
-        );
+        assert!(ids_matching(&store, "\u{0645}\u{062f}\u{0631}\u{0633}\u{0647}").is_empty());
     }
 
     fn image_store(original: &[u8], thumb: Option<(&str, &[u8])>) -> (Store, String) {
@@ -957,7 +946,14 @@ mod audit_tests {
         assert!(validate_settings(&s).is_ok(), "128 تطبيقًا مسموح");
         s.excluded_apps.push("com.extra".into());
         assert!(validate_settings(&s).is_err());
-        for bad in ["", "com.a b", "com.a\u{0000}", "com.a\t", "com.\u{00A0}x", "com.\u{2028}x"] {
+        for bad in [
+            "",
+            "com.a b",
+            "com.a\u{0000}",
+            "com.a\t",
+            "com.\u{00A0}x",
+            "com.\u{2028}x",
+        ] {
             let mut s = valid();
             s.excluded_apps = vec![bad.into()];
             assert!(validate_settings(&s).is_err(), "{bad:?}");

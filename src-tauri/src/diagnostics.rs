@@ -164,7 +164,11 @@ pub fn from_parts(
     let s = &store.settings;
     Diagnostics {
         schema: SCHEMA,
-        build: if cfg!(debug_assertions) { "debug" } else { "release" },
+        build: if cfg!(debug_assertions) {
+            "debug"
+        } else {
+            "release"
+        },
         accessibility: ax_trusted.map(|t| if t { "granted" } else { "missing" }),
         capture: CaptureState {
             enabled: s.capture_enabled,
@@ -198,10 +202,19 @@ pub fn collect(app: &tauri::AppHandle) -> Diagnostics {
     use tauri::Manager;
     let state = app.state::<crate::AppState>();
     let pause = *crate::lock_pause(&state.pause);
-    let alive = state.capture_alive.load(std::sync::atomic::Ordering::SeqCst);
+    let alive = state
+        .capture_alive
+        .load(std::sync::atomic::Ordering::SeqCst);
     let ax = Some(crate::macos::ax_trusted());
     let store = crate::lock_store(&state.store);
-    from_parts(&store, alive, pause, ax, recent(), started_at().elapsed().as_secs())
+    from_parts(
+        &store,
+        alive,
+        pause,
+        ax,
+        recent(),
+        started_at().elapsed().as_secs(),
+    )
 }
 
 #[cfg(test)]
@@ -224,11 +237,28 @@ mod tests {
 
     #[test]
     fn the_field_list_is_closed() {
-        let d = from_parts(&store_with_content(), true, Pause::Off, Some(true), vec![], 7);
+        let d = from_parts(
+            &store_with_content(),
+            true,
+            Pause::Off,
+            Some(true),
+            vec![],
+            7,
+        );
         let json = serde_json::to_value(&d).unwrap();
         assert_eq!(
             keys(&json),
-            ["accessibility", "build", "capture", "counts", "recent", "schema", "settings", "storage", "uptimeS"]
+            [
+                "accessibility",
+                "build",
+                "capture",
+                "counts",
+                "recent",
+                "schema",
+                "settings",
+                "storage",
+                "uptimeS"
+            ]
         );
         assert_eq!(keys(&json["capture"]), ["alive", "enabled", "paused"]);
         assert_eq!(
@@ -250,7 +280,13 @@ mod tests {
 
     #[test]
     fn an_outcome_carries_codes_and_times_only() {
-        let o = serde_json::to_value(Outcome { op: "paste", result: "ok", ms: 120, ago_s: 4 }).unwrap();
+        let o = serde_json::to_value(Outcome {
+            op: "paste",
+            result: "ok",
+            ms: 120,
+            ago_s: 4,
+        })
+        .unwrap();
         assert_eq!(keys(&o), ["agoS", "ms", "op", "result"]);
     }
 
@@ -277,10 +313,24 @@ mod tests {
         assert_eq!(store.history.len(), 1, "the fixture really holds content");
         let d = from_parts(&store, true, Pause::Until(None), Some(false), recent(), 3);
         let text = serde_json::to_string(&d).unwrap();
-        for forbidden in ["SECRET-CLIP", "كلمة", "SecretApp", "com.example", "secret-vault", "ctrl+alt+k", "/"] {
-            assert!(!text.contains(forbidden), "diagnostics must not contain {forbidden:?}: {text}");
+        for forbidden in [
+            "SECRET-CLIP",
+            "كلمة",
+            "SecretApp",
+            "com.example",
+            "secret-vault",
+            "ctrl+alt+k",
+            "/",
+        ] {
+            assert!(
+                !text.contains(forbidden),
+                "diagnostics must not contain {forbidden:?}: {text}"
+            );
         }
-        assert!(text.contains("\"excludedCount\":1"), "the exclusions are a count");
+        assert!(
+            text.contains("\"excludedCount\":1"),
+            "the exclusions are a count"
+        );
         assert!(text.contains("\"hotkeyIsDefault\":false"));
         assert!(text.contains("\"paused\":\"untilRestart\""));
     }

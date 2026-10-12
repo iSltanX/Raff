@@ -159,9 +159,15 @@ pub(crate) enum CaptureUndo {
     /// whatever fell off the end.
     Added,
     /// The pinned row at `index` was overwritten; here it is as it was.
-    PinnedBumped { index: usize, previous: Box<ClipItem> },
+    PinnedBumped {
+        index: usize,
+        previous: Box<ClipItem>,
+    },
     /// The history row at `index` was moved to the head and overwritten.
-    HistoryBumped { index: usize, previous: Box<ClipItem> },
+    HistoryBumped {
+        index: usize,
+        previous: Box<ClipItem>,
+    },
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
@@ -315,7 +321,7 @@ pub fn normalize_for_search(text: &str) -> String {
             }
             // Tashkeel and the superscript alef carry no search meaning...
             '\u{064B}'..='\u{065F}' | '\u{0670}' => {}
-            '\u{0640}' => {}                       // ...nor does tatweel
+            '\u{0640}' => {} // ...nor does tatweel
             '\u{0623}' | '\u{0625}' | '\u{0622}' => folded.push('\u{0627}'),
             '\u{0649}' => folded.push('\u{064A}'),
             _ => folded.push(ch),
@@ -337,8 +343,8 @@ pub fn trim_query(query: &str) -> &str {
         matches!(
             ch,
             // WhiteSpace: TAB, VT, FF, ZWNBSP and every Zs space...
-            '\t' | '\u{000B}' | '\u{000C}' | '\u{FEFF}'
-                | ' ' | '\u{00A0}' | '\u{1680}' | '\u{2000}'..='\u{200A}'
+            '\t' | '\u{000B}' | '\u{000C}' | '\u{FEFF}' | ' ' | '\u{00A0}' | '\u{1680}' | '\u{2000}'
+                ..='\u{200A}'
                 | '\u{202F}' | '\u{205F}' | '\u{3000}'
                 // ...and LineTerminator.
                 | '\n' | '\r' | '\u{2028}' | '\u{2029}'
@@ -591,8 +597,7 @@ fn set_aside(path: &Path) -> std::io::Result<PathBuf> {
 /// Every set-aside copy of the layer at `path`, with its stamp; the newest,
 /// unstamped `<file>.corrupt` comes back with `None`.
 fn recovery_copies(path: &Path) -> Vec<(Option<u64>, PathBuf)> {
-    let (Some(dir), Some(name)) = (path.parent(), path.file_name().and_then(|n| n.to_str()))
-    else {
+    let (Some(dir), Some(name)) = (path.parent(), path.file_name().and_then(|n| n.to_str())) else {
         return Vec::new();
     };
     let Ok(entries) = fs::read_dir(dir) else {
@@ -658,9 +663,8 @@ fn write_layer_bytes(path: &Path, bytes: &[u8]) -> Result<(), String> {
 /// so two captures can be in flight at once. The ticket each carries lets the
 /// writer refuse to lay an older layer over a newer one.
 fn write_gate() -> &'static std::sync::Mutex<std::collections::HashMap<PathBuf, u64>> {
-    static GATE: std::sync::OnceLock<
-        std::sync::Mutex<std::collections::HashMap<PathBuf, u64>>,
-    > = std::sync::OnceLock::new();
+    static GATE: std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<PathBuf, u64>>> =
+        std::sync::OnceLock::new();
     GATE.get_or_init(Default::default)
 }
 
@@ -1852,7 +1856,11 @@ mod tests {
         };
         fs::write(
             dir.join(HISTORY_FILE),
-            format!("[{},{}]", row("nine-days", 9, "old"), row("two-days", 2, "kept")),
+            format!(
+                "[{},{}]",
+                row("nine-days", 9, "old"),
+                row("two-days", 2, "kept")
+            ),
         )
         .unwrap();
         fs::write(
@@ -1874,11 +1882,18 @@ mod tests {
         let store = Store::load(dir.clone());
 
         assert_eq!(
-            store.history.iter().map(|i| i.id.as_str()).collect::<Vec<_>>(),
+            store
+                .history
+                .iter()
+                .map(|i| i.id.as_str())
+                .collect::<Vec<_>>(),
             vec!["two-days"],
             "past the window goes, inside it stays"
         );
-        assert!(!images.join("old.png").exists(), "and its image goes with it");
+        assert!(
+            !images.join("old.png").exists(),
+            "and its image goes with it"
+        );
         assert!(!images.join("old.thumb.png").exists());
         assert_eq!(store.pinned.len(), 1, "a pinned item is outside the policy");
 
@@ -1956,10 +1971,13 @@ mod tests {
         let before = pinned_ids_in_order(&s);
 
         for wrong in [
-            vec![first.clone()],                                  // one short
-            vec![first.clone(), second.clone(), first.clone()],   // one too many
-            vec![first.clone(), first.clone()],                   // right length, repeated
-            vec![first.clone(), "\u{063a}\u{0631}\u{064a}\u{0628}".to_string()], // a stranger
+            vec![first.clone()],                                // one short
+            vec![first.clone(), second.clone(), first.clone()], // one too many
+            vec![first.clone(), first.clone()],                 // right length, repeated
+            vec![
+                first.clone(),
+                "\u{063a}\u{0631}\u{064a}\u{0628}".to_string(),
+            ], // a stranger
         ] {
             assert!(
                 s.reorder_pinned_persisted(&wrong).is_err(),
@@ -2102,7 +2120,11 @@ mod tests {
 
         assert_eq!(s.set_pin_persisted(&id, false), Ok(false));
 
-        assert!(!s.find(&id).expect("the unpinned row is still there").is_pinned);
+        assert!(
+            !s.find(&id)
+                .expect("the unpinned row is still there")
+                .is_pinned
+        );
         assert_eq!(
             s.history.last().map(|item| item.id.as_str()),
             Some(id.as_str()),
@@ -2113,7 +2135,9 @@ mod tests {
             "and nothing else was dropped to make room for it"
         );
         assert!(
-            layer_on_disk(&s, HISTORY_FILE).iter().any(|item| item.id == id),
+            layer_on_disk(&s, HISTORY_FILE)
+                .iter()
+                .any(|item| item.id == id),
             "written down, not only kept in memory"
         );
         assert!(layer_on_disk(&s, PINNED_FILE).is_empty());
@@ -2144,8 +2168,13 @@ mod tests {
 
         s.set_pin_persisted(&id, false).unwrap();
 
-        assert!(s.find(&expired).is_none(), "the age limit applies here as well");
-        assert!(!layer_on_disk(&s, HISTORY_FILE).iter().any(|item| item.id == expired));
+        assert!(
+            s.find(&expired).is_none(),
+            "the age limit applies here as well"
+        );
+        assert!(!layer_on_disk(&s, HISTORY_FILE)
+            .iter()
+            .any(|item| item.id == expired));
         assert!(s.find(&id).is_some());
     }
 
@@ -2455,9 +2484,17 @@ mod tests {
             fs::write(images.join(name), name).unwrap();
         }
 
-        fs::write(dir.join(HISTORY_FILE), r#"[{"type":"image","imageFile":"first.png""#).unwrap();
+        fs::write(
+            dir.join(HISTORY_FILE),
+            r#"[{"type":"image","imageFile":"first.png""#,
+        )
+        .unwrap();
         Store::load(dir.clone());
-        fs::write(dir.join(HISTORY_FILE), r#"[{"type":"image","imageFile":"second.png""#).unwrap();
+        fs::write(
+            dir.join(HISTORY_FILE),
+            r#"[{"type":"image","imageFile":"second.png""#,
+        )
+        .unwrap();
         Store::load(dir.clone());
 
         assert_eq!(
@@ -2478,9 +2515,18 @@ mod tests {
         // copy, not only the newest.
         fs::write(dir.join(HISTORY_FILE), "[]").unwrap();
         Store::load(dir.clone());
-        assert!(images.join("first.png").exists(), "named only by the earlier copy");
-        assert!(images.join("second.png").exists(), "named only by the newest copy");
-        assert!(!images.join("orphan.png").exists(), "and collection did run");
+        assert!(
+            images.join("first.png").exists(),
+            "named only by the earlier copy"
+        );
+        assert!(
+            images.join("second.png").exists(),
+            "named only by the newest copy"
+        );
+        assert!(
+            !images.join("orphan.png").exists(),
+            "and collection did run"
+        );
     }
 
     #[test]
@@ -2508,7 +2554,10 @@ mod tests {
 
         let kept = set_aside_contents(&dir);
         assert_eq!(kept.len(), MAX_RECOVERY_COPIES);
-        assert!(!kept.contains(&b"{broken 0".to_vec()), "the oldest went first");
+        assert!(
+            !kept.contains(&b"{broken 0".to_vec()),
+            "the oldest went first"
+        );
         assert!(!kept.contains(&b"{broken 1".to_vec()));
         assert_eq!(
             fs::read(dir.join("history.json.corrupt")).unwrap(),
@@ -2549,7 +2598,11 @@ mod tests {
         assert!(persist_capture(&store, capture).is_err());
 
         let s = crate::lock_store(&store);
-        assert_eq!(s.history.len(), before_len, "the row it pushed off came back");
+        assert_eq!(
+            s.history.len(),
+            before_len,
+            "the row it pushed off came back"
+        );
         assert_eq!(s.history[0].id, before_head, "the new row is gone");
         assert_eq!(
             s.history[before_len - 1].id,
@@ -2592,7 +2645,10 @@ mod tests {
         // fingerprint already on disk has just stopped matching.
         assert_eq!(content_hash(b""), "f1:cbf29ce484222325");
         assert_eq!(content_hash(b"raff"), "f1:6dcf031fd20381b8");
-        assert_eq!(content_hash(&[0x89, b'P', b'N', b'G']), "f1:09935de427cea543");
+        assert_eq!(
+            content_hash(&[0x89, b'P', b'N', b'G']),
+            "f1:09935de427cea543"
+        );
     }
 
     #[test]
@@ -2676,12 +2732,12 @@ mod tests {
     fn prose_that_merely_contains_a_link_stays_text() {
         for text in [
             "\u{0627}\u{0641}\u{062a}\u{062d} https://example.com \u{0627}\u{0644}\u{0622}\u{0646}", // prose around a URL
-            "example",                 // a word, not a domain
-            "3.5",                     // a number
-            "file.txt",                // a filename, not a host
-            "\u{0645}\u{0644}\u{0641}.\u{0646}\u{0635}",  // ...in Arabic too
-            "a@b",                     // not an address, and no scheme
-            "mailto:",                 // a scheme with nothing after it
+            "example",                                   // a word, not a domain
+            "3.5",                                       // a number
+            "file.txt",                                  // a filename, not a host
+            "\u{0645}\u{0644}\u{0641}.\u{0646}\u{0635}", // ...in Arabic too
+            "a@b",                                       // not an address, and no scheme
+            "mailto:",                                   // a scheme with nothing after it
         ] {
             assert_ne!(detect_kind(text), ItemKind::Link, "{text}");
         }
@@ -2787,7 +2843,10 @@ mod tests {
             "the defaults would capture everything the file was keeping out"
         );
         assert!(s.unreadable_settings && s.unreadable_layer);
-        assert!(!s.unreadable_shelf, "history and pinned were read: the shelf is not in question");
+        assert!(
+            !s.unreadable_shelf,
+            "history and pinned were read: the shelf is not in question"
+        );
         assert_eq!(
             fs::read(dir.join(SETTINGS_FILE)).unwrap(),
             unreadable,
@@ -3017,11 +3076,25 @@ mod audit_tests {
 
                 let s = Store::load(dir.clone());
 
-                assert!(s.unreadable_layer, "{layer}/{name}: يجب رفع علامة الطبقة غير المقروءة");
+                assert!(
+                    s.unreadable_layer,
+                    "{layer}/{name}: يجب رفع علامة الطبقة غير المقروءة"
+                );
                 let copy = dir.join(layer).with_extension("json.corrupt");
-                assert_eq!(fs::read(&copy).unwrap(), bytes, "{layer}/{name}: النسخة الجانبية مطابقة");
-                assert_eq!(fs::read(dir.join(layer)).unwrap(), bytes, "{layer}/{name}: الأصل لم يُستبدل عند الإقلاع");
-                assert!(image.exists(), "{layer}/{name}: لا تنظيف للصور اليتيمة مع طبقة غير مقروءة");
+                assert_eq!(
+                    fs::read(&copy).unwrap(),
+                    bytes,
+                    "{layer}/{name}: النسخة الجانبية مطابقة"
+                );
+                assert_eq!(
+                    fs::read(dir.join(layer)).unwrap(),
+                    bytes,
+                    "{layer}/{name}: الأصل لم يُستبدل عند الإقلاع"
+                );
+                assert!(
+                    image.exists(),
+                    "{layer}/{name}: لا تنظيف للصور اليتيمة مع طبقة غير مقروءة"
+                );
                 let _ = fs::remove_dir_all(dir);
             }
         }
@@ -3033,7 +3106,10 @@ mod audit_tests {
         fs::create_dir_all(&dir).unwrap();
         fs::write(dir.join(SETTINGS_FILE), b"{oops").unwrap();
         let s = Store::load(dir.clone());
-        assert!(s.unreadable_layer, "فساد الإعدادات يجب أن يصل إلى الواجهة كما في الطبقتين الأخريين");
+        assert!(
+            s.unreadable_layer,
+            "فساد الإعدادات يجب أن يصل إلى الواجهة كما في الطبقتين الأخريين"
+        );
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -3052,7 +3128,10 @@ mod audit_tests {
         two_successive_corruptions(&dir);
         let mut found_first = false;
         for entry in fs::read_dir(&dir).unwrap().flatten() {
-            if fs::read(entry.path()).map(|b| b == b"FIRST-CORRUPTION").unwrap_or(false) {
+            if fs::read(entry.path())
+                .map(|b| b == b"FIRST-CORRUPTION")
+                .unwrap_or(false)
+            {
                 found_first = true;
             }
         }
@@ -3073,9 +3152,17 @@ mod audit_tests {
         let result = cap_persist(&store, "doomed");
 
         assert!(result.is_err());
-        assert_eq!(ids(&crate::lock_store(&store).history), before, "الذاكرة تعود كما كانت");
+        assert_eq!(
+            ids(&crate::lock_store(&store).history),
+            before,
+            "الذاكرة تعود كما كانت"
+        );
         fs::remove_dir(dir.join("history.json.tmp")).unwrap();
-        assert_eq!(ids(&Store::load(dir.clone()).history), before, "القرص لم يتغيّر");
+        assert_eq!(
+            ids(&Store::load(dir.clone()).history),
+            before,
+            "القرص لم يتغيّر"
+        );
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -3116,11 +3203,24 @@ mod audit_tests {
     fn check_invariants(s: &Store, step: usize, op: &str) {
         let mut seen = std::collections::HashSet::new();
         for item in s.history.iter().chain(s.pinned.iter()) {
-            assert!(seen.insert(item.id.clone()), "خطوة {step} ({op}): معرّف مكرر {}", item.id);
+            assert!(
+                seen.insert(item.id.clone()),
+                "خطوة {step} ({op}): معرّف مكرر {}",
+                item.id
+            );
         }
-        assert!(s.history.iter().all(|i| !i.is_pinned), "خطوة {step} ({op}): عنصر مثبت في التاريخ");
-        assert!(s.pinned.iter().all(|i| i.is_pinned), "خطوة {step} ({op}): عنصر غير مثبت في الرف");
-        assert!(s.history.len() <= s.settings.history_limit.max(1), "خطوة {step} ({op}): تجاوز الحد");
+        assert!(
+            s.history.iter().all(|i| !i.is_pinned),
+            "خطوة {step} ({op}): عنصر مثبت في التاريخ"
+        );
+        assert!(
+            s.pinned.iter().all(|i| i.is_pinned),
+            "خطوة {step} ({op}): عنصر غير مثبت في الرف"
+        );
+        assert!(
+            s.history.len() <= s.settings.history_limit.max(1),
+            "خطوة {step} ({op}): تجاوز الحد"
+        );
     }
 
     fn run_model(seed: u64, steps: usize) {
@@ -3176,8 +3276,16 @@ mod audit_tests {
             check_invariants(&s, step, op);
             if step % 10 == 9 {
                 let r = Store::load(dir.clone());
-                assert_eq!(ids(&r.history), ids(&s.history), "بذرة {seed} خطوة {step} ({op}): التاريخ بعد إعادة التحميل");
-                assert_eq!(ids(&r.pinned), ids(&s.pinned), "بذرة {seed} خطوة {step} ({op}): الرف بعد إعادة التحميل");
+                assert_eq!(
+                    ids(&r.history),
+                    ids(&s.history),
+                    "بذرة {seed} خطوة {step} ({op}): التاريخ بعد إعادة التحميل"
+                );
+                assert_eq!(
+                    ids(&r.pinned),
+                    ids(&s.pinned),
+                    "بذرة {seed} خطوة {step} ({op}): الرف بعد إعادة التحميل"
+                );
             }
         }
         let _ = fs::remove_dir_all(dir);
@@ -3218,7 +3326,11 @@ mod audit_tests {
         let mem = ids(&crate::lock_store(&store).history);
         assert_eq!(mem.len(), 320);
         let disk = Store::load(dir.clone());
-        assert_eq!(ids(&disk.history), mem, "القرص يطابق الذاكرة بعد كتابات متزامنة");
+        assert_eq!(
+            ids(&disk.history),
+            mem,
+            "القرص يطابق الذاكرة بعد كتابات متزامنة"
+        );
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -3236,10 +3348,18 @@ mod audit_tests {
             let input = vec["input"].as_str().unwrap();
             let got = normalize_for_search(input);
             if vec["divergence"].is_null() {
-                assert_eq!(got, vec["expected"].as_str().unwrap(), "تباين غير متوقع للمدخل {input:?}");
+                assert_eq!(
+                    got,
+                    vec["expected"].as_str().unwrap(),
+                    "تباين غير متوقع للمدخل {input:?}"
+                );
             } else {
                 // نموذج JS لخفض الحالة حرفًا حرفًا يجب أن يطابق Rust تمامًا.
-                assert_eq!(got, vec["perCharModel"].as_str().unwrap(), "نموذج per-char لا يطابق Rust: {input:?}");
+                assert_eq!(
+                    got,
+                    vec["perCharModel"].as_str().unwrap(),
+                    "نموذج per-char لا يطابق Rust: {input:?}"
+                );
             }
             checked += 1;
         }
@@ -3252,7 +3372,11 @@ mod audit_tests {
         for vec in v["vectors"].as_array().unwrap() {
             if !vec["divergence"].is_null() {
                 let input = vec["input"].as_str().unwrap();
-                assert_eq!(normalize_for_search(input), vec["expected"].as_str().unwrap(), "{input:?}");
+                assert_eq!(
+                    normalize_for_search(input),
+                    vec["expected"].as_str().unwrap(),
+                    "{input:?}"
+                );
             }
         }
     }
@@ -3262,7 +3386,11 @@ mod audit_tests {
         let v = vectors();
         for t in v["trimVectors"].as_array().unwrap() {
             let input = t["input"].as_str().unwrap();
-            assert_eq!(trim_query(input), t["jsTrim"].as_str().unwrap(), "{input:?}");
+            assert_eq!(
+                trim_query(input),
+                t["jsTrim"].as_str().unwrap(),
+                "{input:?}"
+            );
         }
     }
 
@@ -3312,6 +3440,11 @@ mod audit_tests {
         let text = "أَهْلًا بِكُمْ ٠١٢٣ Hello ".repeat(40_000);
         let t = std::time::Instant::now();
         let out = normalize_for_search(&text);
-        println!("perf: normalize {} bytes -> {} bytes in {:?}", text.len(), out.len(), t.elapsed());
+        println!(
+            "perf: normalize {} bytes -> {} bytes in {:?}",
+            text.len(),
+            out.len(),
+            t.elapsed()
+        );
     }
 }

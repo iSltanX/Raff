@@ -170,7 +170,10 @@ mod tests {
         let dir = temp_dir();
         let log = dir.join(LOG_FILE);
         open_log(&log).unwrap();
-        assert_eq!(std::fs::metadata(&log).unwrap().permissions().mode() & 0o777, 0o600);
+        assert_eq!(
+            std::fs::metadata(&log).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
         let _ = std::fs::remove_dir_all(dir);
     }
 
@@ -183,7 +186,11 @@ mod tests {
         std::os::unix::fs::symlink(&target, &link).unwrap();
 
         assert!(open_log(&link).is_err(), "O_NOFOLLOW refuses the link");
-        assert_eq!(std::fs::read(&target).unwrap(), b"", "and nothing reached its target");
+        assert_eq!(
+            std::fs::read(&target).unwrap(),
+            b"",
+            "and nothing reached its target"
+        );
         let _ = std::fs::remove_dir_all(dir);
     }
 

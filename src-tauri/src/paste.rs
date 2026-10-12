@@ -96,14 +96,18 @@ pub async fn paste_item(app: &AppHandle, id: &str, plain: bool) -> Result<bool, 
                 panel::hide(&handle);
                 crate::startup_trace::mark(&format!(
                     "PASTE panel_hide done; panel.is_visible()={:?}",
-                    handle.get_webview_panel(panel::PANEL_LABEL).map(|p| p.is_visible())
+                    handle
+                        .get_webview_panel(panel::PANEL_LABEL)
+                        .map(|p| p.is_visible())
                 ));
                 if let Some(previous) = previous_pid {
                     crate::startup_trace::mark("PASTE activate_app requested");
                     macos::activate_app(previous);
                     crate::startup_trace::mark("PASTE activate_app call returned");
                 } else {
-                    crate::startup_trace::mark("PASTE no previous app to activate — never remembered or already consumed");
+                    crate::startup_trace::mark(
+                        "PASTE no previous app to activate — never remembered or already consumed",
+                    );
                 }
                 crate::startup_trace::mark_with(|| {
                     format!(
@@ -122,16 +126,16 @@ pub async fn paste_item(app: &AppHandle, id: &str, plain: bool) -> Result<bool, 
                         )
                     });
                     let still_trusted = macos::ax_trusted();
-                    let sent = if still_trusted { macos::send_cmd_v() } else { false };
+                    let sent = if still_trusted {
+                        macos::send_cmd_v()
+                    } else {
+                        false
+                    };
                     crate::startup_trace::mark(&format!(
                         "PASTE CGEvent cmd-v: still_trusted={still_trusted} sent={sent}"
                     ));
-                    let pasted = paste_confirmed(
-                        still_trusted,
-                        sent,
-                        previous_pid,
-                        front_before_paste.pid,
-                    );
+                    let pasted =
+                        paste_confirmed(still_trusted, sent, previous_pid, front_before_paste.pid);
                     bump_paste_signals(&handle2, &id);
                     crate::startup_trace::mark(&format!("PASTE COMPLETE pasted={pasted}"));
                     let _ = tx.send(pasted);
