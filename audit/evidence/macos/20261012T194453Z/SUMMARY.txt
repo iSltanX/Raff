@@ -1,0 +1,6 @@
+npm-ci                 exit=0    expected=0    PASS
+npm-test               exit=0    expected=0    PASS
+cargo-test             exit=0    expected=0    PASS
+cargo-test-ignored     exit=101  expected=101  PASS
+perf-release           exit=0    expected=0    PASS
+cfg-test-hunks         exit=0    expected=0    PASS
