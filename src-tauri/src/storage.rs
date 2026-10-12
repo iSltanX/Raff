@@ -96,6 +96,12 @@ pub struct Settings {
     /// for another. `0` is what every existing install migrates to, which is
     /// exactly today's behaviour.
     pub retention_days: u32,
+    /// These are the defaults standing in for a `settings.json` that could not
+    /// be read. Written down, so the notice outlives a restart and any other
+    /// save; only turning capture back on — the user's confirmation — clears it.
+    /// Absent from the file whenever it is false.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub settings_recovered: bool,
 }
 
 impl Default for Settings {
@@ -112,6 +118,7 @@ impl Default for Settings {
             appearance: Appearance::Light,
             follow_system: true,
             retention_days: 0,
+            settings_recovered: false,
         }
     }
 }
@@ -219,10 +226,11 @@ pub struct Store {
     /// is there, it just was not read" — two states an empty list looks
     /// identical in.
     pub unreadable_shelf: bool,
-    /// `settings.json` did not parse. Defaults stand in for it, and the
+    /// `settings.json` did not parse — on this launch or an earlier one. The
     /// defaults would turn capture back on with no app excluded — the very
     /// choices the file existed to keep — so capture is held off and this stays
-    /// set until the user turns it back on themselves.
+    /// set until the user turns it back on themselves
+    /// (`Settings::settings_recovered` carries it across launches).
     pub unreadable_settings: bool,
     pending_delete: Option<PendingDelete>,
     pending_pin: Option<PendingPin>,
@@ -745,10 +753,15 @@ impl Store {
             load_json_with_status(&dir.join(SETTINGS_FILE));
         if !settings_loaded {
             settings.capture_enabled = false;
+            settings.settings_recovered = true;
+            // A file that existed means the welcome already ran; reopening it
+            // would put its «أبقِه يعمل» ahead of the review this calls for.
+            settings.first_run_shown = true;
         }
         let pending_delete: Option<PendingDelete> = load_json(&dir.join(PENDING_DELETE_FILE));
         let pending_pin: Option<PendingPin> = load_json(&dir.join(PENDING_PIN_FILE));
         let unreadable_shelf = !(history_metadata_loaded && pinned_metadata_loaded);
+        let unreadable_settings = settings.settings_recovered;
         let mut store = Self {
             dir,
             history,
@@ -756,7 +769,7 @@ impl Store {
             settings,
             unreadable_layer: unreadable_shelf || !settings_loaded,
             unreadable_shelf,
-            unreadable_settings: !settings_loaded,
+            unreadable_settings,
             pending_delete,
             pending_pin,
             dirty_signals: DirtySignals::default(),
@@ -858,8 +871,12 @@ impl Store {
     /// from the command's point of view. A failed write restores both in-memory
     /// and durable snapshots; pruned image files are deleted only after both
     /// JSON files have landed successfully.
-    pub fn update_settings_persisted(&mut self, settings: Settings) -> Result<(), String> {
+    pub fn update_settings_persisted(&mut self, mut settings: Settings) -> Result<(), String> {
         self.try_finish_pending_pin()?;
+        // The store owns the recovery marker, whatever the caller sent: turning
+        // capture on is the confirmation it was waiting for; any other change
+        // is saved with the marker still on.
+        settings.settings_recovered = self.settings.settings_recovered && !settings.capture_enabled;
         let old_settings = self.settings.clone();
         let old_history = self.history.clone();
         self.settings = settings;
@@ -874,11 +891,7 @@ impl Store {
             save_json(&self.dir.join(HISTORY_FILE), &self.history);
             return Err(err);
         }
-        // Turning capture on is the confirmation an unreadable settings file
-        // was waiting for; any other change leaves the notice up.
-        if self.settings.capture_enabled {
-            self.unreadable_settings = false;
-        }
+        self.unreadable_settings = self.settings.settings_recovered;
         for item in &dropped {
             self.delete_files(item);
         }
@@ -2854,15 +2867,31 @@ mod tests {
         );
         assert!(
             !Store::load(dir.clone()).settings.capture_enabled,
-            "and every launch holds off the same way until something is saved"
+            "and every launch holds off the same way"
+        );
+        assert!(
+            s.settings.first_run_shown,
+            "the welcome does not stand in for the review"
         );
 
-        // Any other change is saved, but it is not the confirmation.
+        // Any other change is saved, but it is not the confirmation — not even
+        // one that sent the marker back cleared.
         let mut next = s.settings.clone();
         next.excluded_apps = vec!["com.bank".into()];
+        next.settings_recovered = false;
         s.update_settings_persisted(next).unwrap();
         assert!(s.unreadable_settings);
         assert!(!s.settings.capture_enabled);
+        s.mark_first_run_shown_persisted().unwrap();
+        let after_saves = Store::load(dir.clone());
+        assert!(
+            after_saves.unreadable_settings && !after_saves.settings.capture_enabled,
+            "the file parses again now, and the notice still stands"
+        );
+        assert!(
+            !after_saves.unreadable_layer,
+            "though nothing was unreadable on this launch"
+        );
 
         let mut next = s.settings.clone();
         next.capture_enabled = true;
@@ -2873,6 +2902,12 @@ mod tests {
         assert!(reloaded.settings.capture_enabled);
         assert!(!reloaded.unreadable_settings && !reloaded.unreadable_layer);
         assert_eq!(reloaded.settings.excluded_apps, ["com.bank"]);
+        assert!(
+            !fs::read_to_string(reloaded.dir.join(SETTINGS_FILE))
+                .unwrap()
+                .contains("settingsRecovered"),
+            "a settings file with nothing to recover from does not mention it"
+        );
     }
 
     #[test]
