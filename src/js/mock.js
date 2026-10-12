@@ -38,9 +38,11 @@ const RECENT = [
 ];
 
 // Design review: `?pause=timed` (or skipNext / untilRestart) shows the
-// capture strip; `?capture=off` shows capture turned off.
+// capture strip; `?capture=off` shows capture turned off;
+// `?settings=unreadable` shows a settings.json that did not parse.
 const params = new URLSearchParams(globalThis.location?.search ?? '');
 let MOCK_PAUSE = params.get('pause') ?? 'off';
+let MOCK_UNREADABLE_SETTINGS = params.get('settings') === 'unreadable';
 
 let pendingDelete = null;
 let deleteSequence = 0;
@@ -49,7 +51,7 @@ const SETTINGS = {
   hotkey: 'shift+super+v',
   launchAtLogin: false,
   historyLimit: 500,
-  captureEnabled: params.get('capture') !== 'off',
+  captureEnabled: params.get('capture') !== 'off' && !MOCK_UNREADABLE_SETTINGS,
   respectConcealed: true,
   excludedApps: ['com.1password.1password'],
   learningEnabled: true,
@@ -111,12 +113,14 @@ export function mockInvoke(cmd, args = {}) {
         captureAlive: true,
         capturePause: { kind: MOCK_PAUSE, minutesLeft: MOCK_PAUSE === 'timed' ? 12 : null },
         unreadableLayer: false,
+        unreadableSettings: MOCK_UNREADABLE_SETTINGS,
       }));
     case 'get_settings':
       return Promise.resolve(structuredClone({
         settings: SETTINGS,
         axTrusted: false,
         version: '6.0.0',
+        unreadableSettings: MOCK_UNREADABLE_SETTINGS,
         captureAlive: true,
         capturePause: { kind: MOCK_PAUSE, minutesLeft: MOCK_PAUSE === 'timed' ? 12 : null },
       }));
@@ -183,6 +187,7 @@ export function mockInvoke(cmd, args = {}) {
       ]);
     case 'update_settings':
       Object.assign(SETTINGS, args.settings);
+      if (SETTINGS.captureEnabled) MOCK_UNREADABLE_SETTINGS = false;
       return Promise.resolve(null);
     // Design-review sample thumbnail, so the image row renders the way it
     // does in the app (the real command returns the stored PNG).

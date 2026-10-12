@@ -80,9 +80,13 @@ pub struct StatePayload {
     pub settings: Settings,
     pub ax_trusted: bool,
     pub version: String,
-    /// True when a stored layer could not be read on this launch. An empty
-    /// list then means something very different, and the panel says so.
+    /// True when a layer of the shelf (history or pinned) could not be read on
+    /// this launch. An empty list then means something very different, and
+    /// the panel says so.
     pub unreadable_layer: bool,
+    /// True while defaults stand in for a `settings.json` that could not be
+    /// read, with capture held off until the user turns it back on.
+    pub unreadable_settings: bool,
     /// False once the capture loop has given up. Distinct from
     /// `settings.capture_enabled`, which only says what the user asked for.
     pub capture_alive: bool,
@@ -102,6 +106,7 @@ pub struct SettingsPayload {
     pub settings: Settings,
     pub ax_trusted: bool,
     pub version: String,
+    pub unreadable_settings: bool,
     pub capture_alive: bool,
     pub capture_pause: crate::PauseView,
 }
@@ -117,6 +122,7 @@ pub fn get_settings(app: AppHandle, state: State<AppState>) -> SettingsPayload {
         settings: store.settings.clone(),
         ax_trusted: ax_trusted_noted(),
         version: app.package_info().version.to_string(),
+        unreadable_settings: store.unreadable_settings,
         capture_alive: state.capture_alive.load(std::sync::atomic::Ordering::SeqCst),
         capture_pause: pause_view(&state),
     }
@@ -134,7 +140,8 @@ pub fn get_state(app: AppHandle, state: State<AppState>) -> StatePayload {
         settings: store.settings.clone(),
         ax_trusted: ax_trusted_noted(),
         version: app.package_info().version.to_string(),
-        unreadable_layer: store.unreadable_layer,
+        unreadable_layer: store.unreadable_shelf,
+        unreadable_settings: store.unreadable_settings,
         capture_alive: state.capture_alive.load(std::sync::atomic::Ordering::SeqCst),
         capture_pause: pause_view(&state),
     }

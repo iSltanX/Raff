@@ -205,10 +205,19 @@ pub struct Store {
     pub history: Vec<ClipItem>,
     pub pinned: Vec<ClipItem>,
     pub settings: Settings,
-    /// A layer could not be parsed on this launch and was copied aside. The
-    /// panel needs this to tell "nothing is saved" apart from "your content is
-    /// there, it just was not read" — two states an empty list looks identical in.
+    /// A layer — history, pinned or settings — could not be parsed on this
+    /// launch and was copied aside.
     pub unreadable_layer: bool,
+    /// The layer that did not parse is the shelf itself (history or pinned).
+    /// The panel needs this to tell "nothing is saved" apart from "your content
+    /// is there, it just was not read" — two states an empty list looks
+    /// identical in.
+    pub unreadable_shelf: bool,
+    /// `settings.json` did not parse. Defaults stand in for it, and the
+    /// defaults would turn capture back on with no app excluded — the very
+    /// choices the file existed to keep — so capture is held off and this stays
+    /// set until the user turns it back on themselves.
+    pub unreadable_settings: bool,
     pending_delete: Option<PendingDelete>,
     pending_pin: Option<PendingPin>,
     /// Layers whose learning counters moved and have not been written yet.
@@ -624,15 +633,22 @@ impl Store {
             load_json_with_status(&dir.join(HISTORY_FILE));
         let (pinned, pinned_metadata_loaded): (Vec<ClipItem>, bool) =
             load_json_with_status(&dir.join(PINNED_FILE));
-        let settings: Settings = load_json(&dir.join(SETTINGS_FILE));
+        let (mut settings, settings_loaded): (Settings, bool) =
+            load_json_with_status(&dir.join(SETTINGS_FILE));
+        if !settings_loaded {
+            settings.capture_enabled = false;
+        }
         let pending_delete: Option<PendingDelete> = load_json(&dir.join(PENDING_DELETE_FILE));
         let pending_pin: Option<PendingPin> = load_json(&dir.join(PENDING_PIN_FILE));
+        let unreadable_shelf = !(history_metadata_loaded && pinned_metadata_loaded);
         let mut store = Self {
             dir,
             history,
             pinned,
             settings,
-            unreadable_layer: !(history_metadata_loaded && pinned_metadata_loaded),
+            unreadable_layer: unreadable_shelf || !settings_loaded,
+            unreadable_shelf,
+            unreadable_settings: !settings_loaded,
             pending_delete,
             pending_pin,
             dirty_signals: DirtySignals::default(),
@@ -749,6 +765,11 @@ impl Store {
             save_json(&self.dir.join(SETTINGS_FILE), &self.settings);
             save_json(&self.dir.join(HISTORY_FILE), &self.history);
             return Err(err);
+        }
+        // Turning capture on is the confirmation an unreadable settings file
+        // was waiting for; any other change leaves the notice up.
+        if self.settings.capture_enabled {
+            self.unreadable_settings = false;
         }
         for item in &dropped {
             self.delete_files(item);
@@ -2570,6 +2591,49 @@ mod tests {
     }
 
     #[test]
+    fn unreadable_settings_hold_capture_off_until_the_user_turns_it_back_on() {
+        let dir = std::env::temp_dir().join(format!("raff-test-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&dir).unwrap();
+        let unreadable: &[u8] = br#"{"captureEnabled": false, "excludedApps": ["com.bank""#;
+        fs::write(dir.join(SETTINGS_FILE), unreadable).unwrap();
+
+        let mut s = Store::load(dir.clone());
+
+        assert!(
+            !s.settings.capture_enabled,
+            "the defaults would capture everything the file was keeping out"
+        );
+        assert!(s.unreadable_settings && s.unreadable_layer);
+        assert!(!s.unreadable_shelf, "history and pinned were read: the shelf is not in question");
+        assert_eq!(
+            fs::read(dir.join(SETTINGS_FILE)).unwrap(),
+            unreadable,
+            "the original is not overwritten at launch"
+        );
+        assert!(
+            !Store::load(dir.clone()).settings.capture_enabled,
+            "and every launch holds off the same way until something is saved"
+        );
+
+        // Any other change is saved, but it is not the confirmation.
+        let mut next = s.settings.clone();
+        next.excluded_apps = vec!["com.bank".into()];
+        s.update_settings_persisted(next).unwrap();
+        assert!(s.unreadable_settings);
+        assert!(!s.settings.capture_enabled);
+
+        let mut next = s.settings.clone();
+        next.capture_enabled = true;
+        s.update_settings_persisted(next).unwrap();
+        assert!(!s.unreadable_settings, "turning capture on is");
+
+        let reloaded = Store::load(dir);
+        assert!(reloaded.settings.capture_enabled);
+        assert!(!reloaded.unreadable_settings && !reloaded.unreadable_layer);
+        assert_eq!(reloaded.settings.excluded_apps, ["com.bank"]);
+    }
+
+    #[test]
     fn settings_from_older_versions_get_appearance_defaults() {
         let dir = std::env::temp_dir().join(format!("raff-test-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
@@ -2781,21 +2845,6 @@ mod audit_tests {
     }
 
     #[test]
-    fn aud002_characterization_corrupt_settings_silently_reverts_to_defaults() {
-        let dir = tmp_dir("aud002c");
-        fs::create_dir_all(&dir).unwrap();
-        fs::write(dir.join(SETTINGS_FILE), b"{\"captureEnabled\": false, \"excludedApps\": [\"com.bank\"").unwrap();
-        let s = Store::load(dir.clone());
-        // السلوك الحالي: الالتقاط يعود مفعّلًا، والاستثناءات تُفرَّغ، ولا علامة للواجهة.
-        assert!(s.settings.capture_enabled);
-        assert!(s.settings.excluded_apps.is_empty());
-        assert!(!s.unreadable_layer);
-        assert!(dir.join("settings.json.corrupt").exists(), "على الأقل تُحفظ نسخة جانبية");
-        let _ = fs::remove_dir_all(dir);
-    }
-
-    #[test]
-    #[ignore = "RAFF-AUD-002: فساد settings.json يعيد الإعدادات الافتراضية بصمت (يُستأنف الالتقاط وتُفقد الاستثناءات)"]
     fn aud002_corrupt_settings_is_surfaced() {
         let dir = tmp_dir("aud002");
         fs::create_dir_all(&dir).unwrap();

@@ -149,6 +149,8 @@ el('confirm-icon').replaceChildren(createIcon(ALERT));
 
 // ─── Load / sync ──────────────────────────────────────────────────────────
 
+let unreadableSettingsShown = false;
+
 async function load() {
   const state = await api.getSettings();
   settings = state.settings;
@@ -165,6 +167,12 @@ async function load() {
   // The switch is the request; this row is the outcome — the same status, in
   // the same words, as the panel strip and the menu bar.
   renderCaptureStatus(state);
+  // That explanation sits under the capture switch, so the window opens there
+  // once instead of on whichever page was last used.
+  if (state.unreadableSettings && !unreadableSettingsShown) {
+    unreadableSettingsShown = true;
+    activateSettingsTab(el('settings-tab-capture'));
+  }
   renderAccessibility(state.axTrusted === true);
   setChecked('concealed-toggle', settings.respectConcealed);
   setChecked('learning-toggle', settings.learningEnabled);
@@ -185,6 +193,13 @@ function renderCaptureStatus(state) {
   let status = null;
   if (state.captureAlive === false) {
     status = { tone: 'danger', icon: ALERT, text: 'توقّف الالتقاط بسبب خلل — لا يُحفظ ما تنسخه.', label: 'إعادة تشغيل رفّ', run: () => api.restartApp() };
+  } else if (state.unreadableSettings) {
+    // No action of its own: the capture switch just above is the confirmation.
+    status = {
+      tone: 'danger',
+      icon: ALERT,
+      text: 'تعذّرت قراءة إعداداتك فعادت إلى الافتراضي، ومنها قائمة الاستبعاد. الالتقاط معطّل حتى تراجعها وتفعّله.',
+    };
   } else if (state.settings?.captureEnabled === false) {
     status = { tone: 'info', icon: CAPTURE_OFF, text: 'معطّل — لا يحفظ رفّ ما تنسخه حتى تفعّله.' };
   } else if (pause.kind && pause.kind !== 'off') {
