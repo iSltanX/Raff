@@ -91,8 +91,7 @@ async function answerCaptureConsent(enabled) {
   captureError.hidden = true;
   try {
     if (enabled !== savedCapture) {
-      const { settings } = await api.getSettings();
-      await api.updateSettings({ ...settings, captureEnabled: enabled });
+      await api.updateSettings({ captureEnabled: enabled });
       savedCapture = enabled;
     }
     captureChoice = enabled;

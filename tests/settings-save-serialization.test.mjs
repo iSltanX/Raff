@@ -1,6 +1,7 @@
-// Complete-object Settings writes must be serialized. These interactions use
-// manually deferred IPC promises so a regression cannot pass merely because
-// the fake backend happens to resolve writes immediately and in order.
+// Settings writes must be serialized, and since H6 each carries only the
+// field it changes; the backend lays it over what it holds. These interactions
+// use manually deferred IPC promises so a regression cannot pass merely
+// because the fake backend happens to resolve writes immediately and in order.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -66,7 +67,7 @@ function deferredSettingsBackend() {
     resolveNext() {
       const request = pending.shift();
       assert.ok(request, 'a deferred settings write is waiting');
-      settings = structuredClone(request.next);
+      settings = { ...settings, ...structuredClone(request.next) };
       request.resolve(null);
     },
   };
@@ -92,7 +93,7 @@ async function mount() {
   return { dom, backend };
 }
 
-test('settings complete-object saves are serialized and composed', async (t) => {
+test('settings saves are serialized and composed', async (t) => {
   const { dom, backend } = await mount();
   const byId = (id) => dom.window.document.getElementById(id);
 
@@ -103,19 +104,21 @@ test('settings complete-object saves are serialized and composed', async (t) => 
 
     assert.equal(backend.writes.length, 1, 'only the head mutation reaches IPC');
     assert.equal(backend.pending.length, 1);
-    assert.equal(backend.writes[0].launchAtLogin, true);
-    assert.equal(backend.writes[0].captureEnabled, true);
+    assert.deepEqual(backend.writes[0], { launchAtLogin: true }, 'only the changed field is sent');
 
     backend.resolveNext();
     await flush();
 
     assert.equal(backend.writes.length, 2, 'the second mutation begins after the first commits');
-    assert.equal(backend.writes[1].launchAtLogin, true, 'the first unrelated value is retained');
-    assert.equal(backend.writes[1].captureEnabled, false, 'the second control applies its change');
+    assert.deepEqual(
+      backend.writes[1],
+      { captureEnabled: false },
+      'the second control applies its change, and carries no copy of the first to go stale'
+    );
 
     backend.resolveNext();
     await flush();
-    assert.equal(backend.current().launchAtLogin, true);
+    assert.equal(backend.current().launchAtLogin, true, 'the first unrelated value is retained');
     assert.equal(backend.current().captureEnabled, false);
   });
 

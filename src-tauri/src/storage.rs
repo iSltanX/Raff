@@ -104,6 +104,72 @@ pub struct Settings {
     pub settings_recovered: bool,
 }
 
+/// The settings a caller wants changed, and only those.
+///
+/// A window used to send a whole `Settings` built from its last view of them,
+/// so a change made anywhere else in between — «إيقاف الالتقاط» from the menu
+/// bar while Settings was open, say — was silently put back by the next
+/// unrelated save (H6). Now an absent field keeps whatever the store holds
+/// when the patch lands. A complete object is still a valid patch.
+///
+/// `settings_recovered` has no field here: the store owns it.
+#[derive(Deserialize, Clone, Debug, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct SettingsPatch {
+    pub hotkey: Option<String>,
+    pub launch_at_login: Option<bool>,
+    pub history_limit: Option<usize>,
+    pub capture_enabled: Option<bool>,
+    pub respect_concealed: Option<bool>,
+    pub excluded_apps: Option<Vec<String>>,
+    pub learning_enabled: Option<bool>,
+    pub first_run_shown: Option<bool>,
+    pub appearance: Option<Appearance>,
+    pub follow_system: Option<bool>,
+    pub retention_days: Option<u32>,
+}
+
+impl SettingsPatch {
+    /// `current`, with this patch's fields laid over it.
+    pub fn applied_to(self, current: &Settings) -> Settings {
+        let mut next = current.clone();
+        if let Some(value) = self.hotkey {
+            next.hotkey = value;
+        }
+        if let Some(value) = self.launch_at_login {
+            next.launch_at_login = value;
+        }
+        if let Some(value) = self.history_limit {
+            next.history_limit = value;
+        }
+        if let Some(value) = self.capture_enabled {
+            next.capture_enabled = value;
+        }
+        if let Some(value) = self.respect_concealed {
+            next.respect_concealed = value;
+        }
+        if let Some(value) = self.excluded_apps {
+            next.excluded_apps = value;
+        }
+        if let Some(value) = self.learning_enabled {
+            next.learning_enabled = value;
+        }
+        if let Some(value) = self.first_run_shown {
+            next.first_run_shown = value;
+        }
+        if let Some(value) = self.appearance {
+            next.appearance = value;
+        }
+        if let Some(value) = self.follow_system {
+            next.follow_system = value;
+        }
+        if let Some(value) = self.retention_days {
+            next.retention_days = value;
+        }
+        next
+    }
+}
+
 impl Default for Settings {
     fn default() -> Self {
         Self {
@@ -2935,6 +3001,43 @@ mod tests {
                 .unwrap()
                 .contains("settingsRecovered"),
             "a settings file with nothing to recover from does not mention it"
+        );
+    }
+
+    /// H6: Settings was opened with capture on; the menu bar has turned it
+    /// off since. A save from the window that changes one other field must
+    /// leave capture as the menu bar put it.
+    #[test]
+    fn a_patch_changes_only_its_own_fields() {
+        let mut current = Settings::default();
+        current.capture_enabled = false; // the menu bar, after the window loaded
+        current.excluded_apps = vec!["com.bank".into()];
+
+        let patch: SettingsPatch = serde_json::from_str(r#"{"launchAtLogin": true}"#).unwrap();
+        let next = patch.applied_to(&current);
+
+        assert!(next.launch_at_login);
+        assert!(!next.capture_enabled, "the menu bar's change survives");
+        assert_eq!(next.excluded_apps, ["com.bank"]);
+        assert_eq!(next.hotkey, current.hotkey);
+    }
+
+    #[test]
+    fn a_complete_object_is_still_a_valid_patch_and_the_marker_is_not_the_caller_s() {
+        let mut sent = Settings::default();
+        sent.capture_enabled = false;
+        sent.history_limit = 200;
+        sent.settings_recovered = true;
+        let patch: SettingsPatch =
+            serde_json::from_str(&serde_json::to_string(&sent).unwrap()).unwrap();
+
+        let next = patch.applied_to(&Settings::default());
+
+        assert!(!next.capture_enabled);
+        assert_eq!(next.history_limit, 200);
+        assert!(
+            !next.settings_recovered,
+            "only the store sets the recovery marker"
         );
     }
 

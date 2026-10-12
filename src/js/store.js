@@ -29,7 +29,8 @@ export const api = {
   clearHistory: () => invoke('clear_history'),
   clearLearning: () => invoke('clear_learning'),
   learningSummary: () => invoke('learning_summary'),
-  updateSettings: (settings) => invoke('update_settings', { settings }),
+  // Only the fields being changed; the rest stay as the store holds them.
+  updateSettings: (patch) => invoke('update_settings', { settings: patch }),
   getImage: (id) => invoke('get_image', { id }),
   hidePanel: () => invoke('hide_panel'),
   showPanel: () => invoke('show_panel'),

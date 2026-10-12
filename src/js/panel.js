@@ -645,7 +645,7 @@ function captureStatus() {
 function enableCapture() {
   if (!state.settings) return Promise.resolve();
   return api
-    .updateSettings({ ...state.settings, captureEnabled: true })
+    .updateSettings({ captureEnabled: true })
     .then(() => refresh())
     .catch((err) => showToast(errorMessage(err), PIN_TOAST_MS, 'error'));
 }

@@ -65,7 +65,7 @@ async function mount() {
         }
         if (command === 'update_settings') {
           updates.push(structuredClone(args.settings));
-          settings = structuredClone(args.settings);
+          settings = { ...settings, ...structuredClone(args.settings) };
           // As the store does: turning capture on is the confirmation.
           if (settings.captureEnabled) unreadableSettings = false;
           queueMicrotask(() => listeners.get('raff://changed')?.({}));
@@ -117,8 +117,7 @@ test('settings: unreadable settings are explained under the capture switch', asy
   await t.test('turning capture on is the confirmation, and the row clears', async () => {
     toggle.click();
     await flush(12);
-    assert.equal(updates.length, 1);
-    assert.equal(updates[0].captureEnabled, true);
+    assert.deepEqual(updates, [{ captureEnabled: true }]);
     assert.equal(toggle.getAttribute('aria-checked'), 'true');
     assert.equal(row.hidden, true);
   });

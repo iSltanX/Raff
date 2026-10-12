@@ -1,4 +1,4 @@
-// Settings window: reads the store, writes back full Settings objects.
+// Settings window: reads the store, writes back only the fields that change.
 //
 // Figma «07 — Product UI · Settings» (268:8, 269:343): a compact macOS
 // preferences toolbar, one page at a time, grouped cards.
@@ -349,14 +349,15 @@ function setChecked(id, value) {
 let saveTail = Promise.resolve();
 
 async function commitSettingsPatch(patch) {
-  // update_settings takes a COMPLETE Settings object — a partial patch would
-  // drop every field it omits.
+  // Only the changed fields go to update_settings, which lays them over what
+  // the store holds now. A whole object built from this window's last view
+  // would put back anything changed elsewhere since — the menu bar's «إيقاف
+  // الالتقاط» undone by the next unrelated switch here (H6).
   const resolvedPatch = typeof patch === 'function' ? patch(settings) : patch;
-  const next = { ...settings, ...resolvedPatch };
   let failure = null;
   try {
-    await api.updateSettings(next);
-    settings = next;
+    await api.updateSettings(resolvedPatch);
+    settings = { ...settings, ...resolvedPatch };
   } catch (err) {
     console.error('raff: settings save failed', err);
     failure = err;

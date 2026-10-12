@@ -6,7 +6,7 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_autostart::ManagerExt as AutostartExt;
 
-use crate::storage::{Appearance, ItemKind, Settings, Store};
+use crate::storage::{Appearance, ItemKind, Settings, SettingsPatch, Store};
 use crate::{macos, panel, paste, AppState};
 
 const PREVIEW_MAX_CHARS: usize = 1000;
@@ -332,17 +332,23 @@ pub fn learning_summary(state: State<AppState>) -> Vec<LearnDto> {
         .collect()
 }
 
+/// Changes the settings named in `settings` and leaves every other one as the
+/// store holds it (H6): callers send what changed, not their last full view.
+///
+/// Like every synchronous command this runs on the main thread, where the
+/// menu bar's handlers run too, so nothing lands between reading the current
+/// settings here and persisting the result below.
 #[tauri::command]
 pub fn update_settings(
     app: AppHandle,
     state: State<AppState>,
-    settings: Settings,
+    settings: SettingsPatch,
 ) -> Result<(), String> {
-    validate_settings(&settings)?;
-    let old = {
+    let (old, settings) = {
         let store = crate::lock_store(&state.store);
-        store.settings.clone()
+        (store.settings.clone(), settings.applied_to(&store.settings))
     };
+    validate_settings(&settings)?;
 
     // Hotkey first: if the new accelerator cannot be registered, fail without
     // persisting anything — and re-register the old one, because registration
@@ -402,10 +408,11 @@ pub fn update_settings(
 /// Turns capture on or off from outside Settings (the menu bar's «تفعيل
 /// الالتقاط»), through the same validated, persisted path.
 pub fn set_capture_enabled(app: &AppHandle, enabled: bool) -> Result<(), String> {
-    let state = app.state::<AppState>();
-    let mut next = crate::lock_store(&state.store).settings.clone();
-    next.capture_enabled = enabled;
-    update_settings(app.clone(), state, next)
+    let patch = SettingsPatch {
+        capture_enabled: Some(enabled),
+        ..SettingsPatch::default()
+    };
+    update_settings(app.clone(), app.state::<AppState>(), patch)
 }
 
 /// Ends a pause from the panel strip or Settings.
