@@ -1,6 +1,6 @@
 // تدقيق رفّ (P2): متجهات مشتركة بين normalizeArabic (JS) وnormalize_for_search (Rust).
 // المتجهات في audit/fixtures/normalize-vectors.json، ويقرؤها اختبار Rust في storage.rs أيضًا.
-// الاختلافات المعروفة تُسجَّل كـ todo بمعرّف RAFF-AUD ولا تكسر المجموعة.
+// المتجهات الموسومة RAFF-AUD-007 هي حيث اختلف الطرفان قبل الإصلاح، وتبقى تحت الاختبار.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -19,7 +19,7 @@ test('المتجهات ما زالت تطابق normalizeArabic الحالي (ح
   }
 });
 
-test('التطابق مع نموذج Rust (خفض حرفًا حرفًا) لكل متجه غير موسوم', () => {
+test('التطابق مع نموذج Rust (طيّ حرفًا حرفًا ثم خفض النص كاملًا) لكل متجه غير موسوم', () => {
   const plain = fixture.vectors.filter((v) => !v.divergence);
   assert.ok(plain.length >= 200);
   for (const v of plain) assert.equal(v.expected, v.perCharModel, v.note);
@@ -32,17 +32,15 @@ test('عدد المتجهات المختلفة ثابت ومعروف', () => {
 });
 
 for (const v of divergent) {
-  test(
-    `RAFF-AUD-007: «${v.note}» يجب أن يطوي JS وRust النص نفسه`,
-    { todo: 'RAFF-AUD-007: toLowerCase() السياقي في JS مقابل char::to_lowercase في Rust' },
-    () => {
-      assert.equal(v.expected, v.perCharModel);
-    }
-  );
+  test(`RAFF-AUD-007: «${v.note}» يجب أن يطوي JS وRust النص نفسه`, () => {
+    assert.equal(v.expected, v.perCharModel);
+  });
 }
 
-test('أثر الاختلاف على المستخدم: صف يوناني يظهر في JS ويختفي في البحث العميق', () => {
+test('السيغما النهائية في البحث الفوري: οδος يجد الصف وοδοσ لا يجده (والبحث العميق مثله)', () => {
   // كلمة تنتهي بسيغما كبيرة: JS يطويها إلى ς، والاستعلام المكتوب بـσ لا يجدها محليًا.
+  // قبل RAFF-AUD-007 كان البحث العميق يعكس ذلك؛ المقابل في Rust:
+  // commands::tests::a_final_sigma_is_found_by_the_same_query_on_both_sides.
   const items = [{ id: 'g', text: 'ΟΔΟΣ', sourceApp: '' }];
   assert.equal(filterItems(items, 'οδοσ').length, 0, 'JS لا يجد οδοσ');
   assert.equal(filterItems(items, 'οδος').length, 1);

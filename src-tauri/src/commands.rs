@@ -786,6 +786,33 @@ mod tests {
             .collect()
     }
 
+    fn store_with_rows(texts: &[&str]) -> Store {
+        let dir = std::env::temp_dir().join(format!("raff-search-test-{}", uuid::Uuid::new_v4()));
+        let mut store = Store::load(dir);
+        for text in texts {
+            store.capture(
+                ItemKind::Text,
+                (*text).into(),
+                None,
+                None,
+                None,
+                None,
+                None,
+                ("Notes".into(), "com.apple.Notes".into()),
+            );
+        }
+        store
+    }
+
+    /// Mirrors `tests/audit-normalize-parity.test.mjs`: the panel's own filter
+    /// finds «ΟΔΟΣ» by «οδος» and not by «οδοσ» (RAFF-AUD-007).
+    #[test]
+    fn a_final_sigma_is_found_by_the_same_query_on_both_sides() {
+        let store = store_with_rows(&["\u{039F}\u{0394}\u{039F}\u{03A3}"]); // ΟΔΟΣ
+        assert_eq!(ids_matching(&store, "\u{03BF}\u{03B4}\u{03BF}\u{03C2}").len(), 1); // οδος
+        assert!(ids_matching(&store, "\u{03BF}\u{03B4}\u{03BF}\u{03C3}").is_empty()); // οδοσ
+    }
+
     #[test]
     fn search_reaches_past_the_preview_the_panel_can_see() {
         let mut store = Store::load(

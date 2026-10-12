@@ -306,22 +306,25 @@ fn migrate_image_hashes(items: &mut [ClipItem], images_dir: &Path) -> bool {
 /// one and asks this one about everything it cannot, and a query that means
 /// two different things on the two sides would show and hide the same row.
 pub fn normalize_for_search(text: &str) -> String {
-    let mut out = String::with_capacity(text.len());
+    let mut folded = String::with_capacity(text.len());
     for ch in text.chars() {
         match ch {
             // Arabic-Indic digits fold to Western, so either spelling finds both.
             '\u{0660}'..='\u{0669}' => {
-                out.push(char::from(b'0' + (ch as u32 - 0x0660) as u8));
+                folded.push(char::from(b'0' + (ch as u32 - 0x0660) as u8));
             }
             // Tashkeel and the superscript alef carry no search meaning...
             '\u{064B}'..='\u{065F}' | '\u{0670}' => {}
             '\u{0640}' => {}                       // ...nor does tatweel
-            '\u{0623}' | '\u{0625}' | '\u{0622}' => out.push('\u{0627}'),
-            '\u{0649}' => out.push('\u{064A}'),
-            _ => out.extend(ch.to_lowercase()),
+            '\u{0623}' | '\u{0625}' | '\u{0622}' => folded.push('\u{0627}'),
+            '\u{0649}' => folded.push('\u{064A}'),
+            _ => folded.push(ch),
         }
     }
-    out
+    // Lowercased as a whole, after the folds, as `toLowerCase()` is: case is
+    // contextual — a capital sigma that ends a word becomes ς, not σ — and a
+    // character at a time cannot see the word it ends.
+    folded.to_lowercase()
 }
 
 /// Schemes the «روابط» filter recognises.
@@ -3225,7 +3228,6 @@ mod audit_tests {
     }
 
     #[test]
-    #[ignore = "RAFF-AUD-007: سيغما اليونانية الختامية تختلف بين toLowerCase في JS وto_lowercase لكل حرف في Rust"]
     fn aud007_normalize_parity_for_divergent_vectors() {
         let v = vectors();
         for vec in v["vectors"].as_array().unwrap() {
