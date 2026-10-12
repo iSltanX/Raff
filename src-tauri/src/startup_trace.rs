@@ -83,13 +83,19 @@ pub fn init() {
 /// Points the log at the app data directory and writes out the stages marked
 /// before it was known.
 pub fn set_dir(dir: &Path) {
-    if !enabled() {
-        return;
+    if enabled() {
+        attach(&mut lock_sink(), dir);
     }
-    let mut sink = lock_sink();
-    let Sink::Pending(lines) = std::mem::replace(&mut *sink, Sink::Closed) else {
+}
+
+/// Opens the log in `dir` for a sink still waiting for one. A sink that is
+/// already writing (or gave up) is left as it is, so a second call cannot cut
+/// a live log short.
+fn attach(sink: &mut Sink, dir: &Path) {
+    let Sink::Pending(lines) = sink else {
         return;
     };
+    let lines = std::mem::take(lines);
     let opened = std::fs::create_dir_all(dir).and_then(|_| open_log(&dir.join(LOG_FILE)));
     match opened {
         Ok(mut file) => {
@@ -98,7 +104,11 @@ pub fn set_dir(dir: &Path) {
             }
             *sink = Sink::File(file);
         }
-        Err(err) => eprintln!("raff-trace: log not opened in {}: {err}", dir.display()),
+        Err(err) => {
+            // The lines already went to stderr as they were marked.
+            eprintln!("raff-trace: log not opened in {}: {err}", dir.display());
+            *sink = Sink::Closed;
+        }
     }
 }
 
@@ -173,6 +183,24 @@ mod tests {
         assert_eq!(
             std::fs::metadata(&log).unwrap().permissions().mode() & 0o777,
             0o600
+        );
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn the_buffered_stages_land_in_the_log_and_a_second_attach_keeps_it() {
+        let dir = temp_dir();
+        let mut sink = Sink::Pending(vec!["    1.00 ms  process_start".into()]);
+        attach(&mut sink, &dir);
+        assert!(matches!(sink, Sink::File(_)));
+        assert!(std::fs::read_to_string(dir.join(LOG_FILE))
+            .unwrap()
+            .contains("process_start"));
+
+        attach(&mut sink, &temp_dir());
+        assert!(
+            matches!(sink, Sink::File(_)),
+            "a live log is not closed by a second call"
         );
         let _ = std::fs::remove_dir_all(dir);
     }
