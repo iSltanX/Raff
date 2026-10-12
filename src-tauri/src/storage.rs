@@ -565,6 +565,9 @@ const MAX_RECOVERY_COPIES: usize = 5;
 /// aside. Bytes already kept are not copied again: a layer that stays
 /// unreadable is met at every launch, and each launch would otherwise push a
 /// genuinely different copy out of the cap. Past the cap, the oldest go.
+///
+/// The new copy is written beside the others before anything moves, so a
+/// write that fails (a full disk) leaves every existing copy where it was.
 fn set_aside(path: &Path) -> std::io::Result<PathBuf> {
     let bytes = fs::read(path)?;
     let newest = path.with_extension("json.corrupt");
@@ -575,6 +578,8 @@ fn set_aside(path: &Path) -> std::io::Result<PathBuf> {
     {
         return Ok(same.clone());
     }
+    let staged = path.with_extension("json.corrupt.tmp");
+    fs::write(&staged, &bytes)?;
     if newest.exists() {
         let mut stamp = fs::metadata(&newest)
             .and_then(|meta| meta.modified())
@@ -586,9 +591,12 @@ fn set_aside(path: &Path) -> std::io::Result<PathBuf> {
             stamp += 1;
             archived = path.with_extension(format!("json.{stamp}.corrupt"));
         }
-        fs::rename(&newest, &archived)?;
+        if let Err(err) = fs::rename(&newest, &archived) {
+            let _ = fs::remove_file(&staged);
+            return Err(err);
+        }
     }
-    fs::write(&newest, &bytes)?;
+    fs::rename(&staged, &newest)?;
 
     let mut stamped: Vec<(u64, PathBuf)> = recovery_copies(path)
         .into_iter()
@@ -2540,6 +2548,26 @@ mod tests {
             !images.join("orphan.png").exists(),
             "and collection did run"
         );
+    }
+
+    #[test]
+    fn a_copy_that_cannot_be_written_moves_nothing() {
+        let dir = std::env::temp_dir().join(format!("raff-test-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join(HISTORY_FILE), "{first").unwrap();
+        Store::load(dir.clone());
+        // Whatever stops the write — a full disk, here a directory in the way.
+        fs::create_dir(dir.join("history.json.corrupt.tmp")).unwrap();
+        fs::write(dir.join(HISTORY_FILE), "{second").unwrap();
+
+        Store::load(dir.clone());
+
+        assert_eq!(
+            fs::read(dir.join("history.json.corrupt")).unwrap(),
+            b"{first",
+            "the newest slot still holds the earlier copy, not nothing"
+        );
+        assert_eq!(set_aside_contents(&dir), [b"{first".to_vec()]);
     }
 
     #[test]
