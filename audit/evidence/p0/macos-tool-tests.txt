@@ -1,0 +1,2 @@
+tests/build-candidate-pipeline.test.mjs
+tests/dmg-installer.test.mjs

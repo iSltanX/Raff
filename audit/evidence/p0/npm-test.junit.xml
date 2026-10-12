@@ -1,0 +1,319 @@
+<?xml version="1.0" encoding="utf-8"?>
+<testsuites>
+	<testcase name="the bundle declares exactly one icon set, and no dark variant" time="0.001042" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/app-icon-authority.test.mjs"/>
+	<testcase name="the generator derives every shipped icon from the one brand master" time="0.001090" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/app-icon-authority.test.mjs"/>
+	<testcase name="the Icon Composer asset pins every appearance to the SAME light artwork" time="0.001707" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/app-icon-authority.test.mjs"/>
+	<testcase name="no dark app icon is reachable from bundle metadata or runtime code" time="0.002805" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/app-icon-authority.test.mjs"/>
+	<testcase name="icon patching happens before DMG creation, and before the updater archive" time="0.002071" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/build-candidate-pipeline.test.mjs"/>
+	<testcase name="the DMG and the updater archive are built from the SAME app directory that was patched" time="0.000322" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/build-candidate-pipeline.test.mjs"/>
+	<testcase name="a local build failure (missing updater signing key) does not abort before the icon patch" time="0.000148" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/build-candidate-pipeline.test.mjs"/>
+	<testcase name="checks the target-triple-qualified bundle path CI actually produces" time="0.000739" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/ci-fix-release-icon-paths.test.mjs"/>
+	<testcase name="still falls back to the unqualified path, for robustness" time="0.000078" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/ci-fix-release-icon-paths.test.mjs"/>
+	<testcase name="fails loudly, listing every path checked, if neither exists" time="0.000059" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/ci-fix-release-icon-paths.test.mjs"/>
+	<testcase name="the background exists at 1× and Retina 2×, at the window size" time="0.025437" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/dmg-installer.test.mjs"/>
+	<testcase name="Finder places each icon at the centre of its dashed frame" time="0.000411" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/dmg-installer.test.mjs"/>
+	<testcase name="the design takes its identity from the app, not from copied values" time="0.000463" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/dmg-installer.test.mjs"/>
+	<testcase name="both release paths style the DMG between creating and compressing it" time="0.000330" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/dmg-installer.test.mjs"/>
+	<testcase name="the layout addresses its own mount, and the window shows the background unscaled" time="0.000160" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/dmg-installer.test.mjs"/>
+	<testsuite name="first run: «أوقفه» actually stops capture" time="0.614112" disabled="0" errors="0" tests="4" failures="0" skipped="0" hostname="iMac-Sultan.local">
+		<testcase name="the window says capture is already running" time="0.002663" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/firstrun-capture-consent.test.mjs"/>
+		<testcase name="declining saves captureEnabled: false" time="0.025816" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/firstrun-capture-consent.test.mjs"/>
+		<testcase name="then the optional permission step, which can be skipped" time="0.018405" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/firstrun-capture-consent.test.mjs"/>
+		<testcase name="then it teaches the way back in" time="0.002122" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/firstrun-capture-consent.test.mjs"/>
+	</testsuite>
+	<testsuite name="first run: accepting capture also lands on the completion state" time="0.112217" disabled="0" errors="0" tests="2" failures="0" skipped="0" hostname="iMac-Sultan.local">
+		<testcase name="accepting saves nothing — capture is already the default" time="0.000340" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/firstrun-capture-consent.test.mjs"/>
+		<testcase name="and the same completion text is shown" time="0.000220" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/firstrun-capture-consent.test.mjs"/>
+	</testsuite>
+	<testcase name="a permission granted before the welcome does not skip the capture decision" time="0.339975" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/firstrun-decision-gaps.test.mjs"/>
+	<testcase name="granting the permission mid-welcome does not answer the capture question" time="0.159057" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/firstrun-decision-gaps.test.mjs"/>
+	<testcase name="a failed «keep it stopped» does not announce that رفّ is ready" time="0.030951" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/firstrun-decision-gaps.test.mjs"/>
+	<testcase name="the welcome does not present the optional permission as a requirement" time="0.091030" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/firstrun-decision-gaps.test.mjs"/>
+	<testcase name="changing your mind after «أوقفه» turns capture back on" time="0.012488" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/firstrun-decision-gaps.test.mjs"/>
+	<testcase name="the summary follows a permission granted while it is on screen" time="0.012644" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/firstrun-decision-gaps.test.mjs"/>
+	<testcase name="first-run permission polling backs off and recovers without unhandled rejection" time="0.427961" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/firstrun-recovery.test.mjs"/>
+	<testcase name="frontend distribution contains exactly the production allowlist" time="0.163350" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/frontend-dist-manifest.test.mjs"/>
+	<testcase name="Tauri packages the generated frontend instead of the design source tree" time="0.000276" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/frontend-dist-manifest.test.mjs"/>
+	<testcase name="every asset the pages reference ships in the bundle" time="0.003532" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/frontend-dist-manifest.test.mjs"/>
+	<testcase name="the «قريب ومرتب» palette is the only palette, in both appearances" time="0.034796" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/identity-contract.test.mjs"/>
+	<testcase name="reading text keeps AA contrast on its surfaces in Light and Dark" time="0.003972" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/identity-contract.test.mjs"/>
+	<testcase name="type is Cairo and Almarai only" time="0.003695" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/identity-contract.test.mjs"/>
+	<testcase name="every icon and brand asset the UI references exists" time="0.001964" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/identity-contract.test.mjs"/>
+	<testcase name="icons are drawn as masks and never injected as markup" time="0.020651" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/identity-contract.test.mjs"/>
+	<testcase name="panel window geometry agrees across config, native code and CSS" time="0.000355" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/identity-contract.test.mjs"/>
+	<testcase name="secondary windows use the native overlay title bar at their designed sizes" time="0.000192" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/identity-contract.test.mjs"/>
+	<testcase name="panel chrome stays fixed while only results scroll" time="0.000292" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/identity-contract.test.mjs"/>
+	<testcase name="row actions cost resting rows nothing and appear for mouse, selection and focus" time="0.000288" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/identity-contract.test.mjs"/>
+	<testcase name="quick-paste slots are revealed only while ⌘ is held" time="0.000391" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/identity-contract.test.mjs"/>
+	<testcase name="history rows never resolve application artwork" time="0.001502" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/identity-contract.test.mjs"/>
+	<testcase name="the menu-bar glyph is an 18pt template drawn natively" time="0.000265" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/identity-contract.test.mjs"/>
+	<testcase name="the app icon keeps transparent corners and one artwork for every appearance" time="0.000247" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/identity-contract.test.mjs"/>
+	<testcase name="native and CSS thumbnail contracts agree at 2x without cropping" time="0.001141" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/image-thumbnail-contract.test.mjs"/>
+	<testcase name="image rows expose a designed loading/fallback surface" time="0.000399" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/image-thumbnail-contract.test.mjs"/>
+	<testcase name="the .sig file content is used verbatim as the signature, never re-base64-encoded" time="0.001368" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/latest-json-signature-encoding.test.mjs"/>
+	<testcase name="arabicDigits converts Western digits" time="0.003639" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/logic.test.mjs"/>
+	<testcase name="normalizeArabic strips tashkeel and tatweel" time="0.000300" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/logic.test.mjs"/>
+	<testcase name="normalizeArabic folds the alef forms and the dotless ya" time="0.000245" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/logic.test.mjs"/>
+	<testcase name="search folding matches across alef and ya spellings both ways" time="0.002488" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/logic.test.mjs"/>
+	<testcase name="filterItems matches text and source app, diacritic-insensitive" time="0.000406" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/logic.test.mjs"/>
+	<testcase name="relativeTimeAr matches identity samples" time="0.000220" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/logic.test.mjs"/>
+	<testcase name="metaLine joins source and time like the reference" time="0.000102" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/logic.test.mjs"/>
+	<testcase name="hotkeyDisplay renders macOS symbols in convention order" time="0.000280" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/logic.test.mjs"/>
+	<testcase name="hotkeyFromEvent builds accelerators and rejects invalid combos" time="0.000505" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/logic.test.mjs"/>
+	<testcase name="the welcome opens on first run whether or not Accessibility is already granted" time="0.001010" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/native-state-contract.test.mjs"/>
+	<testcase name="the menu-bar icon reflects capture the user turned off" time="0.000279" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/native-state-contract.test.mjs"/>
+	<testcase name="the optional permission is offered once per session, not on every paste" time="0.501546" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-accessibility-offer-once.test.mjs"/>
+	<testcase name="a trusted choice pastes with no toast and no permission action" time="0.489306" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-accessibility-trusted-no-toast.test.mjs"/>
+	<testcase name="⌘C copies the selected item without pasting it" time="0.439155" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-copy-only-action.test.mjs"/>
+	<testsuite name="panel: search reaches the text the preview cut off" time="0.601988" disabled="0" errors="0" tests="3" failures="0" skipped="0" hostname="iMac-Sultan.local">
+		<testcase name="a word only in the hidden tail still finds its row" time="0.035178" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-deep-search.test.mjs"/>
+		<testcase name="what the panel can see itself still matches without waiting" time="0.015171" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-deep-search.test.mjs"/>
+		<testcase name="clearing the query asks nothing and shows everything" time="0.012608" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-deep-search.test.mjs"/>
+	</testsuite>
+	<testsuite name="delete shortcut: ⌘⌫ removes the selected item" time="1.082290" disabled="0" errors="0" tests="13" failures="0" skipped="0" hostname="iMac-Sultan.local">
+		<testcase name="idle content exposes quick paste, Search and Settings" time="0.063518" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-delete-shortcut.test.mjs"/>
+		<testcase name="selected items expose exactly the four live row actions" time="0.045715" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-delete-shortcut.test.mjs"/>
+		<testcase name="the pin shortcut label follows the selected item state" time="0.066604" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-delete-shortcut.test.mjs"/>
+		<testcase name="does not delete anything when nothing is selected" time="0.075965" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-delete-shortcut.test.mjs"/>
+		<testcase name="does not fire while the search field is focused (native ⌘⌫ text editing wins)" time="0.037520" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-delete-shortcut.test.mjs"/>
+		<testcase name="⌥P (pin) still works and is not shadowed by the delete shortcut" time="0.016540" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-delete-shortcut.test.mjs"/>
+		<testcase name="extra modifier combinations never trigger the destructive shortcut" time="0.005385" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-delete-shortcut.test.mjs"/>
+		<testcase name="↩ (paste) still works and is not shadowed by the delete shortcut" time="0.006130" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-delete-shortcut.test.mjs"/>
+		<testcase name="deleting the middle item moves selection to the next item" time="0.016509" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-delete-shortcut.test.mjs"/>
+		<testcase name="the deletion survives a refresh — it does not come back" time="0.015908" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-delete-shortcut.test.mjs"/>
+		<testcase name="deleting the last item in the list moves selection to the previous item" time="0.016349" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-delete-shortcut.test.mjs"/>
+		<testcase name="deleting the only remaining item leaves selection empty, not stuck" time="0.113149" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-delete-shortcut.test.mjs"/>
+		<testcase name="no uncaught errors across the whole flow" time="0.000864" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-delete-shortcut.test.mjs"/>
+	</testsuite>
+	<testsuite name="panel endurance: 30 show/hide cycles leak nothing and lose nothing" time="1.931725" disabled="0" errors="0" tests="10" failures="0" skipped="0" hostname="iMac-Sultan.local">
+		<testcase name="30 open/hide cycles keep exactly one row per item" time="0.984898" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-endurance.test.mjs"/>
+		<testcase name="no listener accumulation across all 30 cycles" time="0.000287" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-endurance.test.mjs"/>
+		<testcase name="no repeating-timer accumulation across all 30 cycles" time="0.000158" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-endurance.test.mjs"/>
+		<testcase name="no DOM accumulation across all 30 cycles" time="0.000638" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-endurance.test.mjs"/>
+		<testcase name="no reload happened anywhere in the healthy path" time="0.000071" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-endurance.test.mjs"/>
+		<testcase name="long-hidden then shown: the list repopulates" time="0.328157" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-endurance.test.mjs"/>
+		<testcase name="wake-from-sleep shape: focus regained without panel://shown" time="0.021410" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-endurance.test.mjs"/>
+		<testcase name="hammering ⌘R 20x produces no reload loop" time="0.086468" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-endurance.test.mjs"/>
+		<testcase name="the empty state never appeared while items existed" time="0.000372" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-endurance.test.mjs"/>
+		<testcase name="no uncaught errors over the whole endurance run" time="0.000191" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-endurance.test.mjs"/>
+	</testsuite>
+	<testsuite name="panel: a backend failure is shown in Raff’s own words" time="0.638837" disabled="0" errors="0" tests="2" failures="0" skipped="0" hostname="iMac-Sultan.local">
+		<testcase name="a storage failure says what went wrong, and only that" time="0.233896" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-error-wording.test.mjs"/>
+		<testcase name="and an unclassified failure is never rendered verbatim" time="0.016822" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-error-wording.test.mjs"/>
+	</testsuite>
+	<testsuite name="panel failure state: a permanently failing load shows a recoverable Arabic error" time="2.840848" disabled="0" errors="0" tests="10" failures="0" skipped="0" hostname="iMac-Sultan.local">
+		<testcase name="while the first fetch is still in flight the panel reads as loading" time="0.205595" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-failure-state.test.mjs"/>
+		<testcase name="retries are attempted, then bounded — not an infinite loop" time="2.001680" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-failure-state.test.mjs"/>
+		<testcase name="the failure state is shown instead of a blank list" time="0.002593" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-failure-state.test.mjs"/>
+		<testcase name="it is not confused with a genuinely empty shelf" time="0.001180" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-failure-state.test.mjs"/>
+		<testcase name="it offers an Arabic way out and leaks no technical detail" time="0.000256" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-failure-state.test.mjs"/>
+		<testcase name="the failure copy is the approved wording, reassuring and non-technical" time="0.000867" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-failure-state.test.mjs"/>
+		<testcase name="the app did not reload itself behind the scenes" time="0.000104" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-failure-state.test.mjs"/>
+		<testcase name="the failure button reloads the frontend when pressed" time="0.007518" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-failure-state.test.mjs"/>
+		<testcase name="recovery is possible without a reload once IPC returns" time="0.016969" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-failure-state.test.mjs"/>
+		<testcase name="the whole failure path produced no uncaught errors" time="0.000217" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-failure-state.test.mjs"/>
+	</testsuite>
+	<testsuite name="panel: incremental updates" time="1.489633" disabled="0" errors="0" tests="3" failures="0" skipped="0" hostname="iMac-Sultan.local">
+		<testcase name="moving the selection keeps the very same row nodes" time="0.052018" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-incremental-updates.test.mjs"/>
+		<testcase name="a capture arriving while hidden is not fetched or rebuilt" time="0.011442" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-incremental-updates.test.mjs"/>
+		<testcase name="and showing it again picks up whatever was missed" time="0.329392" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-incremental-updates.test.mjs"/>
+	</testsuite>
+	<testsuite name="row actions and feedback are transactional, accessible, and deterministic" time="1.741743" disabled="0" errors="0" tests="10" failures="0" skipped="0" hostname="iMac-Sultan.local">
+		<testcase name="interactive rows use valid grid semantics and exact control names" time="0.034237" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-item-actions.test.mjs"/>
+		<testcase name="mouse pin and unpin paint immediately and use exact three-second feedback" time="0.129297" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-item-actions.test.mjs"/>
+		<testcase name="mouse delete targets its own row and Undo restores the exact index" time="0.143794" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-item-actions.test.mjs"/>
+		<testcase name="Undo restores a deleted pinned item with its prior pinned state" time="0.239527" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-item-actions.test.mjs"/>
+		<testcase name="five-second expiry commits the delete and dismisses the one toast" time="0.041344" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-item-actions.test.mjs"/>
+		<testcase name="sequential deletes replace safely; only the newest receipt can be undone" time="0.071218" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-item-actions.test.mjs"/>
+		<testcase name="later feedback queues without shortening the five-second Undo window" time="0.222324" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-item-actions.test.mjs"/>
+		<testcase name="Option-P and Command-Backspace use the same live paths" time="0.053358" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-item-actions.test.mjs"/>
+		<testcase name="Undo accepts exactly Command-Z and rejects extra modifiers" time="0.019783" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-item-actions.test.mjs"/>
+		<testcase name="all action flows stay free of uncaught errors" time="0.000261" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-item-actions.test.mjs"/>
+	</testsuite>
+	<testsuite name="panel keyboard contract: navigation, actions, search routing, and native editing" time="1.431730" disabled="0" errors="0" tests="15" failures="0" skipped="0" hostname="iMac-Sultan.local">
+		<testcase name="idle list starts intentionally unselected and exposes no active descendant" time="0.068156" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-keyboard-shortcuts.test.mjs"/>
+		<testcase name="filter tabs rove in RTL order and automatically activate" time="0.373049" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-keyboard-shortcuts.test.mjs"/>
+		<testcase name="Settings is tabbable and has the standard macOS shortcut" time="0.015082" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-keyboard-shortcuts.test.mjs"/>
+		<testcase name="Arrow and Page navigation clamp at both list boundaries" time="0.024815" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-keyboard-shortcuts.test.mjs"/>
+		<testcase name="selection scrolls only the results container, never the WebView document" time="0.003639" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-keyboard-shortcuts.test.mjs"/>
+		<testcase name="⌘F focuses and selects the search field" time="0.007564" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-keyboard-shortcuts.test.mjs"/>
+		<testcase name="⌘C copies the selected row when focus is outside the editor" time="0.038379" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-keyboard-shortcuts.test.mjs"/>
+		<testcase name="Enter pastes normally and Option-Enter requests plain text" time="0.030438" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-keyboard-shortcuts.test.mjs"/>
+		<testcase name="Escape clears an active query first, then hides on the next press" time="0.023442" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-keyboard-shortcuts.test.mjs"/>
+		<testcase name="a printable key routes typing focus to search without cancelling its default input" time="0.003642" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-keyboard-shortcuts.test.mjs"/>
+		<testcase name="non-printable and composing keys never steal focus" time="0.001839" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-keyboard-shortcuts.test.mjs"/>
+		<testcase name="Option-P invokes pin for the selected row" time="0.117982" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-keyboard-shortcuts.test.mjs"/>
+		<testcase name="extra modifiers do not trigger exact pin or copy shortcuts" time="0.017281" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-keyboard-shortcuts.test.mjs"/>
+		<testcase name="native search editing shortcuts are not stolen by row actions" time="0.029469" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-keyboard-shortcuts.test.mjs"/>
+		<testcase name="the complete keyboard flow produces no uncaught errors" time="0.000125" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-keyboard-shortcuts.test.mjs"/>
+	</testsuite>
+	<testsuite name="choosing without Accessibility permission: explained, not silent" time="0.439295" disabled="0" errors="0" tests="2" failures="0" skipped="0" hostname="iMac-Sultan.local">
+		<testcase name="the copy half runs, and the toast explains why auto-paste did not" time="0.020093" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-no-accessibility-fallback.test.mjs"/>
+		<testcase name="the toast action requests Accessibility and opens the settings pane" time="0.004805" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-no-accessibility-fallback.test.mjs"/>
+	</testsuite>
+	<testcase name="clipboard-only paste keeps Raff visible and announces the manual fallback" time="0.460690" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-paste-fallback.test.mjs"/>
+	<testsuite name="panel: the pinned shelf is arranged, not dated" time="0.655618" disabled="0" errors="0" tests="5" failures="0" skipped="0" hostname="iMac-Sultan.local">
+		<testcase name="the default list is still one timeline" time="0.002916" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-pinned-order.test.mjs"/>
+		<testcase name="the مثبّت segment follows pinnedOrder instead" time="0.065971" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-pinned-order.test.mjs"/>
+		<testcase name="move buttons are offered there, and bounded" time="0.002740" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-pinned-order.test.mjs"/>
+		<testcase name="moving one down sends the whole new order" time="0.066755" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-pinned-order.test.mjs"/>
+		<testcase name="the buttons are absent where the order has no meaning" time="0.014684" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-pinned-order.test.mjs"/>
+	</testsuite>
+	<testsuite name="choosing an item: one click, one paste, mouse and keyboard agree" time="0.510308" disabled="0" errors="0" tests="5" failures="0" skipped="0" hostname="iMac-Sultan.local">
+		<testcase name="a single click pastes that exact row" time="0.145894" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-primary-action.test.mjs"/>
+		<testcase name="a pinned row is chosen the same way" time="0.010140" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-primary-action.test.mjs"/>
+		<testcase name="⌥click chooses as plain text, matching ⌥⏎" time="0.011453" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-primary-action.test.mjs"/>
+		<testcase name="Enter performs the identical action on the selection" time="0.009732" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-primary-action.test.mjs"/>
+		<testcase name="the row action buttons are not a choice" time="0.015534" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-primary-action.test.mjs"/>
+	</testsuite>
+	<testsuite name="panel recovery: first load retries, then ⌘R re-initialises in place" time="1.226231" disabled="0" errors="0" tests="22" failures="0" skipped="0" hostname="iMac-Sultan.local">
+		<testcase name="a failed first load is retried automatically and succeeds" time="0.514285" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-recovery.test.mjs"/>
+		<testcase name="the transient failure never showed the error state to the user" time="0.013095" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-recovery.test.mjs"/>
+		<testcase name="one chronological list — pinned items stay in place with one clear action" time="0.011352" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-recovery.test.mjs"/>
+		<testcase name="the header actions carry Arabic labels only" time="0.000914" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-recovery.test.mjs"/>
+		<testcase name="the header actions are wired to their commands" time="0.025433" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-recovery.test.mjs"/>
+		<testcase name="⌘R re-initialises the data without reloading" time="0.014596" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-recovery.test.mjs"/>
+		<testcase name="⌘R never loses already-saved items" time="0.012099" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-recovery.test.mjs"/>
+		<testcase name="a burst of ⌘R is collapsed by the busy state" time="0.011653" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-recovery.test.mjs"/>
+		<testcase name="recovering does not re-subscribe the background events" time="0.000290" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-recovery.test.mjs"/>
+		<testcase name="repeated show/recover cycles never trigger a reload loop" time="0.141425" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-recovery.test.mjs"/>
+		<testcase name="an empty shelf reads as empty, never as an error" time="0.012254" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-recovery.test.mjs"/>
+		<testcase name="the panel exposes no English &amp;quot;Reload&amp;quot; affordance" time="0.001002" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-recovery.test.mjs"/>
+		<testcase name="the native page menu is suppressed over inert areas" time="0.000786" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-recovery.test.mjs"/>
+		<testcase name="the search field keeps its native editing menu" time="0.000099" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-recovery.test.mjs"/>
+		<testcase name="selected text keeps its native copy menu" time="0.016868" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-recovery.test.mjs"/>
+		<testcase name="typing or pasting into the search field still filters" time="0.072765" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-recovery.test.mjs"/>
+		<testcase name="the search-clear button appears with a query and resets it" time="0.014472" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-recovery.test.mjs"/>
+		<testcase name="each filter segment narrows the list to its own kind" time="0.017357" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-recovery.test.mjs"/>
+		<testcase name="the active segment is the only one marked selected" time="0.026415" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-recovery.test.mjs"/>
+		<testcase name="a filter with no matches reads as «لا نتائج», never as an empty shelf" time="0.010587" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-recovery.test.mjs"/>
+		<testcase name="the row icon represents content type while source metadata remains accessible" time="0.000842" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-recovery.test.mjs"/>
+		<testcase name="no uncaught errors during the whole session" time="0.000058" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-recovery.test.mjs"/>
+	</testsuite>
+	<testsuite name="⌘R recovery: falls back to a frontend reload only when re-initialising fails" time="3.877549" disabled="0" errors="0" tests="6" failures="0" skipped="0" hostname="iMac-Sultan.local">
+		<testcase name="the panel starts healthy" time="0.002867" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-refresh-fallback.test.mjs"/>
+		<testcase name="with IPC wedged, ⌘R tries in place first and only then reloads" time="1.493086" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-refresh-fallback.test.mjs"/>
+		<testcase name="a wedged panel keeps the last good list rather than blanking" time="0.000657" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-refresh-fallback.test.mjs"/>
+		<testcase name="the fallback does not loop" time="0.601473" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-refresh-fallback.test.mjs"/>
+		<testcase name="a panel://shown landing mid-recovery is not mistaken for a failure" time="1.403905" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-refresh-fallback.test.mjs"/>
+		<testcase name="no uncaught errors" time="0.000166" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-refresh-fallback.test.mjs"/>
+	</testsuite>
+	<testcase name="image rows defer their thumbnail until they are actually near the viewport" time="0.533446" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-thumbnail-deferral.test.mjs"/>
+	<testcase name="without IntersectionObserver the panel still loads thumbnails eagerly" time="0.316003" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-thumbnail-eager-fallback.test.mjs"/>
+	<testsuite name="panel: an unreadable layer replaces the empty shelf with its own state" time="0.459598" disabled="0" errors="0" tests="2" failures="0" skipped="0" hostname="iMac-Sultan.local">
+		<testcase name="the unreadable-layer state is shown instead of «رفّك جاهز»" time="0.001397" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-unreadable-layer.test.mjs"/>
+		<testcase name="it is announced, and does not borrow the empty-shelf illustration" time="0.004984" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel-unreadable-layer.test.mjs"/>
+	</testsuite>
+	<testsuite name="panel lifecycle: copy/paste an old item, hide, reopen — the list must survive" time="1.039911" disabled="0" errors="0" tests="11" failures="0" skipped="0" hostname="iMac-Sultan.local">
+		<testcase name="initial load renders one chronological list, pinned marked in place" time="0.025762" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel.test.mjs"/>
+		<testcase name="reopening after copying an OLD TEXT item still shows the full list" time="0.020713" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel.test.mjs"/>
+		<testcase name="reopening after copying an OLD IMAGE item still shows the full list" time="0.024918" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel.test.mjs"/>
+		<testcase name="reopening after copying a PINNED item keeps it in its chronological place" time="0.027225" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel.test.mjs"/>
+		<testcase name="search text is cleared on reopen but does not lose items" time="0.032563" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel.test.mjs"/>
+		<testcase name="repeated hide/show cycles (10x) never duplicate rows" time="0.274766" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel.test.mjs"/>
+		<testcase name="each event was subscribed to exactly once for the whole session" time="0.000299" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel.test.mjs"/>
+		<testcase name="a slow, stale get_state response cannot overwrite a newer one (race safety)" time="0.157942" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel.test.mjs"/>
+		<testcase name="a rejected get_state on panel://shown does not leave the panel permanently blank" time="0.022222" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel.test.mjs"/>
+		<testcase name="regaining window focus also resyncs the list through the official refresh path" time="0.015435" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel.test.mjs"/>
+		<testcase name="no console/uncaught errors happened during the whole session" time="0.000232" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/panel.test.mjs"/>
+	</testsuite>
+	<testcase name="the chosen item STAYS on the clipboard after being pasted" time="0.007342" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/paste-clipboard-contract.test.mjs"/>
+	<testcase name="writing our own item back does not create a duplicate history entry" time="0.001368" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/paste-clipboard-contract.test.mjs"/>
+	<testcase name="the full pasteboard payload is restored, not flattened to text" time="0.000601" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/paste-clipboard-contract.test.mjs"/>
+	<testcase name="no surface claims رفّ never uses the network" time="0.001952" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/privacy-promises.test.mjs"/>
+	<testcase name="the clipboard promise itself is still made" time="0.000253" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/privacy-promises.test.mjs"/>
+	<testcase name="the release runner supports Icon Composer (not macos-14)" time="0.000897" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/release-workflow-icon-fix.test.mjs"/>
+	<testcase name="the icon-fix step runs after tauri-action, in the same job" time="0.000098" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/release-workflow-icon-fix.test.mjs"/>
+	<testcase name="the icon-fix step has the secrets it needs to sign the regenerated archive" time="0.000133" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/release-workflow-icon-fix.test.mjs"/>
+	<testcase name="the report window never reaches past Rust" time="0.001048" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/report-window.test.mjs"/>
+	<testcase name="compose: a kind and a description, within the limit, are needed" time="0.006918" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/report-window.test.mjs"/>
+	<testcase name="preview: Rust freezes the payload and the window shows all of it" time="0.043818" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/report-window.test.mjs"/>
+	<testcase name="a failed send retries the same frozen payload" time="0.043900" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/report-window.test.mjs"/>
+	<testcase name="a rate limit counts down instead of offering a retry that cannot work" time="0.017150" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/report-window.test.mjs"/>
+	<testcase name="a rejection names the field, isolated from the Arabic around it" time="0.059205" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/report-window.test.mjs"/>
+	<testcase name="Escape keeps what the user wrote" time="0.000486" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/report-window.test.mjs"/>
+	<testcase name="sent: the number is the reference, copied through Rust" time="0.067725" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/report-window.test.mjs"/>
+	<testcase name="«التالي» waits for an image still being prepared" time="0.089007" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/report-window.test.mjs"/>
+	<testcase name="a pasted Finder file is refused with a way forward, not attached as its icon" time="0.021270" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/report-window.test.mjs"/>
+	<testcase name="a text paste is left to the description" time="0.016206" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/report-window.test.mjs"/>
+	<testsuite name="settings: the Accessibility permission has a door in Privacy" time="0.422780" disabled="0" errors="0" tests="3" failures="0" skipped="0" hostname="iMac-Sultan.local">
+		<testcase name="without the permission the row states it and offers an action" time="0.002176" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/settings-accessibility-row.test.mjs"/>
+		<testcase name="the action asks macOS, then opens the right settings pane" time="0.029884" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/settings-accessibility-row.test.mjs"/>
+		<testcase name="once granted the row says so and drops the action" time="0.029052" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/settings-accessibility-row.test.mjs"/>
+	</testsuite>
+	<testsuite name="settings: a capture loop that died is stated, not left looking healthy" time="0.472595" disabled="0" errors="0" tests="3" failures="0" skipped="0" hostname="iMac-Sultan.local">
+		<testcase name="the row appears and says capture stopped" time="0.000968" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/settings-capture-alive.test.mjs"/>
+		<testcase name="the toggle still reads on — which is exactly the trap" time="0.000083" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/settings-capture-alive.test.mjs"/>
+		<testcase name="and it disappears again once capture is alive" time="0.017990" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/settings-capture-alive.test.mjs"/>
+	</testsuite>
+	<testsuite name="«مسح سجل الحافظة» confirmation flow" time="0.524278" disabled="0" errors="0" tests="11" failures="0" skipped="0" hostname="iMac-Sultan.local">
+		<testcase name="the button alone deletes nothing — it only opens the dialog" time="0.028709" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/settings-clear-history.test.mjs"/>
+		<testcase name="the dialog names the consequence and offers both choices" time="0.000413" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/settings-clear-history.test.mjs"/>
+		<testcase name="the destructive button is never focused by default" time="0.000094" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/settings-clear-history.test.mjs"/>
+		<testcase name="rejecting via Cancel deletes nothing" time="0.005142" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/settings-clear-history.test.mjs"/>
+		<testcase name="rejecting via Escape deletes nothing" time="0.010474" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/settings-clear-history.test.mjs"/>
+		<testcase name="rejecting via a backdrop click deletes nothing" time="0.011904" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/settings-clear-history.test.mjs"/>
+		<testcase name="confirming deletes the unpinned items only" time="0.013015" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/settings-clear-history.test.mjs"/>
+		<testcase name="a quiet success message confirms what happened" time="0.000259" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/settings-clear-history.test.mjs"/>
+		<testcase name="settings, hotkey and appearance are untouched by the wipe" time="0.000166" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/settings-clear-history.test.mjs"/>
+		<testcase name="clearing again on an already-empty history is harmless" time="0.009958" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/settings-clear-history.test.mjs"/>
+		<testcase name="no uncaught errors during the whole session" time="0.000200" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/settings-clear-history.test.mjs"/>
+	</testsuite>
+	<testsuite name="Settings exposes recoverable, announced IPC failures" time="0.962973" disabled="0" errors="0" tests="6" failures="0" skipped="0" hostname="iMac-Sultan.local">
+		<testcase name="initial defaults remain inert through retries and failure" time="0.537217" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/settings-error-recovery.test.mjs"/>
+		<testcase name="explicit retry restores the real settings and interactions" time="0.007530" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/settings-error-recovery.test.mjs"/>
+		<testcase name="running-app failure replaces the add controls with an alert and retry" time="0.012685" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/settings-error-recovery.test.mjs"/>
+		<testcase name="a non-hotkey save failure is visible, assertive, and reverts" time="0.008050" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/settings-error-recovery.test.mjs"/>
+		<testcase name="clear-history failure reports that nothing was deleted" time="0.006728" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/settings-error-recovery.test.mjs"/>
+		<testcase name="clear-learning failure is handled, announced, and retryable" time="0.006801" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/settings-error-recovery.test.mjs"/>
+	</testsuite>
+	<testcase name="settings: a refused hotkey is announced, not just painted" time="0.552744" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/settings-hotkey-announcement.test.mjs"/>
+	<testsuite name="settings: a refused learning summary is stated and retryable" time="0.475698" disabled="0" errors="0" tests="2" failures="0" skipped="0" hostname="iMac-Sultan.local">
+		<testcase name="the refusal is shown, not swallowed" time="0.002534" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/settings-learning-failure.test.mjs"/>
+		<testcase name="a retry button is offered, and it works" time="0.024872" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/settings-learning-failure.test.mjs"/>
+	</testsuite>
+	<testsuite name="settings: refreshing costs the preferences, not the whole shelf" time="0.501208" disabled="0" errors="0" tests="2" failures="0" skipped="0" hostname="iMac-Sultan.local">
+		<testcase name="the first load asks for the settings payload only" time="0.001456" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/settings-light-refresh.test.mjs"/>
+		<testcase name="and so does every capture that follows" time="0.016669" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/settings-light-refresh.test.mjs"/>
+	</testsuite>
+	<testsuite name="settings: a bundle id can be typed in" time="0.697080" disabled="0" errors="0" tests="4" failures="0" skipped="0" hostname="iMac-Sultan.local">
+		<testcase name="the field sits beside the picker, which stays the main road" time="0.001186" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/settings-manual-exclusion.test.mjs"/>
+		<testcase name="a well-formed id is saved" time="0.021366" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/settings-manual-exclusion.test.mjs"/>
+		<testcase name="an id with a space is refused and changes nothing" time="0.071236" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/settings-manual-exclusion.test.mjs"/>
+		<testcase name="and an id already on the list is not added twice" time="0.050394" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/settings-manual-exclusion.test.mjs"/>
+	</testsuite>
+	<testsuite name="settings: retention is a choice, and its wording is honest" time="0.657794" disabled="0" errors="0" tests="3" failures="0" skipped="0" hostname="iMac-Sultan.local">
+		<testcase name="the control exists and reflects the saved value" time="0.003418" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/settings-retention.test.mjs"/>
+		<testcase name="the wording says which items it does not touch" time="0.000765" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/settings-retention.test.mjs"/>
+		<testcase name="choosing a window saves it" time="0.022937" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/settings-retention.test.mjs"/>
+	</testsuite>
+	<testsuite name="settings complete-object saves are serialized and composed" time="0.635387" disabled="0" errors="0" tests="2" failures="0" skipped="0" hostname="iMac-Sultan.local">
+		<testcase name="rapid unrelated controls cannot clobber one another" time="0.056330" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/settings-save-serialization.test.mjs"/>
+		<testcase name="two rapid clicks deterministically toggle twice" time="0.011330" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/settings-save-serialization.test.mjs"/>
+	</testsuite>
+	<testsuite name="compact tabbed Settings contract and interactions" time="0.583435" disabled="0" errors="0" tests="6" failures="0" skipped="0" hostname="iMac-Sultan.local">
+		<testsuite name="exactly five labelled ARIA tabs expose one initial page" time="0.009008" disabled="0" errors="0" tests="5" failures="0" skipped="0" hostname="iMac-Sultan.local">
+			<testcase name="عام" time="0.000854" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/settings-tabs.test.mjs"/>
+			<testcase name="الالتقاط" time="0.000212" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/settings-tabs.test.mjs"/>
+			<testcase name="الخصوصية" time="0.000198" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/settings-tabs.test.mjs"/>
+			<testcase name="التعلّم" time="0.000114" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/settings-tabs.test.mjs"/>
+			<testcase name="حول" time="0.000072" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/settings-tabs.test.mjs"/>
+		</testsuite>
+		<testcase name="clicking switches selection and leaves one page visible" time="0.002089" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/settings-tabs.test.mjs"/>
+		<testcase name="RTL arrows, Home, and End select and focus the expected page" time="0.042059" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/settings-tabs.test.mjs"/>
+		<testcase name="appearance radios use one roving stop and RTL arrow selection" time="0.072788" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/settings-tabs.test.mjs"/>
+		<testcase name="each page retains its production controls and legacy columns are gone" time="0.006901" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/settings-tabs.test.mjs"/>
+		<testcase name="About, clear, learning, exclusions, and hotkey actions remain wired" time="0.053473" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/settings-tabs.test.mjs"/>
+	</testsuite>
+	<testcase name="update window announces state and exposes native progress semantics" time="0.254674" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/update-accessibility.test.mjs"/>
+	<testcase name="About opens the update window when a newer version exists" time="0.339606" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/update-entry-about.test.mjs"/>
+	<testcase name="Settings opens the update window when a newer version exists" time="0.378529" classname="test" file="/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/update-entry-points.test.mjs"/>
+	<!-- tests 280 -->
+	<!-- suites 0 -->
+	<!-- pass 280 -->
+	<!-- fail 0 -->
+	<!-- cancelled 0 -->
+	<!-- skipped 0 -->
+	<!-- todo 0 -->
+	<!-- duration_ms 14932.940542 -->
+</testsuites>

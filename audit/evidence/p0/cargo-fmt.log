@@ -1,0 +1,1235 @@
+Diff in /Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src-tauri/src/commands.rs:117:
+         settings: store.settings.clone(),
+         ax_trusted: ax_trusted_noted(),
+         version: app.package_info().version.to_string(),
+-        capture_alive: state.capture_alive.load(std::sync::atomic::Ordering::SeqCst),
++        capture_alive: state
++            .capture_alive
++            .load(std::sync::atomic::Ordering::SeqCst),
+         capture_pause: pause_view(&state),
+     }
+ }
+Diff in /Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src-tauri/src/commands.rs:135:
+         ax_trusted: ax_trusted_noted(),
+         version: app.package_info().version.to_string(),
+         unreadable_layer: store.unreadable_layer,
+-        capture_alive: state.capture_alive.load(std::sync::atomic::Ordering::SeqCst),
++        capture_alive: state
++            .capture_alive
++            .load(std::sync::atomic::Ordering::SeqCst),
+         capture_pause: pause_view(&state),
+     }
+ }
+Diff in /Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src-tauri/src/commands.rs:216:
+ ) -> Result<bool, String> {
+     let is_pinned = {
+         let mut store = crate::lock_store(&state.store);
+-        store.set_pin_persisted(&id, is_pinned).map_err(save_failed)?
++        store
++            .set_pin_persisted(&id, is_pinned)
++            .map_err(save_failed)?
+     };
+     notify(&app);
+     Ok(is_pinned)
+Diff in /Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src-tauri/src/commands.rs:581:
+ /// Every secondary window uses the native title bar in overlay mode: real
+ /// traffic lights and window dragging from macOS, with the page drawing the
+ /// whole content area underneath.
+-fn open_window_when_ready(
+-    app: &AppHandle,
+-    label: &str,
+-    page: &str,
+-    title: &str,
+-    size: (f64, f64),
+-) {
++fn open_window_when_ready(app: &AppHandle, label: &str, page: &str, title: &str, size: (f64, f64)) {
+     if let Some(w) = app.get_webview_window(label) {
+         // Visible → just focus it. Hidden → it is still loading; the
+         // page-load handler (or the watchdog below) will reveal it.
+Diff in /Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src-tauri/src/commands.rs:681:
+ pub fn open_about_window(app: &AppHandle) {
+     let handle = app.clone();
+     let _ = app.run_on_main_thread(move || {
+-        open_window_when_ready(
+-            &handle,
+-            "about",
+-            "about.html",
+-            "عن رفّ",
+-            (320.0, 420.0),
+-        );
++        open_window_when_ready(&handle, "about", "about.html", "عن رفّ", (320.0, 420.0));
+     });
+ }
+ 
+Diff in /Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src-tauri/src/commands.rs:712:
+ }
+ 
+ pub fn open_firstrun_window(app: &AppHandle) {
+-    open_window_when_ready(
+-        app,
+-        "firstrun",
+-        "firstrun.html",
+-        "رفّ",
+-        (460.0, 520.0),
+-    );
++    open_window_when_ready(app, "firstrun", "firstrun.html", "رفّ", (460.0, 520.0));
+ }
+ 
+ /// Small, tab-less window dedicated to the update cycle (opened by the tray's
+Diff in /Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src-tauri/src/commands.rs:742:
+             let _ = w.set_focus();
+             return;
+         }
+-        open_window_when_ready(
+-            &handle,
+-            "update",
+-            "update.html",
+-            "تحديث رفّ",
+-            (360.0, 280.0),
+-        );
++        open_window_when_ready(&handle, "update", "update.html", "تحديث رفّ", (360.0, 280.0));
+     });
+ }
+ 
+Diff in /Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src-tauri/src/commands.rs:790:
+         );
+         // The distinctive word sits at character 2500 — well past the cut.
+         let mut text = "\u{0645} ".repeat(1_250);
+-        text.push_str("\u{0634}\u{0641}\u{0631}\u{0629}\u{0627}\u{0644}\u{062e}\u{0632}\u{0646}\u{0629}");
++        text.push_str(
++            "\u{0634}\u{0641}\u{0631}\u{0629}\u{0627}\u{0644}\u{062e}\u{0632}\u{0646}\u{0629}",
++        );
+         text.push_str(&"\u{0645} ".repeat(250));
+         assert!(text.chars().count() > 3_000);
+         store.capture(
+Diff in /Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src-tauri/src/commands.rs:806:
+         let id = store.history[0].id.clone();
+ 
+         assert_eq!(
+-            ids_matching(&store, "\u{0634}\u{0641}\u{0631}\u{0629}\u{0627}\u{0644}\u{062e}\u{0632}\u{0646}\u{0629}"),
++            ids_matching(
++                &store,
++                "\u{0634}\u{0641}\u{0631}\u{0629}\u{0627}\u{0644}\u{062e}\u{0632}\u{0646}\u{0629}"
++            ),
+             vec![id],
+             "the shelf is searched, not the preview"
+         );
+Diff in /Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src-tauri/src/commands.rs:842:
+             1,
+             "a query written with bare alef still finds it"
+         );
+-        assert!(
+-            ids_matching(&store, "\u{0645}\u{062f}\u{0631}\u{0633}\u{0647}").is_empty()
+-        );
++        assert!(ids_matching(&store, "\u{0645}\u{062f}\u{0631}\u{0633}\u{0647}").is_empty());
+     }
+ 
+     fn image_store(original: &[u8], thumb: Option<(&str, &[u8])>) -> (Store, String) {
+Diff in /Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src-tauri/src/diagnostics.rs:164:
+     let s = &store.settings;
+     Diagnostics {
+         schema: SCHEMA,
+-        build: if cfg!(debug_assertions) { "debug" } else { "release" },
++        build: if cfg!(debug_assertions) {
++            "debug"
++        } else {
++            "release"
++        },
+         accessibility: ax_trusted.map(|t| if t { "granted" } else { "missing" }),
+         capture: CaptureState {
+             enabled: s.capture_enabled,
+Diff in /Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src-tauri/src/diagnostics.rs:198:
+     use tauri::Manager;
+     let state = app.state::<crate::AppState>();
+     let pause = *crate::lock_pause(&state.pause);
+-    let alive = state.capture_alive.load(std::sync::atomic::Ordering::SeqCst);
++    let alive = state
++        .capture_alive
++        .load(std::sync::atomic::Ordering::SeqCst);
+     let ax = Some(crate::macos::ax_trusted());
+     let store = crate::lock_store(&state.store);
+-    from_parts(&store, alive, pause, ax, recent(), started_at().elapsed().as_secs())
++    from_parts(
++        &store,
++        alive,
++        pause,
++        ax,
++        recent(),
++        started_at().elapsed().as_secs(),
++    )
+ }
+ 
+ #[cfg(test)]
+Diff in /Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src-tauri/src/diagnostics.rs:224:
+ 
+     #[test]
+     fn the_field_list_is_closed() {
+-        let d = from_parts(&store_with_content(), true, Pause::Off, Some(true), vec![], 7);
++        let d = from_parts(
++            &store_with_content(),
++            true,
++            Pause::Off,
++            Some(true),
++            vec![],
++            7,
++        );
+         let json = serde_json::to_value(&d).unwrap();
+         assert_eq!(
+             keys(&json),
+Diff in /Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src-tauri/src/diagnostics.rs:231:
+-            ["accessibility", "build", "capture", "counts", "recent", "schema", "settings", "storage", "uptimeS"]
++            [
++                "accessibility",
++                "build",
++                "capture",
++                "counts",
++                "recent",
++                "schema",
++                "settings",
++                "storage",
++                "uptimeS"
++            ]
+         );
+         assert_eq!(keys(&json["capture"]), ["alive", "enabled", "paused"]);
+         assert_eq!(
+Diff in /Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src-tauri/src/diagnostics.rs:250:
+ 
+     #[test]
+     fn an_outcome_carries_codes_and_times_only() {
+-        let o = serde_json::to_value(Outcome { op: "paste", result: "ok", ms: 120, ago_s: 4 }).unwrap();
++        let o = serde_json::to_value(Outcome {
++            op: "paste",
++            result: "ok",
++            ms: 120,
++            ago_s: 4,
++        })
++        .unwrap();
+         assert_eq!(keys(&o), ["agoS", "ms", "op", "result"]);
+     }
+ 
+Diff in /Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src-tauri/src/diagnostics.rs:277:
+         assert_eq!(store.history.len(), 1, "the fixture really holds content");
+         let d = from_parts(&store, true, Pause::Until(None), Some(false), recent(), 3);
+         let text = serde_json::to_string(&d).unwrap();
+-        for forbidden in ["SECRET-CLIP", "كلمة", "SecretApp", "com.example", "secret-vault", "ctrl+alt+k", "/"] {
+-            assert!(!text.contains(forbidden), "diagnostics must not contain {forbidden:?}: {text}");
++        for forbidden in [
++            "SECRET-CLIP",
++            "كلمة",
++            "SecretApp",
++            "com.example",
++            "secret-vault",
++            "ctrl+alt+k",
++            "/",
++        ] {
++            assert!(
++                !text.contains(forbidden),
++                "diagnostics must not contain {forbidden:?}: {text}"
++            );
+         }
+-        assert!(text.contains("\"excludedCount\":1"), "the exclusions are a count");
++        assert!(
++            text.contains("\"excludedCount\":1"),
++            "the exclusions are a count"
++        );
+         assert!(text.contains("\"hotkeyIsDefault\":false"));
+         assert!(text.contains("\"paused\":\"untilRestart\""));
+     }
+Diff in /Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src-tauri/src/macos.rs:276:
+     let cutoff = now.checked_sub(ACTIVATION_KEEP).unwrap_or(now);
+     // Keep the newest activation at or before the cutoff: it is the one still
+     // in force, and dropping it would lose the answer for older windows.
+-    let keep_from = log
+-        .iter()
+-        .rposition(|a| a.at <= cutoff)
+-        .unwrap_or(0);
++    let keep_from = log.iter().rposition(|a| a.at <= cutoff).unwrap_or(0);
+     log.drain(..keep_from);
+     log.push(Activation { at: now, app });
+ }
+Diff in /Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src-tauri/src/macos.rs:654:
+             "org.nspasteboard.AutoGeneratedType",
+             "org.nspasteboard.TransientType",
+         ] {
+-            assert!(CONCEALED_TYPES.contains(&marker), "{marker} must be skipped");
++            assert!(
++                CONCEALED_TYPES.contains(&marker),
++                "{marker} must be skipped"
++            );
+         }
+     }
+ }
+Diff in /Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src-tauri/src/main.rs:92:
+     pub fn view(&self) -> PauseView {
+         match *self {
+             Pause::Off => PauseView::default(),
+-            Pause::SkipNext => PauseView { kind: "skipNext", ..PauseView::default() },
+-            Pause::Until(None) => PauseView { kind: "untilRestart", ..PauseView::default() },
++            Pause::SkipNext => PauseView {
++                kind: "skipNext",
++                ..PauseView::default()
++            },
++            Pause::Until(None) => PauseView {
++                kind: "untilRestart",
++                ..PauseView::default()
++            },
+             Pause::Until(Some(until)) => {
+                 let left = until.saturating_duration_since(Instant::now());
+                 if left.is_zero() {
+Diff in /Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src-tauri/src/main.rs:100:
+                     return PauseView::default();
+                 }
+-                PauseView { kind: "timed", minutes_left: Some(left.as_secs().div_ceil(60).max(1)) }
++                PauseView {
++                    kind: "timed",
++                    minutes_left: Some(left.as_secs().div_ceil(60).max(1)),
++                }
+             }
+         }
+     }
+Diff in /Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src-tauri/src/main.rs:117:
+ 
+ impl Default for PauseView {
+     fn default() -> Self {
+-        Self { kind: "off", minutes_left: None }
++        Self {
++            kind: "off",
++            minutes_left: None,
++        }
+     }
+ }
+ 
+Diff in /Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src-tauri/src/main.rs:360:
+     fn skip_next_spends_itself_on_exactly_one_change() {
+         let mut pause = Pause::SkipNext;
+         assert!(pause.consume(), "the copy the user is worried about");
+-        assert!(!pause.consume(), "and the one after it is captured normally");
++        assert!(
++            !pause.consume(),
++            "and the one after it is captured normally"
++        );
+         assert_eq!(pause, Pause::Off);
+     }
+ 
+Diff in /Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src-tauri/src/monitor.rs:1:
+ //! Clipboard capture: a background thread polls the pasteboard change count
+ //! every ~350ms (the standard macOS approach — there is no push notification).
+ 
+-use std::sync::atomic::Ordering;
+ use std::ops::ControlFlow;
++use std::sync::atomic::Ordering;
+ use std::sync::Mutex;
+ use std::time::{Duration, Instant};
+ 
+Diff in /Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src-tauri/src/monitor.rs:195:
+         before,
+         after,
+         clip,
+-        source: macos::front_at(&activations, detected_at, SOURCE_WINDOW)
+-            .unwrap_or(front_now),
++        source: macos::front_at(&activations, detected_at, SOURCE_WINDOW).unwrap_or(front_now),
+     };
+     if capture_reading(&state.store, reading) {
+         let _ = app.emit("raff://changed", ());
+Diff in /Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src-tauri/src/monitor.rs:268:
+         // row whose file had vanished swallow the re-copy as a duplicate, so
+         // no replacement was ever written and the row stayed broken for good —
+         // while copying it back out failed with «العنصر غير موجود».
+-        let dup = store
+-            .pinned
+-            .iter()
+-            .chain(store.history.iter())
+-            .any(|i| {
+-                i.kind == ItemKind::Image
+-                    && i.hash.as_deref() == Some(hash.as_str())
+-                    && i.image_file
+-                        .as_ref()
+-                        .is_some_and(|file| dir.join(file).exists())
+-            });
++        let dup = store.pinned.iter().chain(store.history.iter()).any(|i| {
++            i.kind == ItemKind::Image
++                && i.hash.as_deref() == Some(hash.as_str())
++                && i.image_file
++                    .as_ref()
++                    .is_some_and(|file| dir.join(file).exists())
++        });
+ 
+         let (image_file, thumb_file) = if dup {
+             (None, None)
+Diff in /Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src-tauri/src/monitor.rs:394:
+             std::ops::ControlFlow::Continue(())
+         });
+ 
+-        assert_eq!(outcome, Supervision::Finished, "the loop was not given up on");
++        assert_eq!(
++            outcome,
++            Supervision::Finished,
++            "the loop was not given up on"
++        );
+         assert_eq!(turns, 5, "polling carried on across the panic");
+     }
+ 
+Diff in /Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src-tauri/src/monitor.rs:494:
+         assert!(capture_reading(&store, image_reading(png)));
+ 
+         let guard = store.lock().unwrap();
+-        assert_eq!(guard.history.len(), 1, "it is still one row, not a duplicate");
++        assert_eq!(
++            guard.history.len(),
++            1,
++            "it is still one row, not a duplicate"
++        );
+         let healed = guard.history[0].image_file.clone().unwrap();
+         assert!(
+             images.join(&healed).exists(),
+Diff in /Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src-tauri/src/report.rs:133:
+     /// 201, or 200 for a replayed key.
+     Sent { id: u64 },
+     /// 400 / 413 / 415 — sending again would not change the answer.
+-    Rejected { code: u16, error: Option<String>, field: Option<String> },
++    Rejected {
++        code: u16,
++        error: Option<String>,
++        field: Option<String>,
++    },
+     /// 429 — try again after `retry_after_s`.
+     #[serde(rename_all = "camelCase")]
+     RateLimited { retry_after_s: u64 },
+Diff in /Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src-tauri/src/report.rs:157:
+                 .output()
+                 .ok()
+                 .and_then(|o| String::from_utf8(o.stdout).ok())
+-                .map(|s| s.trim().chars().filter(|c| c.is_ascii_digit() || *c == '.').take(16).collect())
++                .map(|s| {
++                    s.trim()
++                        .chars()
++                        .filter(|c| c.is_ascii_digit() || *c == '.')
++                        .take(16)
++                        .collect()
++                })
+                 .filter(|s: &String| !s.is_empty())
+                 .unwrap_or_else(|| "unknown".into())
+         })
+Diff in /Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src-tauri/src/report.rs:185:
+     os_version: String,
+     endpoint: &str,
+ ) -> Result<Frozen, String> {
+-    let kind = KINDS.iter().copied().find(|k| *k == kind).ok_or(err::INVALID)?;
++    let kind = KINDS
++        .iter()
++        .copied()
++        .find(|k| *k == kind)
++        .ok_or(err::INVALID)?;
+     let category = match category.filter(|c| !c.is_empty()) {
+         None => None,
+-        Some(c) => Some(CATEGORIES.iter().copied().find(|k| *k == c).ok_or(err::INVALID)?),
++        Some(c) => Some(
++            CATEGORIES
++                .iter()
++                .copied()
++                .find(|k| *k == c)
++                .ok_or(err::INVALID)?,
++        ),
+     };
+     let description = description.trim().to_string();
+     let length = description.chars().count();
+Diff in /Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src-tauri/src/report.rs:313:
+         },
+         400 | 413 | 415 => SendOutcome::Rejected {
+             code,
+-            error: json.get("error").and_then(|v| v.as_str()).map(|s| s.chars().take(64).collect()),
+-            field: json.get("field").and_then(|v| v.as_str()).map(|s| s.chars().take(64).collect()),
++            error: json
++                .get("error")
++                .and_then(|v| v.as_str())
++                .map(|s| s.chars().take(64).collect()),
++            field: json
++                .get("field")
++                .and_then(|v| v.as_str())
++                .map(|s| s.chars().take(64).collect()),
+         },
+-        429 => SendOutcome::RateLimited { retry_after_s: retry_after },
++        429 => SendOutcome::RateLimited {
++            retry_after_s: retry_after,
++        },
+         _ => SendOutcome::Failed { reason: "server" },
+     }
+ }
+Diff in /Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src-tauri/src/report.rs:388:
+     let (body, key, blocked, epoch) = {
+         let session = lock();
+         let frozen = session.frozen.as_ref().ok_or(err::NOT_PREPARED)?;
+-        (frozen.body.clone(), frozen.key.clone(), session.blocked_until, session.epoch)
++        (
++            frozen.body.clone(),
++            frozen.key.clone(),
++            session.blocked_until,
++            session.epoch,
++        )
+     };
+     if let Some(until) = blocked {
+         let left = until.saturating_duration_since(Instant::now()).as_secs();
+Diff in /Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src-tauri/src/report.rs:395:
+         if left > 0 {
+-            return Ok(SendOutcome::RateLimited { retry_after_s: left });
++            return Ok(SendOutcome::RateLimited {
++                retry_after_s: left,
++            });
+         }
+     }
+     let began = Instant::now();
+Diff in /Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src-tauri/src/report.rs:417:
+         // A rate limit is the server's answer about this Mac, whatever window
+         // is open now.
+         SendOutcome::RateLimited { retry_after_s } => {
+-            session.blocked_until =
+-                Instant::now().checked_add(Duration::from_secs(*retry_after_s));
++            session.blocked_until = Instant::now().checked_add(Duration::from_secs(*retry_after_s));
+         }
+         _ => {}
+     }
+Diff in /Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src-tauri/src/report.rs:438:
+ 
+ /// «نسخ الرقم» — `#id`, through the same skipped write.
+ #[tauri::command]
+-pub fn report_copy_number(app: AppHandle, window: tauri::WebviewWindow, id: u64) -> Result<(), String> {
++pub fn report_copy_number(
++    app: AppHandle,
++    window: tauri::WebviewWindow,
++    id: u64,
++) -> Result<(), String> {
+     require_window(&window, &["report"])?;
+     write_clipboard(&app, &format!("#{id}"))
+ }
+Diff in /Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src-tauri/src/report.rs:498:
+ fn read_capped(path: &std::path::Path) -> Result<Vec<u8>, report_image::ImageError> {
+     use std::io::Read;
+     let file = std::fs::File::open(path).map_err(|_| report_image::ImageError::Unreadable)?;
+-    let meta = file.metadata().map_err(|_| report_image::ImageError::Unreadable)?;
++    let meta = file
++        .metadata()
++        .map_err(|_| report_image::ImageError::Unreadable)?;
+     if !meta.is_file() {
+         return Err(report_image::ImageError::Unreadable);
+     }
+Diff in /Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src-tauri/src/report.rs:525:
+         .ok()
+         .flatten();
+     let Some(path) = path else { return Ok(None) };
+-    let bytes = tauri::async_runtime::spawn_blocking(move || read_capped(std::path::Path::new(&path)))
+-        .await
+-        .map_err(|_| report_image::ImageError::Unreadable.code().to_string())?
+-        .map_err(|e| e.code().to_string())?;
++    let bytes =
++        tauri::async_runtime::spawn_blocking(move || read_capped(std::path::Path::new(&path)))
++            .await
++            .map_err(|_| report_image::ImageError::Unreadable.code().to_string())?
++            .map_err(|e| e.code().to_string())?;
+     prepare_off_main(bytes, false).await.map(Some)
+ }
+ 
+Diff in /Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src-tauri/src/report.rs:578:
+     fn diag() -> Diagnostics {
+         let dir = std::env::temp_dir().join(format!("raff-report-test-{}", uuid::Uuid::new_v4()));
+         let store = crate::storage::Store::load(dir.clone());
+-        let diagnostics = diagnostics::from_parts(&store, true, crate::Pause::Off, Some(true), vec![], 1);
++        let diagnostics =
++            diagnostics::from_parts(&store, true, crate::Pause::Off, Some(true), vec![], 1);
+         let _ = std::fs::remove_dir_all(dir);
+         diagnostics
+     }
+Diff in /Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src-tauri/src/report.rs:585:
+ 
+     fn frozen(description: &str, image: Option<&Prepared>) -> Frozen {
+-        freeze("bug", Some("hotkey"), description, diag(), image, "5.1.0".into(), "15.4".into(), ENDPOINT)
+-            .expect("valid")
++        freeze(
++            "bug",
++            Some("hotkey"),
++            description,
++            diag(),
++            image,
++            "5.1.0".into(),
++            "15.4".into(),
++            ENDPOINT,
++        )
++        .expect("valid")
+     }
+ 
+     struct Seen {
+Diff in /Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src-tauri/src/report.rs:596:
+     /// A one-shot local HTTP server: answers with `status`, `extra` headers
+     /// and `body`, and reports what it received. `respond: false` accepts and
+     /// never answers (a timeout).
+-    fn server(status: &str, extra: &str, body: &str, respond: bool) -> (String, mpsc::Receiver<Seen>) {
++    fn server(
++        status: &str,
++        extra: &str,
++        body: &str,
++        respond: bool,
++    ) -> (String, mpsc::Receiver<Seen>) {
+         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+         let url = format!("http://{}/v1/reports", listener.local_addr().unwrap());
+         let (tx, rx) = mpsc::channel();
+Diff in /Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src-tauri/src/report.rs:609:
+                 let n = stream.read(&mut chunk).unwrap();
+                 buf.extend_from_slice(&chunk[..n]);
+                 if let Some(i) = buf.windows(4).position(|w| w == b"\r\n\r\n") {
+-                    break (String::from_utf8_lossy(&buf[..i]).to_string(), buf[i + 4..].to_vec());
++                    break (
++                        String::from_utf8_lossy(&buf[..i]).to_string(),
++                        buf[i + 4..].to_vec(),
++                    );
+                 }
+             };
+             let length: usize = head
+Diff in /Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src-tauri/src/report.rs:616:
+                 .lines()
+-                .find_map(|l| l.to_ascii_lowercase().strip_prefix("content-length:").map(|v| v.trim().parse().unwrap()))
++                .find_map(|l| {
++                    l.to_ascii_lowercase()
++                        .strip_prefix("content-length:")
++                        .map(|v| v.trim().parse().unwrap())
++                })
+                 .unwrap_or(0);
+             while rest.len() < length {
+                 let n = stream.read(&mut chunk).unwrap();
+Diff in /Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src-tauri/src/report.rs:621:
+                 rest.extend_from_slice(&chunk[..n]);
+             }
+-            let _ = tx.send(Seen { head, body: String::from_utf8_lossy(&rest).to_string() });
++            let _ = tx.send(Seen {
++                head,
++                body: String::from_utf8_lossy(&rest).to_string(),
++            });
+             if respond {
+                 let reply = format!(
+                     "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\n{extra}Connection: close\r\n\r\n{body}",
+Diff in /Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src-tauri/src/report.rs:644:
+         let (url, seen) = server("201 Created", "", r#"{"id":12}"#, true);
+         assert_eq!(send(&url, &f), SendOutcome::Sent { id: 12 });
+         let seen = seen.recv().unwrap();
+-        assert_eq!(seen.body, f.body, "the request body is the frozen preview, byte for byte");
++        assert_eq!(
++            seen.body, f.body,
++            "the request body is the frozen preview, byte for byte"
++        );
+         let head = seen.head.to_ascii_lowercase();
+         assert!(head.contains("content-type: application/json"));
+         assert!(head.contains(&format!("idempotency-key: {}", f.key)));
+Diff in /Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src-tauri/src/report.rs:654:
+     fn a_replayed_key_answers_200_with_the_same_number() {
+         let f = frozen("مرة ثانية بعد ضياع الرد", None);
+         let (url, seen) = server("200 OK", "", r#"{"id":12}"#, true);
+-        assert_eq!(send(&url, &f), SendOutcome::Sent { id: 12 }, "200 is a replay, not a failure");
+-        assert!(seen.recv().unwrap().head.to_ascii_lowercase().contains(&format!("idempotency-key: {}", f.key)));
++        assert_eq!(
++            send(&url, &f),
++            SendOutcome::Sent { id: 12 },
++            "200 is a replay, not a failure"
++        );
++        assert!(seen
++            .recv()
++            .unwrap()
++            .head
++            .to_ascii_lowercase()
++            .contains(&format!("idempotency-key: {}", f.key)));
+     }
+ 
+     #[test]
+Diff in /Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src-tauri/src/report.rs:662:
+     fn a_retry_after_is_capped_and_a_date_falls_back_to_the_hour() {
+         let f = frozen("كثير جدًا", None);
+-        let (url, _) = server("429 Too Many Requests", "Retry-After: 999999999999\r\n", "", true);
+-        assert_eq!(send(&url, &f), SendOutcome::RateLimited { retry_after_s: MAX_RETRY_AFTER_S });
+-        let (url, _) = server("429 Too Many Requests", "Retry-After: Wed, 21 Oct 2026 07:28:00 GMT\r\n", "", true);
+-        assert_eq!(send(&url, &f), SendOutcome::RateLimited { retry_after_s: DEFAULT_RETRY_AFTER_S });
++        let (url, _) = server(
++            "429 Too Many Requests",
++            "Retry-After: 999999999999\r\n",
++            "",
++            true,
++        );
++        assert_eq!(
++            send(&url, &f),
++            SendOutcome::RateLimited {
++                retry_after_s: MAX_RETRY_AFTER_S
++            }
++        );
++        let (url, _) = server(
++            "429 Too Many Requests",
++            "Retry-After: Wed, 21 Oct 2026 07:28:00 GMT\r\n",
++            "",
++            true,
++        );
++        assert_eq!(
++            send(&url, &f),
++            SendOutcome::RateLimited {
++                retry_after_s: DEFAULT_RETRY_AFTER_S
++            }
++        );
+     }
+ 
+     #[test]
+Diff in /Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src-tauri/src/report.rs:675:
+         let (url, _) = server("307 Temporary Redirect", &location, "", true);
+         assert_eq!(send(&url, &f), SendOutcome::Failed { reason: "server" });
+         assert!(
+-            seen_elsewhere.recv_timeout(Duration::from_millis(300)).is_err(),
++            seen_elsewhere
++                .recv_timeout(Duration::from_millis(300))
++                .is_err(),
+             "the body never reaches the host a redirect names"
+         );
+     }
+Diff in /Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src-tauri/src/report.rs:682:
+ 
+     #[test]
+     fn a_closed_window_fences_off_late_work_but_keeps_a_rate_limit() {
+-        let image = || Prepared { mime: "image/png", bytes: vec![1], width: 1, height: 1, thumb: String::new() };
++        let image = || Prepared {
++            mime: "image/png",
++            bytes: vec![1],
++            width: 1,
++            height: 1,
++            thumb: String::new(),
++        };
+         let before = lock().epoch;
+         lock().blocked_until = Instant::now().checked_add(Duration::from_secs(60));
+         reset();
+Diff in /Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src-tauri/src/report.rs:689:
+         {
+             let session = lock();
+-            assert_eq!(session.epoch, before.wrapping_add(1), "a reset starts a new epoch");
+-            assert!(session.blocked_until.is_some(), "the server's limit outlives the window");
++            assert_eq!(
++                session.epoch,
++                before.wrapping_add(1),
++                "a reset starts a new epoch"
++            );
++            assert!(
++                session.blocked_until.is_some(),
++                "the server's limit outlives the window"
++            );
+         }
+         store_image(before, image());
+-        assert!(lock().image.is_none(), "an image decoded for the closed window is dropped");
++        assert!(
++            lock().image.is_none(),
++            "an image decoded for the closed window is dropped"
++        );
+         store_image(before.wrapping_add(1), image());
+         assert!(lock().image.is_some(), "one for the open window is kept");
+         reset();
+Diff in /Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src-tauri/src/report.rs:709:
+     #[test]
+     fn rejections_carry_the_reason_and_are_final() {
+         for (status, body, code, error, field) in [
+-            ("400 Bad Request", r#"{"error":"invalid_field","field":"description"}"#, 400, Some("invalid_field"), Some("description")),
+-            ("400 Bad Request", r#"{"error":"unknown_product"}"#, 400, Some("unknown_product"), None),
+-            ("413 Payload Too Large", r#"{"error":"too_large"}"#, 413, Some("too_large"), None),
+-            ("415 Unsupported Media Type", r#"{"error":"unsupported_media_type"}"#, 415, Some("unsupported_media_type"), None),
++            (
++                "400 Bad Request",
++                r#"{"error":"invalid_field","field":"description"}"#,
++                400,
++                Some("invalid_field"),
++                Some("description"),
++            ),
++            (
++                "400 Bad Request",
++                r#"{"error":"unknown_product"}"#,
++                400,
++                Some("unknown_product"),
++                None,
++            ),
++            (
++                "413 Payload Too Large",
++                r#"{"error":"too_large"}"#,
++                413,
++                Some("too_large"),
++                None,
++            ),
++            (
++                "415 Unsupported Media Type",
++                r#"{"error":"unsupported_media_type"}"#,
++                415,
++                Some("unsupported_media_type"),
++                None,
++            ),
+         ] {
+             let f = frozen("مرفوض", None);
+             let (url, _) = server(status, "", body, true);
+Diff in /Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src-tauri/src/report.rs:719:
+             assert_eq!(
+                 send(&url, &f),
+-                SendOutcome::Rejected { code, error: error.map(Into::into), field: field.map(Into::into) },
++                SendOutcome::Rejected {
++                    code,
++                    error: error.map(Into::into),
++                    field: field.map(Into::into)
++                },
+                 "{status}"
+             );
+         }
+Diff in /Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src-tauri/src/report.rs:727:
+     #[test]
+     fn a_rate_limit_reports_when_to_try_again() {
+         let f = frozen("كثير", None);
+-        let (url, _) = server("429 Too Many Requests", "Retry-After: 120\r\n", r#"{"error":"rate_limited"}"#, true);
+-        assert_eq!(send(&url, &f), SendOutcome::RateLimited { retry_after_s: 120 });
+-        let (url, _) = server("429 Too Many Requests", "", r#"{"error":"rate_limited"}"#, true);
+-        assert_eq!(send(&url, &f), SendOutcome::RateLimited { retry_after_s: DEFAULT_RETRY_AFTER_S });
++        let (url, _) = server(
++            "429 Too Many Requests",
++            "Retry-After: 120\r\n",
++            r#"{"error":"rate_limited"}"#,
++            true,
++        );
++        assert_eq!(
++            send(&url, &f),
++            SendOutcome::RateLimited { retry_after_s: 120 }
++        );
++        let (url, _) = server(
++            "429 Too Many Requests",
++            "",
++            r#"{"error":"rate_limited"}"#,
++            true,
++        );
++        assert_eq!(
++            send(&url, &f),
++            SendOutcome::RateLimited {
++                retry_after_s: DEFAULT_RETRY_AFTER_S
++            }
++        );
+     }
+ 
+     #[test]
+Diff in /Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src-tauri/src/report.rs:738:
+         let f = frozen("عطل", None);
+         for status in ["500 Internal Server Error", "502 Bad Gateway"] {
+             let (url, _) = server(status, "", "", true);
+-            assert_eq!(send(&url, &f), SendOutcome::Failed { reason: "server" }, "{status}");
++            assert_eq!(
++                send(&url, &f),
++                SendOutcome::Failed { reason: "server" },
++                "{status}"
++            );
+         }
+         let (url, _) = server("201 Created", "", "", false);
+         assert_eq!(send(&url, &f), SendOutcome::Failed { reason: "timeout" });
+Diff in /Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src-tauri/src/report.rs:756:
+         let _ = send(&url1, &f);
+         let (url2, seen2) = server("201 Created", "", r#"{"id":3}"#, true);
+         assert_eq!(send(&url2, &f), SendOutcome::Sent { id: 3 });
+-        let key = |s: Seen| s.head.lines().find(|l| l.to_ascii_lowercase().starts_with("idempotency-key")).unwrap().to_string();
++        let key = |s: Seen| {
++            s.head
++                .lines()
++                .find(|l| l.to_ascii_lowercase().starts_with("idempotency-key"))
++                .unwrap()
++                .to_string()
++        };
+         assert_eq!(key(seen1.recv().unwrap()), key(seen2.recv().unwrap()));
+         let g = frozen("بلاغ مختلف", None);
+         assert_ne!(f.key, g.key);
+Diff in /Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src-tauri/src/report.rs:770:
+         let mut keys: Vec<_> = v.as_object().unwrap().keys().cloned().collect();
+         keys.sort();
+         let mut expected = vec![
+-            "app_version", "arch", "category", "description", "diagnostics", "kind", "locale", "os", "os_version", "product",
++            "app_version",
++            "arch",
++            "category",
++            "description",
++            "diagnostics",
++            "kind",
++            "locale",
++            "os",
++            "os_version",
++            "product",
+         ];
+         if cfg!(debug_assertions) {
+             expected.push("test");
+Diff in /Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src-tauri/src/report.rs:780:
+         assert_eq!(v["product"], "raff");
+         assert_eq!(v["os"], "macos");
+         assert_eq!(v["locale"], "ar");
+-        assert_eq!(v.get("test").is_some(), cfg!(debug_assertions), "test: true in debug builds only");
++        assert_eq!(
++            v.get("test").is_some(),
++            cfg!(debug_assertions),
++            "test: true in debug builds only"
++        );
+     }
+ 
+     #[test]
+Diff in /Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src-tauri/src/report.rs:787:
+     fn the_window_limits_are_enforced_before_freezing() {
+         let d = || diag();
+-        let ok = |k: &str, c: Option<&str>, t: &str| freeze(k, c, t, d(), None, "5.1.0".into(), "15.4".into(), ENDPOINT).is_ok();
++        let ok = |k: &str, c: Option<&str>, t: &str| {
++            freeze(k, c, t, d(), None, "5.1.0".into(), "15.4".into(), ENDPOINT).is_ok()
++        };
+         assert!(!ok("bug", None, "   "), "an empty description");
+-        assert!(!ok("bug", None, &"ب".repeat(MAX_DESCRIPTION_CHARS + 1)), "over 1000 characters");
++        assert!(
++            !ok("bug", None, &"ب".repeat(MAX_DESCRIPTION_CHARS + 1)),
++            "over 1000 characters"
++        );
+         assert!(ok("bug", None, &"ب".repeat(MAX_DESCRIPTION_CHARS)));
+         assert!(!ok("feature", None, "وصف"), "an unknown kind");
+-        assert!(!ok("bug", Some("clipboard-content"), "وصف"), "an unknown category");
++        assert!(
++            !ok("bug", Some("clipboard-content"), "وصف"),
++            "an unknown category"
++        );
+         assert!(ok("suggestion", None, "وصف"));
+     }
+ 
+Diff in /Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src-tauri/src/report.rs:812:
+         assert!(f.body.contains("\"data\":\""), "the body carries the image");
+         let copied = copy_text(&f.body);
+         let v: serde_json::Value = serde_json::from_str(&copied).unwrap();
+-        assert_eq!(v["attachments"][0], serde_json::json!({ "type": "image/png", "bytes": img.bytes.len() }));
++        assert_eq!(
++            v["attachments"][0],
++            serde_json::json!({ "type": "image/png", "bytes": img.bytes.len() })
++        );
+         assert!(!copied.contains("\"data\""));
+         assert!(copied.contains('\n'), "pretty-printed");
+     }
+Diff in /Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src-tauri/src/report_image.rs:95:
+     let rgba = img.to_rgba8();
+     let mut out = Vec::new();
+     PngEncoder::new(Cursor::new(&mut out))
+-        .write_image(rgba.as_raw(), rgba.width(), rgba.height(), image::ExtendedColorType::Rgba8)
++        .write_image(
++            rgba.as_raw(),
++            rgba.width(),
++            rgba.height(),
++            image::ExtendedColorType::Rgba8,
++        )
+         .ok()?;
+     Some(out)
+ }
+Diff in /Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src-tauri/src/report_image.rs:104:
+     let rgb = img.to_rgb8();
+     let mut out = Vec::new();
+     JpegEncoder::new_with_quality(Cursor::new(&mut out), JPEG_QUALITY)
+-        .write_image(rgb.as_raw(), rgb.width(), rgb.height(), image::ExtendedColorType::Rgb8)
++        .write_image(
++            rgb.as_raw(),
++            rgb.width(),
++            rgb.height(),
++            image::ExtendedColorType::Rgb8,
++        )
+         .ok()?;
+     Some(out)
+ }
+Diff in /Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src-tauri/src/report_image.rs:136:
+         if let Some(jpeg) = encode_jpeg(&img).filter(|b| b.len() <= MAX_OUTPUT_BYTES) {
+             return Ok(finish("image/jpeg", jpeg, &img));
+         }
+-        let (nw, nh) = ((img.width() as f32 * 0.8) as u32, (img.height() as f32 * 0.8) as u32);
++        let (nw, nh) = (
++            (img.width() as f32 * 0.8) as u32,
++            (img.height() as f32 * 0.8) as u32,
++        );
+         if nw < 64 || nh < 64 {
+             break;
+         }
+Diff in /Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src-tauri/src/report_image.rs:189:
+         for &b in bytes {
+             crc ^= u32::from(b);
+             for _ in 0..8 {
+-                crc = if crc & 1 != 0 { (crc >> 1) ^ 0xEDB8_8320 } else { crc >> 1 };
++                crc = if crc & 1 != 0 {
++                    (crc >> 1) ^ 0xEDB8_8320
++                } else {
++                    crc >> 1
++                };
+             }
+         }
+         !crc
+Diff in /Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src-tauri/src/report_image.rs:197:
+ 
+     #[test]
+     fn the_format_is_read_from_the_signature_only() {
+-        assert_eq!(sniff(b"\x89PNG\r\n\x1a\nrest", false), Some(ImageFormat::Png));
+-        assert_eq!(sniff(&[0xFF, 0xD8, 0xFF, 0xE0], false), Some(ImageFormat::Jpeg));
++        assert_eq!(
++            sniff(b"\x89PNG\r\n\x1a\nrest", false),
++            Some(ImageFormat::Png)
++        );
++        assert_eq!(
++            sniff(&[0xFF, 0xD8, 0xFF, 0xE0], false),
++            Some(ImageFormat::Jpeg)
++        );
+         assert_eq!(sniff(b"GIF89a", false), None);
+-        assert_eq!(sniff(b"II*\0", false), None, "TIFF only from the pasteboard");
++        assert_eq!(
++            sniff(b"II*\0", false),
++            None,
++            "TIFF only from the pasteboard"
++        );
+         assert_eq!(sniff(b"II*\0", true), Some(ImageFormat::Tiff));
+-        assert_eq!(prepare(b"<svg/>", false).err(), Some(ImageError::Unsupported));
++        assert_eq!(
++            prepare(b"<svg/>", false).err(),
++            Some(ImageError::Unsupported)
++        );
+     }
+ 
+     #[test]
+Diff in /Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src-tauri/src/report_image.rs:212:
+         assert!(window(&input), "the fixture carries a text chunk");
+         let out = prepare(&input, false).expect("prepares");
+         assert!(!window(&out.bytes), "no text chunk survives");
+-        assert!(!out.bytes.windows(7).any(|w| w == b"private"), "nor the file name it held");
++        assert!(
++            !out.bytes.windows(7).any(|w| w == b"private"),
++            "nor the file name it held"
++        );
+         assert_eq!((out.mime, out.width, out.height), ("image/png", 32, 24));
+         assert!(out.thumb.starts_with("data:image/png;base64,"));
+     }
+Diff in /Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src-tauri/src/storage.rs:159:
+     /// whatever fell off the end.
+     Added,
+     /// The pinned row at `index` was overwritten; here it is as it was.
+-    PinnedBumped { index: usize, previous: Box<ClipItem> },
++    PinnedBumped {
++        index: usize,
++        previous: Box<ClipItem>,
++    },
+     /// The history row at `index` was moved to the head and overwritten.
+-    HistoryBumped { index: usize, previous: Box<ClipItem> },
++    HistoryBumped {
++        index: usize,
++        previous: Box<ClipItem>,
++    },
+ }
+ 
+ #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
+Diff in /Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src-tauri/src/storage.rs:306:
+             }
+             // Tashkeel and the superscript alef carry no search meaning...
+             '\u{064B}'..='\u{065F}' | '\u{0670}' => {}
+-            '\u{0640}' => {}                       // ...nor does tatweel
++            '\u{0640}' => {} // ...nor does tatweel
+             '\u{0623}' | '\u{0625}' | '\u{0622}' => out.push('\u{0627}'),
+             '\u{0649}' => out.push('\u{064A}'),
+             _ => out.extend(ch.to_lowercase()),
+Diff in /Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src-tauri/src/storage.rs:545:
+ /// so two captures can be in flight at once. The ticket each carries lets the
+ /// writer refuse to lay an older layer over a newer one.
+ fn write_gate() -> &'static std::sync::Mutex<std::collections::HashMap<PathBuf, u64>> {
+-    static GATE: std::sync::OnceLock<
+-        std::sync::Mutex<std::collections::HashMap<PathBuf, u64>>,
+-    > = std::sync::OnceLock::new();
++    static GATE: std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<PathBuf, u64>>> =
++        std::sync::OnceLock::new();
+     GATE.get_or_init(Default::default)
+ }
+ 
+Diff in /Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src-tauri/src/storage.rs:1707:
+         };
+         fs::write(
+             dir.join(HISTORY_FILE),
+-            format!("[{},{}]", row("nine-days", 9, "old"), row("two-days", 2, "kept")),
++            format!(
++                "[{},{}]",
++                row("nine-days", 9, "old"),
++                row("two-days", 2, "kept")
++            ),
+         )
+         .unwrap();
+         fs::write(
+Diff in /Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src-tauri/src/storage.rs:1729:
+         let store = Store::load(dir.clone());
+ 
+         assert_eq!(
+-            store.history.iter().map(|i| i.id.as_str()).collect::<Vec<_>>(),
++            store
++                .history
++                .iter()
++                .map(|i| i.id.as_str())
++                .collect::<Vec<_>>(),
+             vec!["two-days"],
+             "past the window goes, inside it stays"
+         );
+Diff in /Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src-tauri/src/storage.rs:1736:
+-        assert!(!images.join("old.png").exists(), "and its image goes with it");
++        assert!(
++            !images.join("old.png").exists(),
++            "and its image goes with it"
++        );
+         assert!(!images.join("old.thumb.png").exists());
+         assert_eq!(store.pinned.len(), 1, "a pinned item is outside the policy");
+ 
+Diff in /Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src-tauri/src/storage.rs:1811:
+         let before = pinned_ids_in_order(&s);
+ 
+         for wrong in [
+-            vec![first.clone()],                                  // one short
+-            vec![first.clone(), second.clone(), first.clone()],   // one too many
+-            vec![first.clone(), first.clone()],                   // right length, repeated
+-            vec![first.clone(), "\u{063a}\u{0631}\u{064a}\u{0628}".to_string()], // a stranger
++            vec![first.clone()],                                // one short
++            vec![first.clone(), second.clone(), first.clone()], // one too many
++            vec![first.clone(), first.clone()],                 // right length, repeated
++            vec![
++                first.clone(),
++                "\u{063a}\u{0631}\u{064a}\u{0628}".to_string(),
++            ], // a stranger
+         ] {
+             assert!(
+                 s.reorder_pinned_persisted(&wrong).is_err(),
+Diff in /Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src-tauri/src/storage.rs:2251:
+         assert!(persist_capture(&store, capture).is_err());
+ 
+         let s = crate::lock_store(&store);
+-        assert_eq!(s.history.len(), before_len, "the row it pushed off came back");
++        assert_eq!(
++            s.history.len(),
++            before_len,
++            "the row it pushed off came back"
++        );
+         assert_eq!(s.history[0].id, before_head, "the new row is gone");
+         assert_eq!(
+             s.history[before_len - 1].id,
+Diff in /Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src-tauri/src/storage.rs:2294:
+         // fingerprint already on disk has just stopped matching.
+         assert_eq!(content_hash(b""), "f1:cbf29ce484222325");
+         assert_eq!(content_hash(b"raff"), "f1:6dcf031fd20381b8");
+-        assert_eq!(content_hash(&[0x89, b'P', b'N', b'G']), "f1:09935de427cea543");
++        assert_eq!(
++            content_hash(&[0x89, b'P', b'N', b'G']),
++            "f1:09935de427cea543"
++        );
+     }
+ 
+     #[test]
+Diff in /Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src-tauri/src/storage.rs:2378:
+     fn prose_that_merely_contains_a_link_stays_text() {
+         for text in [
+             "\u{0627}\u{0641}\u{062a}\u{062d} https://example.com \u{0627}\u{0644}\u{0622}\u{0646}", // prose around a URL
+-            "example",                 // a word, not a domain
+-            "3.5",                     // a number
+-            "file.txt",                // a filename, not a host
+-            "\u{0645}\u{0644}\u{0641}.\u{0646}\u{0635}",  // ...in Arabic too
+-            "a@b",                     // not an address, and no scheme
+-            "mailto:",                 // a scheme with nothing after it
++            "example",                                   // a word, not a domain
++            "3.5",                                       // a number
++            "file.txt",                                  // a filename, not a host
++            "\u{0645}\u{0644}\u{0641}.\u{0646}\u{0635}", // ...in Arabic too
++            "a@b",                                       // not an address, and no scheme
++            "mailto:",                                   // a scheme with nothing after it
+         ] {
+             assert_ne!(detect_kind(text), ItemKind::Link, "{text}");
+         }
+Diff in /Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src-tauri/src/tray.rs:338:
+     let skip_next = new_item("تجاهل النسخة التالية", Some(sel!(skipNextCopy:)), "");
+     let fifteen = new_item("إيقاف ١٥ دقيقة", Some(sel!(pauseFifteen:)), "");
+     let hour = new_item("إيقاف ساعة", Some(sel!(pauseHour:)), "");
+-    let until_restart = new_item("إيقاف حتى إعادة التشغيل", Some(sel!(pauseUntilRestart:)), "");
++    let until_restart = new_item(
++        "إيقاف حتى إعادة التشغيل",
++        Some(sel!(pauseUntilRestart:)),
++        "",
++    );
+     let resume = new_item("استئناف الالتقاط", Some(sel!(resumeCapture:)), "");
+     for entry in [&skip_next, &fifteen, &hour, &until_restart] {
+         capture_menu.addItem(entry);
+Diff in /Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src-tauri/src/tray.rs:367:
+     menu.addItem(&capture);
+     menu.addItem(&NSMenuItem::separatorItem(mtm));
+     menu.addItem(&new_item("الإعدادات…", Some(sel!(openSettings:)), ","));
+-    menu.addItem(&new_item("التحقق من التحديثات…", Some(sel!(checkUpdates:)), ""));
++    menu.addItem(&new_item(
++        "التحقق من التحديثات…",
++        Some(sel!(checkUpdates:)),
++        "",
++    ));
+     menu.addItem(&new_item("أبلغ عن مشكلة…", Some(sel!(openReport:)), ""));
+     menu.addItem(&new_item("عن رفّ", Some(sel!(openAbout:)), ""));
+     menu.addItem(&NSMenuItem::separatorItem(mtm));
+Diff in /Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src-tauri/src/tray.rs:457:
+     let glyph = current_glyph();
+     // The tooltip is written on state changes only, so it carries no count
+     // that would go stale; the menu header is rebuilt on every open.
+-    let pause = crate::PauseView { minutes_left: None, ..current_pause() };
++    let pause = crate::PauseView {
++        minutes_left: None,
++        ..current_pause()
++    };
+     let mut tooltip = format!("رفّ — {}", status_text(glyph, &pause));
+     if PERMISSION_MISSING.load(Ordering::SeqCst) {
+         tooltip.push_str(" · اللصق التلقائي معطّل");
+Diff in /Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src-tauri/src/tray.rs:505:
+     ] {
+         entry.setEnabled(can_pause);
+         let on = !kind.is_empty() && pause.kind == kind;
+-        entry.setState(if on { NSControlStateValueOn } else { NSControlStateValueOff });
++        entry.setState(if on {
++            NSControlStateValueOn
++        } else {
++            NSControlStateValueOff
++        });
+     }
+     items.resume.setEnabled(glyph == Glyph::Paused);
+ }
+Diff in /Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src-tauri/src/tray.rs:513:
+ fn show_menu(mtm: MainThreadMarker) {
+     NATIVE.with(|cell| {
+         let Some(native) = cell.get() else { return };
+-        let Some(button) = native.item.button(mtm) else { return };
++        let Some(button) = native.item.button(mtm) else {
++            return;
++        };
+         // Close the panel first so the menu never stacks over it.
+         if let Some(app) = APP.get() {
+             panel::hide(app);
+Diff in /Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src-tauri/src/tray.rs:522:
+         }
+         refresh_menu(&native.items);
+         let height = button.bounds().size.height;
+-        let below = if button.isFlipped() { height + 6.0 } else { -6.0 };
++        let below = if button.isFlipped() {
++            height + 6.0
++        } else {
++            -6.0
++        };
+         button.highlight(true);
+-        native
+-            .menu
+-            .popUpMenuPositioningItem_atLocation_inView(None, NSPoint::new(0.0, below), Some(&button));
++        native.menu.popUpMenuPositioningItem_atLocation_inView(
++            None,
++            NSPoint::new(0.0, below),
++            Some(&button),
++        );
+         button.highlight(false);
+     });
+ }
+Diff in /Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src-tauri/src/tray.rs:559:
+         assert_eq!(status_text(Glyph::Capturing, &none), "رفّ يحفظ ما تنسخه");
+         assert_eq!(status_text(Glyph::Off, &none), "الالتقاط معطّل من الإعدادات");
+         assert!(status_text(Glyph::Fault, &none).contains("أعد تشغيل رفّ"));
+-        let timed = crate::PauseView { kind: "timed", minutes_left: Some(12), ..Default::default() };
+-        assert_eq!(status_text(Glyph::Paused, &timed), "الالتقاط موقوف — يُستأنف بعد ١٢ د");
++        let timed = crate::PauseView {
++            kind: "timed",
++            minutes_left: Some(12),
++            ..Default::default()
++        };
++        assert_eq!(
++            status_text(Glyph::Paused, &timed),
++            "الالتقاط موقوف — يُستأنف بعد ١٢ د"
++        );
+         for glyph in [Glyph::Capturing, Glyph::Paused, Glyph::Off, Glyph::Fault] {
+             assert!(!status_text(glyph, &timed).contains("اللصق"), "{glyph:?}");
+         }
+exit=1 dur=1s cmd: cargo fmt --manifest-path src-tauri/Cargo.toml --check
