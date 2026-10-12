@@ -342,7 +342,7 @@ function setChecked(id, value) {
   el(id).setAttribute('aria-checked', String(Boolean(value)));
 }
 
-// Settings are a complete-object IPC contract. Keep mutations strictly in
+// Each save sends only the fields it changes (H6). Keep mutations strictly in
 // order so a slower earlier write can never overwrite a newer control, and
 // resolve functional patches only when their turn begins so rapid double
 // toggles are based on the last committed state rather than a stale snapshot.

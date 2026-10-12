@@ -3138,6 +3138,62 @@ mod tests {
         assert_eq!(next.hotkey, current.hotkey);
     }
 
+    /// Every field a patch can carry, each set away from its default, so a
+    /// dropped or crossed assignment in `applied_to` shows. And the list of
+    /// settings is pinned: a field added to `Settings` fails here until
+    /// `SettingsPatch` learns it too — otherwise saving it would silently do
+    /// nothing.
+    #[test]
+    fn a_patch_carries_every_setting_and_nothing_crosses() {
+        let wanted = Settings {
+            hotkey: "ctrl+alt+k".into(),
+            launch_at_login: true,
+            history_limit: 1000,
+            capture_enabled: false,
+            respect_concealed: false,
+            excluded_apps: vec!["com.bank".into()],
+            learning_enabled: false,
+            first_run_shown: true,
+            appearance: Appearance::Dark,
+            follow_system: false,
+            retention_days: 30,
+            settings_recovered: false,
+        };
+        let json = serde_json::to_value(&wanted).unwrap();
+        let mut keys: Vec<&str> = json
+            .as_object()
+            .unwrap()
+            .keys()
+            .map(String::as_str)
+            .collect();
+        keys.sort_unstable();
+        assert_eq!(
+            keys,
+            [
+                "appearance",
+                "captureEnabled",
+                "excludedApps",
+                "firstRunShown",
+                "followSystem",
+                "historyLimit",
+                "hotkey",
+                "launchAtLogin",
+                "learningEnabled",
+                "respectConcealed",
+                "retentionDays",
+            ],
+            "a new setting needs a SettingsPatch field before it can be saved"
+        );
+
+        let patch: SettingsPatch = serde_json::from_value(json).unwrap();
+        let next = patch.applied_to(&Settings::default());
+
+        assert_eq!(
+            serde_json::to_value(&next).unwrap(),
+            serde_json::to_value(&wanted).unwrap()
+        );
+    }
+
     #[test]
     fn a_complete_object_is_still_a_valid_patch_and_the_marker_is_not_the_caller_s() {
         let mut sent = Settings::default();

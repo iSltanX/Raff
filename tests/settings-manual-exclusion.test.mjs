@@ -67,7 +67,7 @@ async function mount() {
             (id) => !id || REJECTED.test(id) || id.length > 200
           );
           if (bad) return Promise.reject('قائمة التطبيقات المستثناة غير صالحة');
-          settings = structuredClone(args.settings);
+          settings = { ...settings, ...structuredClone(args.settings) };
           return Promise.resolve(null);
         }
         if (command === 'list_running_apps') return Promise.resolve([]);
