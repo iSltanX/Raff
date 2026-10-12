@@ -307,6 +307,18 @@ body {
   transition: opacity var(--t-fast) var(--ease);
 }
 
+/* The dark panel is glass: over a bright desktop it composites to about
+   #505050, the worst background these rows are read on. There --ink-3 falls to
+   3.1:1 and --accent-ink to 3.6:1; the next step up in each clears 4.5:1
+   (WCAG 1.4.3) — 5.0:1 and 4.9:1. */
+:root[data-appearance='dark'] .row-time {
+  color: var(--ink-2);
+}
+
+:root[data-appearance='dark'] .preview-title.is-link {
+  color: var(--accent-hover);
+}
+
 .preview-thumb {
   position: relative;
   width: 64px;
