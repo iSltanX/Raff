@@ -30,6 +30,11 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-apple-darwin
+          components: rustfmt
+
+      # قبل أي بناء: فرق تنسيق لا يحتاج انتظار التجميع ليظهر.
+      - name: تنسيق Rust
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
 
       - name: تثبيت الاعتماديات
         run: npm ci
