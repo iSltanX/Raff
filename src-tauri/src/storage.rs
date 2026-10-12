@@ -734,9 +734,56 @@ fn next_write_ticket() -> u64 {
 
 fn write_layer_bytes(path: &Path, bytes: &[u8]) -> Result<(), String> {
     let tmp = path.with_extension("json.tmp");
-    fs::write(&tmp, bytes)
+    let durable = is_durable_layer(path);
+    let written = if durable {
+        write_synced(&tmp, bytes)
+    } else {
+        fs::write(&tmp, bytes)
+    };
+    written
         .and_then(|_| fs::rename(&tmp, path))
-        .map_err(|err| format!("تعذّر حفظ {}: {err}", path.display()))
+        .map_err(|err| format!("تعذّر حفظ {}: {err}", path.display()))?;
+    if durable {
+        sync_parent_dir(path);
+    }
+    Ok(())
+}
+
+/// The files whose writes reach the platter before they count as done (H3):
+/// the settings, and the two journals the delete and pin transactions start
+/// with. Each is small and written only on a deliberate act, so the flush —
+/// about 7 ms on an SSD — is paid rarely. History is not among them: it is
+/// rewritten whole on every copy (tens of megabytes at the limit, ~50 ms to
+/// flush), and a power cut costs it at most the last few copies.
+fn is_durable_layer(path: &Path) -> bool {
+    matches!(
+        path.file_name().and_then(|name| name.to_str()),
+        Some(SETTINGS_FILE | PENDING_DELETE_FILE | PENDING_PIN_FILE)
+    )
+}
+
+/// Writes `bytes` to `path` and flushes them to the device. `sync_all` is
+/// `fcntl(F_FULLFSYNC)` on macOS, the only call that gets past the drive's
+/// own cache; a plain `fsync` there does not.
+fn write_synced(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    use std::io::Write;
+    let mut file = fs::File::create(path)?;
+    file.write_all(bytes)?;
+    file.sync_all()?;
+    #[cfg(test)]
+    tests::note_sync();
+    Ok(())
+}
+
+/// Makes the rename that just landed `path` durable too. Best effort: the
+/// write has already happened by now, and reporting it as failed would have
+/// the caller undo in memory a change that is on disk — a pin journal, say,
+/// replayed at the next launch after the user was told the pin failed.
+fn sync_parent_dir(path: &Path) {
+    let Some(dir) = path.parent() else { return };
+    if let Err(err) = fs::File::open(dir).and_then(|dir| dir.sync_all()) {
+        eprintln!("raff: could not flush {}: {err}", dir.display());
+    }
 }
 
 /// The newest serialization of each layer that has reached the disk.
@@ -1807,6 +1854,75 @@ impl Store {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    thread_local! {
+        static SYNCED_WRITES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    }
+
+    /// Counts flushed writes on the calling thread, so parallel tests do not
+    /// see each other's.
+    pub(super) fn note_sync() {
+        SYNCED_WRITES.with(|count| count.set(count.get() + 1));
+    }
+
+    fn synced_writes() -> usize {
+        SYNCED_WRITES.with(std::cell::Cell::get)
+    }
+
+    #[test]
+    fn the_settings_and_the_two_journals_are_the_durable_layers() {
+        for file in [SETTINGS_FILE, PENDING_DELETE_FILE, PENDING_PIN_FILE] {
+            assert!(is_durable_layer(&Path::new("/data").join(file)), "{file}");
+        }
+        for file in [
+            HISTORY_FILE,
+            PINNED_FILE,
+            PANEL_PLACEMENT_FILE,
+            "history.json.corrupt",
+        ] {
+            assert!(!is_durable_layer(&Path::new("/data").join(file)), "{file}");
+        }
+    }
+
+    /// H3: what is flushed is exactly the settings and the journals — never
+    /// the history every copy rewrites.
+    #[test]
+    fn settings_and_journals_are_flushed_and_a_capture_is_not() {
+        let mut s = store();
+        let before = synced_writes();
+
+        capture_text(&mut s, "copied text");
+        s.save_history();
+        assert_eq!(
+            synced_writes(),
+            before,
+            "a capture rewrites history without a flush"
+        );
+
+        let mut next = s.settings.clone();
+        next.retention_days = 7;
+        s.update_settings_persisted(next).unwrap();
+        assert_eq!(
+            synced_writes(),
+            before + 1,
+            "settings.json is flushed; the history beside it is not"
+        );
+
+        let id = s.history[0].id.clone();
+        s.set_pin_persisted(&id, true).unwrap();
+        assert_eq!(
+            synced_writes(),
+            before + 2,
+            "the pin journal is flushed, the layers it moves between are not"
+        );
+
+        s.delete_reversible(&id).unwrap();
+        assert_eq!(synced_writes(), before + 3, "so is the delete journal");
+
+        let reloaded = Store::load(s.dir.clone());
+        assert_eq!(reloaded.settings.retention_days, 7);
+        assert!(reloaded.find(&id).is_none());
+    }
 
     fn store() -> Store {
         let dir = std::env::temp_dir().join(format!("raff-test-{}", uuid::Uuid::new_v4()));

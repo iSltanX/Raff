@@ -510,7 +510,13 @@ mod tests {
             ("updater.rs", include_str!("updater.rs")),
         ];
         for (name, source) in modules {
-            let production = source.split("#[cfg(test)]").next().unwrap();
+            // Up to the first test module — not the first `#[cfg(test)]`, which
+            // may be a one-line test hook inside production code.
+            let production = source.split("\n#[cfg(test)]\nmod ").next().unwrap();
+            assert!(
+                production.len() < source.len(),
+                "{name} has a test module to stop at"
+            );
             let compact: String = production.chars().filter(|c| !c.is_whitespace()).collect();
             for raw in [".lock().unwrap()", ".lock().expect("] {
                 assert!(
