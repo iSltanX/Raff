@@ -444,7 +444,8 @@ pub fn detect_kind(text: &str) -> ItemKind {
     }
 }
 
-/// Image filenames named by a set-aside `*.json.corrupt` copy.
+/// Image filenames named by any set-aside copy — the newest `*.json.corrupt`
+/// and every stamped `*.json.<ms>.corrupt` before it.
 ///
 /// Such a copy exists precisely because it did not parse, so it is read
 /// leniently: every `"imageFile"` / `"thumbFile"` value that can still be
@@ -497,16 +498,97 @@ fn load_json_with_status<T: serde::de::DeserializeOwned + Default>(path: &Path) 
         Ok(v) => (v, true),
         Err(err) => {
             // Never destroy user data silently: keep the unreadable file aside.
-            let corrupt = path.with_extension("json.corrupt");
-            let _ = fs::copy(path, &corrupt);
-            eprintln!(
-                "raff: unreadable {} ({err}); copied to {}",
-                path.display(),
-                corrupt.display()
-            );
+            match set_aside(path) {
+                Ok(copy) => eprintln!(
+                    "raff: unreadable {} ({err}); copied to {}",
+                    path.display(),
+                    copy.display()
+                ),
+                Err(copy_err) => eprintln!(
+                    "raff: unreadable {} ({err}); could not copy it aside: {copy_err}",
+                    path.display()
+                ),
+            }
             (T::default(), false)
         }
     }
+}
+
+/// Set-aside copies kept per layer, the newest included.
+///
+/// Every copy keeps the images it names alive (`referenced_by_recovery_copies`),
+/// and a history copy can weigh as much as the layer's whole byte budget, so
+/// "all of them, forever" is not an option. Five distinct unreadable versions
+/// of one file is already far past anything but a disk that is failing.
+const MAX_RECOVERY_COPIES: usize = 5;
+
+/// Copies an unreadable layer aside without ever replacing an earlier copy.
+///
+/// The newest copy is `<file>.corrupt`, where it always was. An earlier one is
+/// first moved to `<file>.<ms>.corrupt`, stamped with the time it was set
+/// aside. Bytes already kept are not copied again: a layer that stays
+/// unreadable is met at every launch, and each launch would otherwise push a
+/// genuinely different copy out of the cap. Past the cap, the oldest go.
+fn set_aside(path: &Path) -> std::io::Result<PathBuf> {
+    let bytes = fs::read(path)?;
+    let newest = path.with_extension("json.corrupt");
+    let copies = recovery_copies(path);
+    if let Some((_, same)) = copies
+        .iter()
+        .find(|(_, copy)| fs::read(copy).is_ok_and(|kept| kept == bytes))
+    {
+        return Ok(same.clone());
+    }
+    if newest.exists() {
+        let mut stamp = fs::metadata(&newest)
+            .and_then(|meta| meta.modified())
+            .ok()
+            .and_then(|at| at.duration_since(std::time::UNIX_EPOCH).ok())
+            .map_or_else(now_ms, |since| since.as_millis() as u64);
+        let mut archived = path.with_extension(format!("json.{stamp}.corrupt"));
+        while archived.exists() {
+            stamp += 1;
+            archived = path.with_extension(format!("json.{stamp}.corrupt"));
+        }
+        fs::rename(&newest, &archived)?;
+    }
+    fs::write(&newest, &bytes)?;
+
+    let mut stamped: Vec<(u64, PathBuf)> = recovery_copies(path)
+        .into_iter()
+        .filter_map(|(stamp, copy)| stamp.map(|stamp| (stamp, copy)))
+        .collect();
+    stamped.sort();
+    let excess = (stamped.len() + 1).saturating_sub(MAX_RECOVERY_COPIES);
+    for (_, oldest) in stamped.into_iter().take(excess) {
+        let _ = fs::remove_file(oldest);
+    }
+    Ok(newest)
+}
+
+/// Every set-aside copy of the layer at `path`, with its stamp; the newest,
+/// unstamped `<file>.corrupt` comes back with `None`.
+fn recovery_copies(path: &Path) -> Vec<(Option<u64>, PathBuf)> {
+    let (Some(dir), Some(name)) = (path.parent(), path.file_name().and_then(|n| n.to_str()))
+    else {
+        return Vec::new();
+    };
+    let Ok(entries) = fs::read_dir(dir) else {
+        return Vec::new();
+    };
+    let prefix = format!("{name}.");
+    entries
+        .flatten()
+        .filter_map(|entry| {
+            let file = entry.file_name().to_str()?.to_owned();
+            let middle = file.strip_prefix(&prefix)?.strip_suffix("corrupt")?;
+            let stamp = match middle {
+                "" => None,
+                stamped => Some(stamped.strip_suffix('.')?.parse::<u64>().ok()?),
+            };
+            Some((stamp, entry.path()))
+        })
+        .collect()
 }
 
 fn load_json<T: serde::de::DeserializeOwned + Default>(path: &Path) -> T {
@@ -2333,6 +2415,85 @@ mod tests {
         );
     }
 
+    fn set_aside_contents(dir: &Path) -> Vec<Vec<u8>> {
+        let mut kept: Vec<Vec<u8>> = recovery_copies(&dir.join(HISTORY_FILE))
+            .into_iter()
+            .map(|(_, copy)| fs::read(copy).unwrap())
+            .collect();
+        kept.sort();
+        kept
+    }
+
+    #[test]
+    fn a_second_unreadable_history_does_not_replace_the_first_copy() {
+        let dir = std::env::temp_dir().join(format!("raff-test-{}", uuid::Uuid::new_v4()));
+        let images = dir.join(IMAGES_DIR);
+        fs::create_dir_all(&images).unwrap();
+        for name in ["first.png", "second.png", "orphan.png"] {
+            fs::write(images.join(name), name).unwrap();
+        }
+
+        fs::write(dir.join(HISTORY_FILE), r#"[{"type":"image","imageFile":"first.png""#).unwrap();
+        Store::load(dir.clone());
+        fs::write(dir.join(HISTORY_FILE), r#"[{"type":"image","imageFile":"second.png""#).unwrap();
+        Store::load(dir.clone());
+
+        assert_eq!(
+            set_aside_contents(&dir),
+            [
+                br#"[{"type":"image","imageFile":"first.png""#.to_vec(),
+                br#"[{"type":"image","imageFile":"second.png""#.to_vec(),
+            ],
+            "both versions are kept"
+        );
+        assert_eq!(
+            fs::read(dir.join("history.json.corrupt")).unwrap(),
+            br#"[{"type":"image","imageFile":"second.png""#,
+            "the newest stays where it always was"
+        );
+
+        // History heals; from here on collection runs, and has to count every
+        // copy, not only the newest.
+        fs::write(dir.join(HISTORY_FILE), "[]").unwrap();
+        Store::load(dir.clone());
+        assert!(images.join("first.png").exists(), "named only by the earlier copy");
+        assert!(images.join("second.png").exists(), "named only by the newest copy");
+        assert!(!images.join("orphan.png").exists(), "and collection did run");
+    }
+
+    #[test]
+    fn a_layer_that_stays_unreadable_is_set_aside_once() {
+        let dir = std::env::temp_dir().join(format!("raff-test-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join(HISTORY_FILE), "{still not json").unwrap();
+
+        for _ in 0..3 {
+            Store::load(dir.clone());
+        }
+
+        assert_eq!(set_aside_contents(&dir), [b"{still not json".to_vec()]);
+    }
+
+    #[test]
+    fn set_aside_copies_are_capped_and_the_oldest_go_first() {
+        let dir = std::env::temp_dir().join(format!("raff-test-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&dir).unwrap();
+
+        for version in 0..MAX_RECOVERY_COPIES + 2 {
+            fs::write(dir.join(HISTORY_FILE), format!("{{broken {version}")).unwrap();
+            Store::load(dir.clone());
+        }
+
+        let kept = set_aside_contents(&dir);
+        assert_eq!(kept.len(), MAX_RECOVERY_COPIES);
+        assert!(!kept.contains(&b"{broken 0".to_vec()), "the oldest went first");
+        assert!(!kept.contains(&b"{broken 1".to_vec()));
+        assert_eq!(
+            fs::read(dir.join("history.json.corrupt")).unwrap(),
+            format!("{{broken {}", MAX_RECOVERY_COPIES + 1).into_bytes()
+        );
+    }
+
     #[test]
     fn a_failed_capture_write_restores_the_model_from_its_undo_record() {
         // 1000 is the highest limit `validate_settings` allows, and the size
@@ -2864,15 +3025,6 @@ mod audit_tests {
     }
 
     #[test]
-    fn aud003_characterization_second_corruption_overwrites_first_recovery_copy() {
-        let dir = tmp_dir("aud003c");
-        two_successive_corruptions(&dir);
-        assert_eq!(fs::read(dir.join("history.json.corrupt")).unwrap(), b"SECOND-CORRUPTION");
-        let _ = fs::remove_dir_all(dir);
-    }
-
-    #[test]
-    #[ignore = "RAFF-AUD-003: اسم .json.corrupt ثابت فتُستبدل نسخة الاستعادة الأولى"]
     fn aud003_every_recovery_copy_is_kept() {
         let dir = tmp_dir("aud003");
         two_successive_corruptions(&dir);
