@@ -23,16 +23,37 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # Node 20 انتهى دعمه (2026-04-30)، وعليه كان node --test --test-force-exit
+      # يُسقط من الحزمة عشرات الاختبارات بصمت ويخرج بـ0. Node 24 هو LTS الحالي.
       - uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: 24
 
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-apple-darwin
+          components: rustfmt
+
+      # قبل أي بناء: فرق تنسيق لا يحتاج انتظار التجميع ليظهر.
+      - name: تنسيق Rust
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
 
       - name: تثبيت الاعتماديات
         run: npm ci
+
+      # ثغرات ما يُشحن فقط: اعتمادات التطوير (jsdom وما يجرّه) لا تدخل الحزمة.
+      - name: ثغرات اعتمادات npm المشحونة
+        run: npm audit --omit=dev
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
+
+      # يفشل على الثغرات وحدها؛ تحذيرات unmaintained/unsound لاعتمادات Tauri
+      # العابرة تُطبع ولا توقف البوابة.
+      - name: ثغرات اعتمادات Rust
+        working-directory: src-tauri
+        run: cargo audit
 
       - name: اختبارات الواجهة
         run: npm test

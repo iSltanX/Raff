@@ -1,0 +1,1667 @@
+{
+ "generator": "audit/scripts/gen-normalize-vectors.mjs",
+ "seed": "0x5eed",
+ "vectors": [
+  {
+   "input": "",
+   "note": "فارغ",
+   "expected": "",
+   "perCharModel": "",
+   "divergence": null
+  },
+  {
+   "input": "مَرْحَبًا",
+   "note": "تشكيل",
+   "expected": "مرحبا",
+   "perCharModel": "مرحبا",
+   "divergence": null
+  },
+  {
+   "input": "مـــرحبا",
+   "note": "تطويل",
+   "expected": "مرحبا",
+   "perCharModel": "مرحبا",
+   "divergence": null
+  },
+  {
+   "input": "أحمد إبراهيم آمال",
+   "note": "أشكال الألف",
+   "expected": "احمد ابراهيم امال",
+   "perCharModel": "احمد ابراهيم امال",
+   "divergence": null
+  },
+  {
+   "input": "مصطفى على",
+   "note": "الألف المقصورة",
+   "expected": "مصطفي علي",
+   "perCharModel": "مصطفي علي",
+   "divergence": null
+  },
+  {
+   "input": "٠١٢٣٤٥٦٧٨٩",
+   "note": "أرقام عربية-هندية",
+   "expected": "0123456789",
+   "perCharModel": "0123456789",
+   "divergence": null
+  },
+  {
+   "input": "۰۱۲۳",
+   "note": "أرقام فارسية (لا تُطوى في الجانبين)",
+   "expected": "۰۱۲۳",
+   "perCharModel": "۰۱۲۳",
+   "divergence": null
+  },
+  {
+   "input": "رحمٰن",
+   "note": "ألف خنجرية U+0670",
+   "expected": "رحمن",
+   "perCharModel": "رحمن",
+   "divergence": null
+  },
+  {
+   "input": "ٖٟ",
+   "note": "أطراف نطاق التشكيل",
+   "expected": "",
+   "perCharModel": "",
+   "divergence": null
+  },
+  {
+   "input": "٪٫٬",
+   "note": "رموز بعد الأرقام (يجب أن تبقى)",
+   "expected": "٪٫٬",
+   "perCharModel": "٪٫٬",
+   "divergence": null
+  },
+  {
+   "input": "HELLO World",
+   "note": "لاتيني",
+   "expected": "hello world",
+   "perCharModel": "hello world",
+   "divergence": null
+  },
+  {
+   "input": "İstanbul",
+   "note": "İ التركية",
+   "expected": "i̇stanbul",
+   "perCharModel": "i̇stanbul",
+   "divergence": null
+  },
+  {
+   "input": "ẞ",
+   "note": "eszett كبيرة",
+   "expected": "ß",
+   "perCharModel": "ß",
+   "divergence": null
+  },
+  {
+   "input": "ΟΔΟΣ",
+   "note": "سيغما نهائية",
+   "expected": "οδος",
+   "perCharModel": "οδος",
+   "divergence": "RAFF-AUD-007"
+  },
+  {
+   "input": "ΣΑΣ",
+   "note": "سيغما نهائية مكررة",
+   "expected": "σας",
+   "perCharModel": "σας",
+   "divergence": "RAFF-AUD-007"
+  },
+  {
+   "input": "Σ",
+   "note": "سيغما منفردة",
+   "expected": "σ",
+   "perCharModel": "σ",
+   "divergence": null
+  },
+  {
+   "input": "ΑΣ Β",
+   "note": "سيغما قبل مسافة",
+   "expected": "ας β",
+   "perCharModel": "ας β",
+   "divergence": "RAFF-AUD-007"
+  },
+  {
+   "input": "‮abc",
+   "note": "RLO",
+   "expected": "‮abc",
+   "perCharModel": "‮abc",
+   "divergence": null
+  },
+  {
+   "input": "﻿نص",
+   "note": "BOM",
+   "expected": "﻿نص",
+   "perCharModel": "﻿نص",
+   "divergence": null
+  },
+  {
+   "input": "😀 إيموجي",
+   "note": "خارج BMP",
+   "expected": "😀 ايموجي",
+   "perCharModel": "😀 ايموجي",
+   "divergence": null
+  },
+  {
+   "input": "á",
+   "note": "علامة تركيبية لاتينية",
+   "expected": "á",
+   "perCharModel": "á",
+   "divergence": null
+  },
+  {
+   "input": "فح1مCًذِغİْ",
+   "note": "مولَّد #0 (seed 0x5eed)",
+   "expected": "فح1مcذغi̇",
+   "perCharModel": "فح1مcذغi̇",
+   "divergence": null
+  },
+  {
+   "input": "ُا1ث8َـ٠ظِّـىA٣x5",
+   "note": "مولَّد #1 (seed 0x5eed)",
+   "expected": "ا1ث80ظيa3x5",
+   "perCharModel": "ا1ث80ظيa3x5",
+   "divergence": null
+  },
+  {
+   "input": "ُ́٨رعٌيغمللإ٢ل٧İِ",
+   "note": "مولَّد #2 (seed 0x5eed)",
+   "expected": "́8رعيغمللا2ل7i̇",
+   "perCharModel": "́8رعيغمللا2ل7i̇",
+   "divergence": null
+  },
+  {
+   "input": "ةُ2ص",
+   "note": "مولَّد #3 (seed 0x5eed)",
+   "expected": "ة2ص",
+   "perCharModel": "ة2ص",
+   "divergence": null
+  },
+  {
+   "input": "٢7İدت́جه٩ آ7Bّ",
+   "note": "مولَّد #4 (seed 0x5eed)",
+   "expected": "27i̇دت́جه9 ا7b",
+   "perCharModel": "27i̇دت́جه9 ا7b",
+   "divergence": null
+  },
+  {
+   "input": "ءهBْحΣإًُءإ",
+   "note": "مولَّد #5 (seed 0x5eed)",
+   "expected": "ءهbحσاءا",
+   "perCharModel": "ءهbحσاءا",
+   "divergence": null
+  },
+  {
+   "input": "ـيذxغ0B0ر́0Ωغ5٢٩ضإ3طْ١",
+   "note": "مولَّد #6 (seed 0x5eed)",
+   "expected": "يذxغ0b0ر́0ωغ529ضا3ط1",
+   "perCharModel": "يذxغ0b0ر́0ωغ529ضا3ط1",
+   "divergence": null
+  },
+  {
+   "input": "١نفيخ٣ٌأBص ",
+   "note": "مولَّد #7 (seed 0x5eed)",
+   "expected": "1نفيخ3اbص ",
+   "perCharModel": "1نفيخ3اbص ",
+   "divergence": null
+  },
+  {
+   "input": "ٌ٧يةظ7ثأ́zBً0",
+   "note": "مولَّد #8 (seed 0x5eed)",
+   "expected": "7يةظ7ثا́zb0",
+   "perCharModel": "7يةظ7ثا́zb0",
+   "divergence": null
+  },
+  {
+   "input": "İ٨غٰ39غَ6Ωهظ٩َيِصء4آ",
+   "note": "مولَّد #9 (seed 0x5eed)",
+   "expected": "i̇8غ39غ6ωهظ9يصء4ا",
+   "perCharModel": "i̇8غ39غ6ωهظ9يصء4ا",
+   "divergence": null
+  },
+  {
+   "input": "ربّ2م",
+   "note": "مولَّد #10 (seed 0x5eed)",
+   "expected": "رب2م",
+   "perCharModel": "رب2م",
+   "divergence": null
+  },
+  {
+   "input": "ثُسننز87٩",
+   "note": "مولَّد #11 (seed 0x5eed)",
+   "expected": "ثسننز879",
+   "perCharModel": "ثسننز879",
+   "divergence": null
+  },
+  {
+   "input": "3́62سب١7yضضيأ",
+   "note": "مولَّد #12 (seed 0x5eed)",
+   "expected": "3́62سب17yضضيا",
+   "perCharModel": "3́62سب17yضضيا",
+   "divergence": null
+  },
+  {
+   "input": "914",
+   "note": "مولَّد #13 (seed 0x5eed)",
+   "expected": "914",
+   "perCharModel": "914",
+   "divergence": null
+  },
+  {
+   "input": "ضجقآطذعىرشه3C٠َعآحوΣ0ح١",
+   "note": "مولَّد #14 (seed 0x5eed)",
+   "expected": "ضجقاطذعيرشه3c0عاحوσ0ح1",
+   "perCharModel": "ضجقاطذعيرشه3c0عاحوσ0ح1",
+   "divergence": null
+  },
+  {
+   "input": "",
+   "note": "مولَّد #15 (seed 0x5eed)",
+   "expected": "",
+   "perCharModel": "",
+   "divergence": null
+  },
+  {
+   "input": "٥ِأـ",
+   "note": "مولَّد #16 (seed 0x5eed)",
+   "expected": "5ا",
+   "perCharModel": "5ا",
+   "divergence": null
+  },
+  {
+   "input": "ثصتل٦ً٥́٨صًَzC3ي٠xةyغث6",
+   "note": "مولَّد #17 (seed 0x5eed)",
+   "expected": "ثصتل65́8صzc3ي0xةyغث6",
+   "perCharModel": "ثصتل65́8صzc3ي0xةyغث6",
+   "divergence": null
+  },
+  {
+   "input": "إ٧َْْو",
+   "note": "مولَّد #18 (seed 0x5eed)",
+   "expected": "ا7و",
+   "perCharModel": "ا7و",
+   "divergence": null
+  },
+  {
+   "input": "İ٦ٰتمCةهءو١́ظٰدzzحzْ٢",
+   "note": "مولَّد #19 (seed 0x5eed)",
+   "expected": "i̇6تمcةهءو1́ظدzzحz2",
+   "perCharModel": "i̇6تمcةهءو1́ظدzzحz2",
+   "divergence": null
+  },
+  {
+   "input": "كص5٠ىوبمx٦أْاجه1حشّْ٤ق",
+   "note": "مولَّد #20 (seed 0x5eed)",
+   "expected": "كص50يوبمx6ااجه1حش4ق",
+   "perCharModel": "كص50يوبمx6ااجه1حش4ق",
+   "divergence": null
+  },
+  {
+   "input": " x5ٰ",
+   "note": "مولَّد #21 (seed 0x5eed)",
+   "expected": " x5",
+   "perCharModel": " x5",
+   "divergence": null
+  },
+  {
+   "input": "ُِِz",
+   "note": "مولَّد #22 (seed 0x5eed)",
+   "expected": "z",
+   "perCharModel": "z",
+   "divergence": null
+  },
+  {
+   "input": "ت",
+   "note": "مولَّد #23 (seed 0x5eed)",
+   "expected": "ت",
+   "perCharModel": "ت",
+   "divergence": null
+  },
+  {
+   "input": "عxوظضغ٩ُ5ف7ح6Σَْشغك",
+   "note": "مولَّد #24 (seed 0x5eed)",
+   "expected": "عxوظضغ95ف7ح6σشغك",
+   "perCharModel": "عxوظضغ95ف7ح6σشغك",
+   "divergence": null
+  },
+  {
+   "input": "3آΩΣاظُرع6٦نzه3أىتً05ض",
+   "note": "مولَّد #25 (seed 0x5eed)",
+   "expected": "3اωςاظرع66نzه3ايت05ض",
+   "perCharModel": "3اωςاظرع66نzه3ايت05ض",
+   "divergence": "RAFF-AUD-007"
+  },
+  {
+   "input": "",
+   "note": "مولَّد #26 (seed 0x5eed)",
+   "expected": "",
+   "perCharModel": "",
+   "divergence": null
+  },
+  {
+   "input": "٠٨صَذzyوحط",
+   "note": "مولَّد #27 (seed 0x5eed)",
+   "expected": "08صذzyوحط",
+   "perCharModel": "08صذzyوحط",
+   "divergence": null
+  },
+  {
+   "input": "ج٨١Ω٤4إىCٍ3ًَΏإًzي2",
+   "note": "مولَّد #28 (seed 0x5eed)",
+   "expected": "ج81ω44ايc3ώاzي2",
+   "perCharModel": "ج81ω44ايc3ώاzي2",
+   "divergence": null
+  },
+  {
+   "input": "٩زع٥yyَفب́ ",
+   "note": "مولَّد #29 (seed 0x5eed)",
+   "expected": "9زع5yyفب́ ",
+   "perCharModel": "9زع5yyفب́ ",
+   "divergence": null
+  },
+  {
+   "input": "ا9",
+   "note": "مولَّد #30 (seed 0x5eed)",
+   "expected": "ا9",
+   "perCharModel": "ا9",
+   "divergence": null
+  },
+  {
+   "input": "٦ه5z١غ5غيثظİΣC",
+   "note": "مولَّد #31 (seed 0x5eed)",
+   "expected": "6ه5z1غ5غيثظi̇σc",
+   "perCharModel": "6ه5z1غ5غيثظi̇σc",
+   "divergence": null
+  },
+  {
+   "input": "0بΩغ3ٍّودٰد5َA٦وz٤ش٤آ7",
+   "note": "مولَّد #32 (seed 0x5eed)",
+   "expected": "0بωغ3ودد5a6وz4ش4ا7",
+   "perCharModel": "0بωغ3ودد5a6وz4ش4ا7",
+   "divergence": null
+  },
+  {
+   "input": "Cنةِص8ظ٩م٧٨ة",
+   "note": "مولَّد #33 (seed 0x5eed)",
+   "expected": "cنةص8ظ9م78ة",
+   "perCharModel": "cنةص8ظ9م78ة",
+   "divergence": null
+  },
+  {
+   "input": "آAxCبxzم٩́7ذ٤8ةميرض6أ٤",
+   "note": "مولَّد #34 (seed 0x5eed)",
+   "expected": "اaxcبxzم9́7ذ48ةميرض6ا4",
+   "perCharModel": "اaxcبxzم9́7ذ48ةميرض6ا4",
+   "divergence": null
+  },
+  {
+   "input": "غْغ٦ّΩBΩن٦٤٢جشةΩ",
+   "note": "مولَّد #35 (seed 0x5eed)",
+   "expected": "غغ6ωbωن642جشةω",
+   "perCharModel": "غغ6ωbωن642جشةω",
+   "divergence": null
+  },
+  {
+   "input": "و9ـΣُذ",
+   "note": "مولَّد #36 (seed 0x5eed)",
+   "expected": "و9σذ",
+   "perCharModel": "و9σذ",
+   "divergence": null
+  },
+  {
+   "input": "2طضح٥موٍ٧٥",
+   "note": "مولَّد #37 (seed 0x5eed)",
+   "expected": "2طضح5مو75",
+   "perCharModel": "2طضح5مو75",
+   "divergence": null
+  },
+  {
+   "input": "",
+   "note": "مولَّد #38 (seed 0x5eed)",
+   "expected": "",
+   "perCharModel": "",
+   "divergence": null
+  },
+  {
+   "input": "ح́81 ر3 طك٠٩د٤İثذ2َ",
+   "note": "مولَّد #39 (seed 0x5eed)",
+   "expected": "ح́81 ر3 طك09د4i̇ثذ2",
+   "perCharModel": "ح́81 ر3 طك09د4i̇ثذ2",
+   "divergence": null
+  },
+  {
+   "input": "ايبنجحندٰCلٰج34بو يظ",
+   "note": "مولَّد #40 (seed 0x5eed)",
+   "expected": "ايبنجحندcلج34بو يظ",
+   "perCharModel": "ايبنجحندcلج34بو يظ",
+   "divergence": null
+  },
+  {
+   "input": "٣ٌ٢ـر8ة8شyف7ِ",
+   "note": "مولَّد #41 (seed 0x5eed)",
+   "expected": "32ر8ة8شyف7",
+   "perCharModel": "32ر8ة8شyف7",
+   "divergence": null
+  },
+  {
+   "input": "ث0غyyأٌِة7تش82́غكلد",
+   "note": "مولَّد #42 (seed 0x5eed)",
+   "expected": "ث0غyyاة7تش82́غكلد",
+   "perCharModel": "ث0غyyاة7تش82́غكلد",
+   "divergence": null
+  },
+  {
+   "input": "إ9ز نتآوحء٥",
+   "note": "مولَّد #43 (seed 0x5eed)",
+   "expected": "ا9ز نتاوحء5",
+   "perCharModel": "ا9ز نتاوحء5",
+   "divergence": null
+  },
+  {
+   "input": "ـ69جٌمِشاقحْ٢ْ",
+   "note": "مولَّد #44 (seed 0x5eed)",
+   "expected": "69جمشاقح2",
+   "perCharModel": "69جمشاقح2",
+   "divergence": null
+  },
+  {
+   "input": "Σ٢ٍه́İΩطضآ٦xأ6٦7سآC",
+   "note": "مولَّد #45 (seed 0x5eed)",
+   "expected": "σ2ه́i̇ωطضا6xا667ساc",
+   "perCharModel": "σ2ه́i̇ωطضا6xا667ساc",
+   "divergence": null
+  },
+  {
+   "input": "صرع٢تدٍُمك",
+   "note": "مولَّد #46 (seed 0x5eed)",
+   "expected": "صرع2تدمك",
+   "perCharModel": "صرع2تدمك",
+   "divergence": null
+  },
+  {
+   "input": "٦y٢لَْ",
+   "note": "مولَّد #47 (seed 0x5eed)",
+   "expected": "6y2ل",
+   "perCharModel": "6y2ل",
+   "divergence": null
+  },
+  {
+   "input": "ٰـ ةعََءث8ك59آةص́٦ا",
+   "note": "مولَّد #48 (seed 0x5eed)",
+   "expected": " ةعءث8ك59اةص́6ا",
+   "perCharModel": " ةعءث8ك59اةص́6ا",
+   "divergence": null
+  },
+  {
+   "input": "ذىنمدفموث9ذّ05َΣ25ى3ِ́ت",
+   "note": "مولَّد #49 (seed 0x5eed)",
+   "expected": "ذينمدفموث9ذ05σ25ي3́ت",
+   "perCharModel": "ذينمدفموث9ذ05σ25ي3́ت",
+   "divergence": null
+  },
+  {
+   "input": "ظهشٰ٦٠Cحةٍ",
+   "note": "مولَّد #50 (seed 0x5eed)",
+   "expected": "ظهش60cحة",
+   "perCharModel": "ظهش60cحة",
+   "divergence": null
+  },
+  {
+   "input": "غن٥ع٠9آ",
+   "note": "مولَّد #51 (seed 0x5eed)",
+   "expected": "غن5ع09ا",
+   "perCharModel": "غن5ع09ا",
+   "divergence": null
+  },
+  {
+   "input": "Bظظضْ٧مy حAتعΣ1آِج٩آ",
+   "note": "مولَّد #52 (seed 0x5eed)",
+   "expected": "bظظض7مy حaتعσ1اج9ا",
+   "perCharModel": "bظظض7مy حaتعσ1اج9ا",
+   "divergence": null
+  },
+  {
+   "input": "أzΩ",
+   "note": "مولَّد #53 (seed 0x5eed)",
+   "expected": "اzω",
+   "perCharModel": "اzω",
+   "divergence": null
+  },
+  {
+   "input": "4وعسΣَح٥اى",
+   "note": "مولَّد #54 (seed 0x5eed)",
+   "expected": "4وعسσح5اي",
+   "perCharModel": "4وعسσح5اي",
+   "divergence": null
+  },
+  {
+   "input": "C٦٠Cا٧51İغط٨ر5يع́٩ΣB2Ωح",
+   "note": "مولَّد #55 (seed 0x5eed)",
+   "expected": "c60cا751i̇غط8ر5يع́9σb2ωح",
+   "perCharModel": "c60cا751i̇غط8ر5يع́9σb2ωح",
+   "divergence": null
+  },
+  {
+   "input": "٥ذدزوإ2 3٤ٰ4ق٥رyة",
+   "note": "مولَّد #56 (seed 0x5eed)",
+   "expected": "5ذدزوا2 344ق5رyة",
+   "perCharModel": "5ذدزوا2 344ق5رyة",
+   "divergence": null
+  },
+  {
+   "input": "6Bج",
+   "note": "مولَّد #57 (seed 0x5eed)",
+   "expected": "6bج",
+   "perCharModel": "6bج",
+   "divergence": null
+  },
+  {
+   "input": "٥ص٨٧ة5ىْاييعقط",
+   "note": "مولَّد #58 (seed 0x5eed)",
+   "expected": "5ص87ة5ياييعقط",
+   "perCharModel": "5ص87ة5ياييعقط",
+   "divergence": null
+  },
+  {
+   "input": "عٌشنىظوBΩوصCأ8١ذ١ه́ج1y3",
+   "note": "مولَّد #59 (seed 0x5eed)",
+   "expected": "عشنيظوbωوصcا81ذ1ه́ج1y3",
+   "perCharModel": "عشنيظوbωوصcا81ذ1ه́ج1y3",
+   "divergence": null
+  },
+  {
+   "input": "بت3B",
+   "note": "مولَّد #60 (seed 0x5eed)",
+   "expected": "بت3b",
+   "perCharModel": "بت3b",
+   "divergence": null
+  },
+  {
+   "input": "ّ2ٌ9أ١ذ4",
+   "note": "مولَّد #61 (seed 0x5eed)",
+   "expected": "29ا1ذ4",
+   "perCharModel": "29ا1ذ4",
+   "divergence": null
+  },
+  {
+   "input": "ٍ",
+   "note": "مولَّد #62 (seed 0x5eed)",
+   "expected": "",
+   "perCharModel": "",
+   "divergence": null
+  },
+  {
+   "input": "سـضحـقΣعشz",
+   "note": "مولَّد #63 (seed 0x5eed)",
+   "expected": "سضحقσعشz",
+   "perCharModel": "سضحقσعشz",
+   "divergence": null
+  },
+  {
+   "input": "ف٠خصغ٢٩طٍَ6آ",
+   "note": "مولَّد #64 (seed 0x5eed)",
+   "expected": "ف0خصغ29ط6ا",
+   "perCharModel": "ف0خصغ29ط6ا",
+   "divergence": null
+  },
+  {
+   "input": "Aجِ5Aİد",
+   "note": "مولَّد #65 (seed 0x5eed)",
+   "expected": "aج5ai̇د",
+   "perCharModel": "aج5ai̇د",
+   "divergence": null
+  },
+  {
+   "input": "آ٢٠7ا40ًخ٩ًظْİA٦ْ٣شٍْ٤",
+   "note": "مولَّد #66 (seed 0x5eed)",
+   "expected": "ا207ا40خ9ظi̇a63ش4",
+   "perCharModel": "ا207ا40خ9ظi̇a63ش4",
+   "divergence": null
+  },
+  {
+   "input": "ذ١طةش٦İٌٌ٦اأإ",
+   "note": "مولَّد #67 (seed 0x5eed)",
+   "expected": "ذ1طةش6i̇6ااا",
+   "perCharModel": "ذ1طةش6i̇6ااا",
+   "divergence": null
+  },
+  {
+   "input": "ج8٨İC٩8ذب٥حهعز",
+   "note": "مولَّد #68 (seed 0x5eed)",
+   "expected": "ج88i̇c98ذب5حهعز",
+   "perCharModel": "ج88i̇c98ذب5حهعز",
+   "divergence": null
+  },
+  {
+   "input": "٤Ωقد٨3ّم٩",
+   "note": "مولَّد #69 (seed 0x5eed)",
+   "expected": "4ωقد83م9",
+   "perCharModel": "4ωقد83م9",
+   "divergence": null
+  },
+  {
+   "input": "اٍ3ل",
+   "note": "مولَّد #70 (seed 0x5eed)",
+   "expected": "ا3ل",
+   "perCharModel": "ا3ل",
+   "divergence": null
+  },
+  {
+   "input": "٧",
+   "note": "مولَّد #71 (seed 0x5eed)",
+   "expected": "7",
+   "perCharModel": "7",
+   "divergence": null
+  },
+  {
+   "input": "هجىتصخثر٦خذى٣م8ٰ",
+   "note": "مولَّد #72 (seed 0x5eed)",
+   "expected": "هجيتصخثر6خذي3م8",
+   "perCharModel": "هجيتصخثر6خذي3م8",
+   "divergence": null
+  },
+  {
+   "input": "٩zْx7٩ذِكشغًٍّ",
+   "note": "مولَّد #73 (seed 0x5eed)",
+   "expected": "9zx79ذكشغ",
+   "perCharModel": "9zx79ذكشغ",
+   "divergence": null
+  },
+  {
+   "input": "ااثفًغΣ٩٢",
+   "note": "مولَّد #74 (seed 0x5eed)",
+   "expected": "ااثفغσ92",
+   "perCharModel": "ااثفغσ92",
+   "divergence": null
+  },
+  {
+   "input": "مُامًه",
+   "note": "مولَّد #75 (seed 0x5eed)",
+   "expected": "مامه",
+   "perCharModel": "مامه",
+   "divergence": null
+  },
+  {
+   "input": "٦ىلذ6Aاظزإأطش٦ضzz2ز١",
+   "note": "مولَّد #76 (seed 0x5eed)",
+   "expected": "6يلذ6aاظزااطش6ضzz2ز1",
+   "perCharModel": "6يلذ6aاظزااطش6ضzz2ز1",
+   "divergence": null
+  },
+  {
+   "input": "8إ5 آُ٣ٰ0خإ02عنُ3٣فً1ِ٨",
+   "note": "مولَّد #77 (seed 0x5eed)",
+   "expected": "8ا5 ا30خا02عن33ف18",
+   "perCharModel": "8ا5 ا30خا02عن33ف18",
+   "divergence": null
+  },
+  {
+   "input": "حيzثىز١yً٧Ωْلِ٩حخف7",
+   "note": "مولَّد #78 (seed 0x5eed)",
+   "expected": "حيzثيز1y7ωل9حخف7",
+   "perCharModel": "حيzثيز1y7ωل9حخف7",
+   "divergence": null
+  },
+  {
+   "input": "ٰ٨ـينُلن٠ث0٩386ط",
+   "note": "مولَّد #79 (seed 0x5eed)",
+   "expected": "8ينلن0ث09386ط",
+   "perCharModel": "8ينلن0ث09386ط",
+   "divergence": null
+  },
+  {
+   "input": "٨2٣Cن6أقعy",
+   "note": "مولَّد #80 (seed 0x5eed)",
+   "expected": "823cن6اقعy",
+   "perCharModel": "823cن6اقعy",
+   "divergence": null
+  },
+  {
+   "input": "ً1٣3آ6ً٦آضزظد٨٢طت",
+   "note": "مولَّد #81 (seed 0x5eed)",
+   "expected": "133ا66اضزظد82طت",
+   "perCharModel": "133ا66اضزظد82طت",
+   "divergence": null
+  },
+  {
+   "input": "ΣAأzآx7ٌٰآxوطـ",
+   "note": "مولَّد #82 (seed 0x5eed)",
+   "expected": "σaاzاx7اxوط",
+   "perCharModel": "σaاzاx7اxوط",
+   "divergence": null
+  },
+  {
+   "input": "ΣقعBنyBرجش٦٢",
+   "note": "مولَّد #83 (seed 0x5eed)",
+   "expected": "σقعbنybرجش62",
+   "perCharModel": "σقعbنybرجش62",
+   "divergence": null
+  },
+  {
+   "input": "ق",
+   "note": "مولَّد #84 (seed 0x5eed)",
+   "expected": "ق",
+   "perCharModel": "ق",
+   "divergence": null
+  },
+  {
+   "input": "أxِ5نBCن ٥ٍ7B ر0Σخهإءآ",
+   "note": "مولَّد #85 (seed 0x5eed)",
+   "expected": "اx5نbcن 57b ر0σخهاءا",
+   "perCharModel": "اx5نbcن 57b ر0σخهاءا",
+   "divergence": null
+  },
+  {
+   "input": "س8ٌBي٦5ثΣ٨لح٩ص",
+   "note": "مولَّد #86 (seed 0x5eed)",
+   "expected": "س8bي65ثσ8لح9ص",
+   "perCharModel": "س8bي65ثσ8لح9ص",
+   "divergence": null
+  },
+  {
+   "input": "نلدْ٤ِحْق9ر١zzجان5ش٢نجB",
+   "note": "مولَّد #87 (seed 0x5eed)",
+   "expected": "نلد4حق9ر1zzجان5ش2نجb",
+   "perCharModel": "نلد4حق9ر1zzجان5ش2نجb",
+   "divergence": null
+  },
+  {
+   "input": "ديإًّب3 CثCكٌٰ6٦ةُ5",
+   "note": "مولَّد #88 (seed 0x5eed)",
+   "expected": "دياب3 cثcك66ة5",
+   "perCharModel": "دياب3 cثcك66ة5",
+   "divergence": null
+  },
+  {
+   "input": "عءΩب",
+   "note": "مولَّد #89 (seed 0x5eed)",
+   "expected": "عءωب",
+   "perCharModel": "عءωب",
+   "divergence": null
+  },
+  {
+   "input": "1ٌعxضلضُشظ٣أصيَ0ُ042",
+   "note": "مولَّد #90 (seed 0x5eed)",
+   "expected": "1عxضلضشظ3اصي0042",
+   "perCharModel": "1عxضلضشظ3اصي0042",
+   "divergence": null
+  },
+  {
+   "input": "8اخمًَ",
+   "note": "مولَّد #91 (seed 0x5eed)",
+   "expected": "8اخم",
+   "perCharModel": "8اخم",
+   "divergence": null
+  },
+  {
+   "input": "نفُخC",
+   "note": "مولَّد #92 (seed 0x5eed)",
+   "expected": "نفخc",
+   "perCharModel": "نفخc",
+   "divergence": null
+  },
+  {
+   "input": "٧ت7س4٩مض́ةفBا",
+   "note": "مولَّد #93 (seed 0x5eed)",
+   "expected": "7ت7س49مض́ةفbا",
+   "perCharModel": "7ت7س49مض́ةفbا",
+   "divergence": null
+  },
+  {
+   "input": "اع1٨",
+   "note": "مولَّد #94 (seed 0x5eed)",
+   "expected": "اع18",
+   "perCharModel": "اع18",
+   "divergence": null
+  },
+  {
+   "input": "ِْأ89ٍ0أهآ٩",
+   "note": "مولَّد #95 (seed 0x5eed)",
+   "expected": "ا890اها9",
+   "perCharModel": "ا890اها9",
+   "divergence": null
+  },
+  {
+   "input": "3٨8لــةز٤ً3ة٨ء0دء9",
+   "note": "مولَّد #96 (seed 0x5eed)",
+   "expected": "388لةز43ة8ء0دء9",
+   "perCharModel": "388لةز43ة8ء0دء9",
+   "divergence": null
+  },
+  {
+   "input": "y",
+   "note": "مولَّد #97 (seed 0x5eed)",
+   "expected": "y",
+   "perCharModel": "y",
+   "divergence": null
+  },
+  {
+   "input": "زٍ́٦ء٩أ٦حٰهأحِل٨",
+   "note": "مولَّد #98 (seed 0x5eed)",
+   "expected": "ز́6ء9ا6حهاحل8",
+   "perCharModel": "ز́6ء9ا6حهاحل8",
+   "divergence": null
+  },
+  {
+   "input": "٩6 ًٌCمB4٤ّْx0Σح1فبإzٍظ",
+   "note": "مولَّد #99 (seed 0x5eed)",
+   "expected": "96 cمb44x0σح1فباzظ",
+   "perCharModel": "96 cمb44x0σح1فباzظ",
+   "divergence": null
+  },
+  {
+   "input": "",
+   "note": "مولَّد #100 (seed 0x5eed)",
+   "expected": "",
+   "perCharModel": "",
+   "divergence": null
+  },
+  {
+   "input": "أطغx2ى1٥ا",
+   "note": "مولَّد #101 (seed 0x5eed)",
+   "expected": "اطغx2ي15ا",
+   "perCharModel": "اطغx2ي15ا",
+   "divergence": null
+  },
+  {
+   "input": "0ضقفٍٍضأض٦zيضْ٠أب٤́",
+   "note": "مولَّد #102 (seed 0x5eed)",
+   "expected": "0ضقفضاض6zيض0اب4́",
+   "perCharModel": "0ضقفضاض6zيض0اب4́",
+   "divergence": null
+  },
+  {
+   "input": "A8xبطي٧َة24ء١شٰنكخ",
+   "note": "مولَّد #103 (seed 0x5eed)",
+   "expected": "a8xبطي7ة24ء1شنكخ",
+   "perCharModel": "a8xبطي7ة24ء1شنكخ",
+   "divergence": null
+  },
+  {
+   "input": "ـ́٥zٌ٢خCyإ١",
+   "note": "مولَّد #104 (seed 0x5eed)",
+   "expected": "́5z2خcyا1",
+   "perCharModel": "́5z2خcyا1",
+   "divergence": null
+  },
+  {
+   "input": "حبص6دyث٧جxB9",
+   "note": "مولَّد #105 (seed 0x5eed)",
+   "expected": "حبص6دyث7جxb9",
+   "perCharModel": "حبص6دyث7جxb9",
+   "divergence": null
+  },
+  {
+   "input": "٥ءİـحطن٣8ى٢٧تBرzط٠َ",
+   "note": "مولَّد #106 (seed 0x5eed)",
+   "expected": "5ءi̇حطن38ي27تbرzط0",
+   "perCharModel": "5ءi̇حطن38ي27تbرzط0",
+   "divergence": null
+  },
+  {
+   "input": "رءمّyة٥ث٢ك٦هنغ٥ظْ377",
+   "note": "مولَّد #107 (seed 0x5eed)",
+   "expected": "رءمyة5ث2ك6هنغ5ظ377",
+   "perCharModel": "رءمyة5ث2ك6هنغ5ظ377",
+   "divergence": null
+  },
+  {
+   "input": "ِΩİ7ثفْİا5نٰزد",
+   "note": "مولَّد #108 (seed 0x5eed)",
+   "expected": "ωi̇7ثفi̇ا5نزد",
+   "perCharModel": "ωi̇7ثفi̇ا5نزد",
+   "divergence": null
+  },
+  {
+   "input": "قربخإzz",
+   "note": "مولَّد #109 (seed 0x5eed)",
+   "expected": "قربخاzz",
+   "perCharModel": "قربخاzz",
+   "divergence": null
+  },
+  {
+   "input": "٢زمx6ً٩حأفy١ْا",
+   "note": "مولَّد #110 (seed 0x5eed)",
+   "expected": "2زمx69حافy1ا",
+   "perCharModel": "2زمx69حافy1ا",
+   "divergence": null
+  },
+  {
+   "input": "وٰİعع٤",
+   "note": "مولَّد #111 (seed 0x5eed)",
+   "expected": "وi̇عع4",
+   "perCharModel": "وi̇عع4",
+   "divergence": null
+  },
+  {
+   "input": "ْ14ز٥غْİضعءً",
+   "note": "مولَّد #112 (seed 0x5eed)",
+   "expected": "14ز5غi̇ضعء",
+   "perCharModel": "14ز5غi̇ضعء",
+   "divergence": null
+  },
+  {
+   "input": "45ٍج A",
+   "note": "مولَّد #113 (seed 0x5eed)",
+   "expected": "45ج a",
+   "perCharModel": "45ج a",
+   "divergence": null
+  },
+  {
+   "input": "ّرثzفضَ7١ΣAـ٧Ωءدط",
+   "note": "مولَّد #114 (seed 0x5eed)",
+   "expected": "رثzفض71σa7ωءدط",
+   "perCharModel": "رثzفض71σa7ωءدط",
+   "divergence": null
+  },
+  {
+   "input": "Ωلث5İC6ةمي٤3B",
+   "note": "مولَّد #115 (seed 0x5eed)",
+   "expected": "ωلث5i̇c6ةمي43b",
+   "perCharModel": "ωلث5i̇c6ةمي43b",
+   "divergence": null
+  },
+  {
+   "input": "كم",
+   "note": "مولَّد #116 (seed 0x5eed)",
+   "expected": "كم",
+   "perCharModel": "كم",
+   "divergence": null
+  },
+  {
+   "input": "Ω ت٥لطءرـُ2",
+   "note": "مولَّد #117 (seed 0x5eed)",
+   "expected": "ω ت5لطءر2",
+   "perCharModel": "ω ت5لطءر2",
+   "divergence": null
+  },
+  {
+   "input": "6دآy x6٣Ω9",
+   "note": "مولَّد #118 (seed 0x5eed)",
+   "expected": "6داy x63ω9",
+   "perCharModel": "6داy x63ω9",
+   "divergence": null
+  },
+  {
+   "input": "أ٠قٍثّ",
+   "note": "مولَّد #119 (seed 0x5eed)",
+   "expected": "ا0قث",
+   "perCharModel": "ا0قث",
+   "divergence": null
+  },
+  {
+   "input": "ـِ1ح2٤Aءْي5للزعفو٣ً",
+   "note": "مولَّد #120 (seed 0x5eed)",
+   "expected": "1ح24aءي5للزعفو3",
+   "perCharModel": "1ح24aءي5للزعفو3",
+   "divergence": null
+  },
+  {
+   "input": "6زقΣx٤د٧ش٧لو٧بعAB",
+   "note": "مولَّد #121 (seed 0x5eed)",
+   "expected": "6زقσx4د7ش7لو7بعab",
+   "perCharModel": "6زقσx4د7ش7لو7بعab",
+   "divergence": null
+  },
+  {
+   "input": "Bزِ",
+   "note": "مولَّد #122 (seed 0x5eed)",
+   "expected": "bز",
+   "perCharModel": "bز",
+   "divergence": null
+  },
+  {
+   "input": "ذا٢7ْر٩ث2ـانث١بCبٰ7",
+   "note": "مولَّد #123 (seed 0x5eed)",
+   "expected": "ذا27ر9ث2انث1بcب7",
+   "perCharModel": "ذا27ر9ث2انث1بcب7",
+   "divergence": null
+  },
+  {
+   "input": "تİهٰض٣إΩzطى3ٍأش́5٤أ1",
+   "note": "مولَّد #124 (seed 0x5eed)",
+   "expected": "تi̇هض3اωzطي3اش́54ا1",
+   "perCharModel": "تi̇هض3اωzطي3اش́54ا1",
+   "divergence": null
+  },
+  {
+   "input": "zه4ْم٢فyyج٤ـغ",
+   "note": "مولَّد #125 (seed 0x5eed)",
+   "expected": "zه4م2فyyج4غ",
+   "perCharModel": "zه4م2فyyج4غ",
+   "divergence": null
+  },
+  {
+   "input": "ٍوً٢Ωص٠",
+   "note": "مولَّد #126 (seed 0x5eed)",
+   "expected": "و2ωص0",
+   "perCharModel": "و2ωص0",
+   "divergence": null
+  },
+  {
+   "input": "1غّ",
+   "note": "مولَّد #127 (seed 0x5eed)",
+   "expected": "1غ",
+   "perCharModel": "1غ",
+   "divergence": null
+  },
+  {
+   "input": "٢ث شَ62ٍ",
+   "note": "مولَّد #128 (seed 0x5eed)",
+   "expected": "2ث ش62",
+   "perCharModel": "2ث ش62",
+   "divergence": null
+  },
+  {
+   "input": "3٣ٌٰ",
+   "note": "مولَّد #129 (seed 0x5eed)",
+   "expected": "33",
+   "perCharModel": "33",
+   "divergence": null
+  },
+  {
+   "input": "ـّ٢ذُآـΣ0ABغخو",
+   "note": "مولَّد #130 (seed 0x5eed)",
+   "expected": "2ذاσ0abغخو",
+   "perCharModel": "2ذاσ0abغخو",
+   "divergence": null
+  },
+  {
+   "input": "ىلΩُعمب",
+   "note": "مولَّد #131 (seed 0x5eed)",
+   "expected": "يلωعمب",
+   "perCharModel": "يلωعمب",
+   "divergence": null
+  },
+  {
+   "input": "٤وـ٧طشج",
+   "note": "مولَّد #132 (seed 0x5eed)",
+   "expected": "4و7طشج",
+   "perCharModel": "4و7طشج",
+   "divergence": null
+  },
+  {
+   "input": "جيصة٥ٰت7ط0ـ٣كإ٥٦٤ظ4ِٰس",
+   "note": "مولَّد #133 (seed 0x5eed)",
+   "expected": "جيصة5ت7ط03كا564ظ4س",
+   "perCharModel": "جيصة5ت7ط03كا564ظ4س",
+   "divergence": null
+  },
+  {
+   "input": "",
+   "note": "مولَّد #134 (seed 0x5eed)",
+   "expected": "",
+   "perCharModel": "",
+   "divergence": null
+  },
+  {
+   "input": "Cأ7ينهم٢اAك",
+   "note": "مولَّد #135 (seed 0x5eed)",
+   "expected": "cا7ينهم2اaك",
+   "perCharModel": "cا7ينهم2اaك",
+   "divergence": null
+  },
+  {
+   "input": "8ع́٨كنإىİ3ّΩنُC5َΣل",
+   "note": "مولَّد #136 (seed 0x5eed)",
+   "expected": "8ع́8كنايi̇3ωنc5σل",
+   "perCharModel": "8ع́8كنايi̇3ωنc5σل",
+   "divergence": null
+  },
+  {
+   "input": "Ωٌح0yCِنx",
+   "note": "مولَّد #137 (seed 0x5eed)",
+   "expected": "ωح0ycنx",
+   "perCharModel": "ωح0ycنx",
+   "divergence": null
+  },
+  {
+   "input": "25ِصغ٠",
+   "note": "مولَّد #138 (seed 0x5eed)",
+   "expected": "25صغ0",
+   "perCharModel": "25صغ0",
+   "divergence": null
+  },
+  {
+   "input": "ع٩ً٨38ي0z٩Ω١ثأسرْث4",
+   "note": "مولَّد #139 (seed 0x5eed)",
+   "expected": "ع9838ي0z9ω1ثاسرث4",
+   "perCharModel": "ع9838ي0z9ω1ثاسرث4",
+   "divergence": null
+  },
+  {
+   "input": "قخه9دز9ّyه٣٦ط٣3كΩ٢5حدخ",
+   "note": "مولَّد #140 (seed 0x5eed)",
+   "expected": "قخه9دز9yه36ط33كω25حدخ",
+   "perCharModel": "قخه9دز9yه36ط33كω25حدخ",
+   "divergence": null
+  },
+  {
+   "input": "اz6xلCجΩ",
+   "note": "مولَّد #141 (seed 0x5eed)",
+   "expected": "اz6xلcجω",
+   "perCharModel": "اz6xلcجω",
+   "divergence": null
+  },
+  {
+   "input": "دأΣء6ظبر٦إزف3إِ6ع",
+   "note": "مولَّد #142 (seed 0x5eed)",
+   "expected": "داσء6ظبر6ازف3ا6ع",
+   "perCharModel": "داσء6ظبر6ازف3ا6ع",
+   "divergence": null
+  },
+  {
+   "input": "ـ",
+   "note": "مولَّد #143 (seed 0x5eed)",
+   "expected": "",
+   "perCharModel": "",
+   "divergence": null
+  },
+  {
+   "input": "7ع0ٌ7دأثذ٠ى٠ط2غ١3́رل",
+   "note": "مولَّد #144 (seed 0x5eed)",
+   "expected": "7ع07داثذ0ي0ط2غ13́رل",
+   "perCharModel": "7ع07داثذ0ي0ط2غ13́رل",
+   "divergence": null
+  },
+  {
+   "input": "ٌى53خ٥ء٩ًقثي",
+   "note": "مولَّد #145 (seed 0x5eed)",
+   "expected": "ي53خ5ء9قثي",
+   "perCharModel": "ي53خ5ء9قثي",
+   "divergence": null
+  },
+  {
+   "input": "ذذغْٰٰİهyك ٠ىـĆت8٥",
+   "note": "مولَّد #146 (seed 0x5eed)",
+   "expected": "ذذغi̇هyك 0يćت85",
+   "perCharModel": "ذذغi̇هyك 0يćت85",
+   "divergence": null
+  },
+  {
+   "input": "٠أسً٢7ةهء3كΩ١آ",
+   "note": "مولَّد #147 (seed 0x5eed)",
+   "expected": "0اس27ةهء3كω1ا",
+   "perCharModel": "0اس27ةهء3كω1ا",
+   "divergence": null
+  },
+  {
+   "input": "",
+   "note": "مولَّد #148 (seed 0x5eed)",
+   "expected": "",
+   "perCharModel": "",
+   "divergence": null
+  },
+  {
+   "input": "2zو78فذ",
+   "note": "مولَّد #149 (seed 0x5eed)",
+   "expected": "2zو78فذ",
+   "perCharModel": "2zو78فذ",
+   "divergence": null
+  },
+  {
+   "input": "٤İآج́",
+   "note": "مولَّد #150 (seed 0x5eed)",
+   "expected": "4i̇اج́",
+   "perCharModel": "4i̇اج́",
+   "divergence": null
+  },
+  {
+   "input": "٧٨يري1صزΣ",
+   "note": "مولَّد #151 (seed 0x5eed)",
+   "expected": "78يري1صزσ",
+   "perCharModel": "78يري1صزσ",
+   "divergence": null
+  },
+  {
+   "input": "٦وط٦ثء",
+   "note": "مولَّد #152 (seed 0x5eed)",
+   "expected": "6وط6ثء",
+   "perCharModel": "6وط6ثء",
+   "divergence": null
+  },
+  {
+   "input": "ةـ",
+   "note": "مولَّد #153 (seed 0x5eed)",
+   "expected": "ة",
+   "perCharModel": "ة",
+   "divergence": null
+  },
+  {
+   "input": "ΣΩyİ٣ضضنغة29ٍ٨يى",
+   "note": "مولَّد #154 (seed 0x5eed)",
+   "expected": "σωyi̇3ضضنغة298يي",
+   "perCharModel": "σωyi̇3ضضنغة298يي",
+   "divergence": null
+  },
+  {
+   "input": "3٦ذ",
+   "note": "مولَّد #155 (seed 0x5eed)",
+   "expected": "36ذ",
+   "perCharModel": "36ذ",
+   "divergence": null
+  },
+  {
+   "input": "ء٩ُأذ٦4ّx",
+   "note": "مولَّد #156 (seed 0x5eed)",
+   "expected": "ء9اذ64x",
+   "perCharModel": "ء9اذ64x",
+   "divergence": null
+  },
+  {
+   "input": "١٢ش0",
+   "note": "مولَّد #157 (seed 0x5eed)",
+   "expected": "12ش0",
+   "perCharModel": "12ش0",
+   "divergence": null
+  },
+  {
+   "input": "ع ا3ُ́Axٰ́07",
+   "note": "مولَّد #158 (seed 0x5eed)",
+   "expected": "ع ا3́ax́07",
+   "perCharModel": "ع ا3́ax́07",
+   "divergence": null
+  },
+  {
+   "input": "ّططمهΣزوأءد",
+   "note": "مولَّد #159 (seed 0x5eed)",
+   "expected": "ططمهσزواءد",
+   "perCharModel": "ططمهσزواءد",
+   "divergence": null
+  },
+  {
+   "input": "قو́ذ٥طآوثسأ1٣د ن",
+   "note": "مولَّد #160 (seed 0x5eed)",
+   "expected": "قو́ذ5طاوثسا13د ن",
+   "perCharModel": "قو́ذ5طاوثسا13د ن",
+   "divergence": null
+  },
+  {
+   "input": "4Bغض٦عـ2هرصقر1صxوعّقC",
+   "note": "مولَّد #161 (seed 0x5eed)",
+   "expected": "4bغض6ع2هرصقر1صxوعقc",
+   "perCharModel": "4bغض6ع2هرصقر1صxوعقc",
+   "divergence": null
+  },
+  {
+   "input": "غİفل́إ́0ٌٍضهىكآظ",
+   "note": "مولَّد #162 (seed 0x5eed)",
+   "expected": "غi̇فل́ا́0ضهيكاظ",
+   "perCharModel": "غi̇فل́ا́0ضهيكاظ",
+   "divergence": null
+  },
+  {
+   "input": "٣٠ٍتج ّنو",
+   "note": "مولَّد #163 (seed 0x5eed)",
+   "expected": "30تج نو",
+   "perCharModel": "30تج نو",
+   "divergence": null
+  },
+  {
+   "input": "yخإأقتتجش٨",
+   "note": "مولَّد #164 (seed 0x5eed)",
+   "expected": "yخااقتتجش8",
+   "perCharModel": "yخااقتتجش8",
+   "divergence": null
+  },
+  {
+   "input": "٤فغ7١٦ٍ6ذرً٥كجة",
+   "note": "مولَّد #165 (seed 0x5eed)",
+   "expected": "4فغ7166ذر5كجة",
+   "perCharModel": "4فغ7166ذر5كجة",
+   "divergence": null
+  },
+  {
+   "input": "ر4حCΩدقحفَوعAُ٠١ّزاأي١١",
+   "note": "مولَّد #166 (seed 0x5eed)",
+   "expected": "ر4حcωدقحفوعa01زااي11",
+   "perCharModel": "ر4حcωدقحفوعa01زااي11",
+   "divergence": null
+  },
+  {
+   "input": "زج",
+   "note": "مولَّد #167 (seed 0x5eed)",
+   "expected": "زج",
+   "perCharModel": "زج",
+   "divergence": null
+  },
+  {
+   "input": "3ذ́٧C٢ثو٧٢حقzΣهدΩ",
+   "note": "مولَّد #168 (seed 0x5eed)",
+   "expected": "3ذ́7c2ثو72حقzςهدω",
+   "perCharModel": "3ذ́7c2ثو72حقzςهدω",
+   "divergence": "RAFF-AUD-007"
+  },
+  {
+   "input": "فص8فح1هظب٢جًَx́تِطـ",
+   "note": "مولَّد #169 (seed 0x5eed)",
+   "expected": "فص8فح1هظب2جx́تط",
+   "perCharModel": "فص8فح1هظب2جx́تط",
+   "divergence": null
+  },
+  {
+   "input": "عدءلة ٦4٠حب",
+   "note": "مولَّد #170 (seed 0x5eed)",
+   "expected": "عدءلة 640حب",
+   "perCharModel": "عدءلة 640حب",
+   "divergence": null
+  },
+  {
+   "input": "İٰ2",
+   "note": "مولَّد #171 (seed 0x5eed)",
+   "expected": "i̇2",
+   "perCharModel": "i̇2",
+   "divergence": null
+  },
+  {
+   "input": "ط4xششلي٨ث٩نْ٠xً٩",
+   "note": "مولَّد #172 (seed 0x5eed)",
+   "expected": "ط4xششلي8ث9ن0x9",
+   "perCharModel": "ط4xششلي8ث9ن0x9",
+   "divergence": null
+  },
+  {
+   "input": "",
+   "note": "مولَّد #173 (seed 0x5eed)",
+   "expected": "",
+   "perCharModel": "",
+   "divergence": null
+  },
+  {
+   "input": "ر9٩عىAظ",
+   "note": "مولَّد #174 (seed 0x5eed)",
+   "expected": "ر99عيaظ",
+   "perCharModel": "ر99عيaظ",
+   "divergence": null
+  },
+  {
+   "input": "٧ْإ82İيB3ص",
+   "note": "مولَّد #175 (seed 0x5eed)",
+   "expected": "7ا82i̇يb3ص",
+   "perCharModel": "7ا82i̇يb3ص",
+   "divergence": null
+  },
+  {
+   "input": "ضـ8ِ٠0ـ٤ُهظغأٍ٥زقَث",
+   "note": "مولَّد #176 (seed 0x5eed)",
+   "expected": "ض8004هظغا5زقث",
+   "perCharModel": "ض8004هظغا5زقث",
+   "divergence": null
+  },
+  {
+   "input": "٠ٍ٣ء",
+   "note": "مولَّد #177 (seed 0x5eed)",
+   "expected": "03ء",
+   "perCharModel": "03ء",
+   "divergence": null
+  },
+  {
+   "input": "غyظخ4نz2xح",
+   "note": "مولَّد #178 (seed 0x5eed)",
+   "expected": "غyظخ4نz2xح",
+   "perCharModel": "غyظخ4نz2xح",
+   "divergence": null
+  },
+  {
+   "input": "xٌمجي2جز8٩",
+   "note": "مولَّد #179 (seed 0x5eed)",
+   "expected": "xمجي2جز89",
+   "perCharModel": "xمجي2جز89",
+   "divergence": null
+  },
+  {
+   "input": "٨إٍ٥شِّ5٩́م٦٤ B٦8٣́ع",
+   "note": "مولَّد #180 (seed 0x5eed)",
+   "expected": "8ا5ش59́م64 b683́ع",
+   "perCharModel": "8ا5ش59́م64 b683́ع",
+   "divergence": null
+  },
+  {
+   "input": "22زىA7",
+   "note": "مولَّد #181 (seed 0x5eed)",
+   "expected": "22زيa7",
+   "perCharModel": "22زيa7",
+   "divergence": null
+  },
+  {
+   "input": "ّطCّّا٦دحطxزْ́إΩـ",
+   "note": "مولَّد #182 (seed 0x5eed)",
+   "expected": "طcا6دحطxز́اω",
+   "perCharModel": "طcا6دحطxز́اω",
+   "divergence": null
+  },
+  {
+   "input": "ن٩آلآه12ذب1",
+   "note": "مولَّد #183 (seed 0x5eed)",
+   "expected": "ن9الاه12ذب1",
+   "perCharModel": "ن9الاه12ذب1",
+   "divergence": null
+  },
+  {
+   "input": "0وعـ2ضİاكق٦İُتض٤ـْİ",
+   "note": "مولَّد #184 (seed 0x5eed)",
+   "expected": "0وع2ضi̇اكق6i̇تض4i̇",
+   "perCharModel": "0وع2ضi̇اكق6i̇تض4i̇",
+   "divergence": null
+  },
+  {
+   "input": "٦ظ",
+   "note": "مولَّد #185 (seed 0x5eed)",
+   "expected": "6ظ",
+   "perCharModel": "6ظ",
+   "divergence": null
+  },
+  {
+   "input": "شذد2أ65ٍّتAاخ 4٢ٍـ8",
+   "note": "مولَّد #186 (seed 0x5eed)",
+   "expected": "شذد2ا65تaاخ 428",
+   "perCharModel": "شذد2ا65تaاخ 428",
+   "divergence": null
+  },
+  {
+   "input": "ٌ١عقشبو٦٤حزٍ3",
+   "note": "مولَّد #187 (seed 0x5eed)",
+   "expected": "1عقشبو64حز3",
+   "perCharModel": "1عقشبو64حز3",
+   "divergence": null
+  },
+  {
+   "input": "́أ٥رر",
+   "note": "مولَّد #188 (seed 0x5eed)",
+   "expected": "́ا5رر",
+   "perCharModel": "́ا5رر",
+   "divergence": null
+  },
+  {
+   "input": "Aش٧٧ِ٥وCİzه6",
+   "note": "مولَّد #189 (seed 0x5eed)",
+   "expected": "aش775وci̇zه6",
+   "perCharModel": "aش775وci̇zه6",
+   "divergence": null
+  },
+  {
+   "input": "ثٌ7z",
+   "note": "مولَّد #190 (seed 0x5eed)",
+   "expected": "ث7z",
+   "perCharModel": "ث7z",
+   "divergence": null
+  },
+  {
+   "input": "",
+   "note": "مولَّد #191 (seed 0x5eed)",
+   "expected": "",
+   "perCharModel": "",
+   "divergence": null
+  },
+  {
+   "input": "غقاسصىط́١ـ",
+   "note": "مولَّد #192 (seed 0x5eed)",
+   "expected": "غقاسصيط́1",
+   "perCharModel": "غقاسصيط́1",
+   "divergence": null
+  },
+  {
+   "input": "س1ضزـَBر3ومّ 4٧لxت",
+   "note": "مولَّد #193 (seed 0x5eed)",
+   "expected": "س1ضزbر3وم 47لxت",
+   "perCharModel": "س1ضزbر3وم 47لxت",
+   "divergence": null
+  },
+  {
+   "input": "٢",
+   "note": "مولَّد #194 (seed 0x5eed)",
+   "expected": "2",
+   "perCharModel": "2",
+   "divergence": null
+  },
+  {
+   "input": "ًص4ءسًّءهظجز",
+   "note": "مولَّد #195 (seed 0x5eed)",
+   "expected": "ص4ءسءهظجز",
+   "perCharModel": "ص4ءسءهظجز",
+   "divergence": null
+  },
+  {
+   "input": "إـطzل٠زظآ6y83وكدُْ",
+   "note": "مولَّد #196 (seed 0x5eed)",
+   "expected": "اطzل0زظا6y83وكد",
+   "perCharModel": "اطzل0زظا6y83وكد",
+   "divergence": null
+  },
+  {
+   "input": "Bءآعُنمِy8٧ذـُق1ْظ",
+   "note": "مولَّد #197 (seed 0x5eed)",
+   "expected": "bءاعنمy87ذق1ظ",
+   "perCharModel": "bءاعنمy87ذق1ظ",
+   "divergence": null
+  },
+  {
+   "input": "z ثذًٌAُصج",
+   "note": "مولَّد #198 (seed 0x5eed)",
+   "expected": "z ثذaصج",
+   "perCharModel": "z ثذaصج",
+   "divergence": null
+  },
+  {
+   "input": "شهفx١ىنCبأط٩ًظىأْ5٦ف",
+   "note": "مولَّد #199 (seed 0x5eed)",
+   "expected": "شهفx1ينcباط9ظيا56ف",
+   "perCharModel": "شهفx1ينcباط9ظيا56ف",
+   "divergence": null
+  }
+ ],
+ "trimVectors": [
+  {
+   "input": " أ ",
+   "jsTrim": "أ"
+  },
+  {
+   "input": "\tx\n",
+   "jsTrim": "x"
+  },
+  {
+   "input": " x ",
+   "jsTrim": "x"
+  },
+  {
+   "input": "　x",
+   "jsTrim": "x"
+  },
+  {
+   "input": "﻿x",
+   "jsTrim": "x"
+  },
+  {
+   "input": "x﻿",
+   "jsTrim": "x"
+  },
+  {
+   "input": "​x",
+   "jsTrim": "​x"
+  },
+  {
+   "input": " x",
+   "jsTrim": "x"
+  },
+  {
+   "input": "x",
+   "jsTrim": "x"
+  },
+  {
+   "input": "\u000bx\u000b",
+   "jsTrim": "x"
+  },
+  {
+   "input": "\fx\f",
+   "jsTrim": "x"
+  },
+  {
+   "input": "\rx\r",
+   "jsTrim": "x"
+  },
+  {
+   "input": " x ",
+   "jsTrim": "x"
+  },
+  {
+   "input": " x ",
+   "jsTrim": "x"
+  },
+  {
+   "input": " x ",
+   "jsTrim": "x"
+  },
+  {
+   "input": " x ",
+   "jsTrim": "x"
+  },
+  {
+   "input": " x ",
+   "jsTrim": "x"
+  },
+  {
+   "input": " x ",
+   "jsTrim": "x"
+  },
+  {
+   "input": " x ",
+   "jsTrim": "x"
+  },
+  {
+   "input": " x ",
+   "jsTrim": "x"
+  },
+  {
+   "input": " x ",
+   "jsTrim": "x"
+  },
+  {
+   "input": " x ",
+   "jsTrim": "x"
+  },
+  {
+   "input": " x ",
+   "jsTrim": "x"
+  },
+  {
+   "input": " x ",
+   "jsTrim": "x"
+  },
+  {
+   "input": " x ",
+   "jsTrim": "x"
+  },
+  {
+   "input": " x ",
+   "jsTrim": "x"
+  },
+  {
+   "input": " x ",
+   "jsTrim": "x"
+  },
+  {
+   "input": "᠎x",
+   "jsTrim": "᠎x"
+  }
+ ]
+}

@@ -1,0 +1,144 @@
+$ cargo test --release --manifest-path src-tauri/Cargo.toml perf_probe -- --ignored --nocapture --test-threads=1
+# 2026-10-12T19:45:36Z
+   Compiling raff v6.0.0 (/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src-tauri)
+warning: unexpected `cfg` condition value: `cargo-clippy`
+   --> src/panel.rs:127:20
+    |
+127 |       let delegate = panel_delegate!(RaffPanelDelegate {
+    |  ____________________^
+128 | |         window_did_resign_key,
+129 | |         window_did_move
+130 | |     });
+    | |______^
+    |
+    = note: no expected values for `feature`
+    = note: using a cfg inside a macro will use the cfgs from the destination crate and not the ones from the defining crate
+    = help: try referring to `sel_impl` crate for guidance on how handle this unexpected cfg
+    = help: the macro `sel_impl` may come from an old version of the `objc` crate, try updating your dependency with `cargo update -p objc`
+    = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+    = note: `#[warn(unexpected_cfgs)]` on by default
+    = note: this warning originates in the macro `sel_impl` which comes from the expansion of the macro `panel_delegate` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: unexpected `cfg` condition value: `cargo-clippy`
+   --> src/panel.rs:127:20
+    |
+127 |       let delegate = panel_delegate!(RaffPanelDelegate {
+    |  ____________________^
+128 | |         window_did_resign_key,
+129 | |         window_did_move
+130 | |     });
+    | |______^
+    |
+    = note: no expected values for `feature`
+    = note: using a cfg inside a macro will use the cfgs from the destination crate and not the ones from the defining crate
+    = help: try referring to `sel_impl` crate for guidance on how handle this unexpected cfg
+    = help: the macro `sel_impl` may come from an old version of the `objc` crate, try updating your dependency with `cargo update -p objc`
+    = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+    = note: this warning originates in the macro `sel_impl` which comes from the expansion of the macro `panel_delegate` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: unexpected `cfg` condition value: `cargo-clippy`
+   --> src/panel.rs:127:20
+    |
+127 |       let delegate = panel_delegate!(RaffPanelDelegate {
+    |  ____________________^
+128 | |         window_did_resign_key,
+129 | |         window_did_move
+130 | |     });
+    | |______^
+    |
+    = note: no expected values for `feature`
+    = note: using a cfg inside a macro will use the cfgs from the destination crate and not the ones from the defining crate
+    = help: try referring to `class` crate for guidance on how handle this unexpected cfg
+    = help: the macro `class` may come from an old version of the `objc` crate, try updating your dependency with `cargo update -p objc`
+    = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+    = note: this warning originates in the macro `class` which comes from the expansion of the macro `panel_delegate` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated struct `tauri_nspanel::cocoa::appkit::NSWindowCollectionBehavior`: use the objc2-app-kit crate instead
+  --> src/panel.rs:10:35
+   |
+10 | use tauri_nspanel::cocoa::appkit::NSWindowCollectionBehavior;
+   |                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(deprecated)]` on by default
+
+warning: use of deprecated struct `tauri_nspanel::cocoa::appkit::NSWindowCollectionBehavior`: use the objc2-app-kit crate instead
+   --> src/panel.rs:121:9
+    |
+121 |         NSWindowCollectionBehavior::NSWindowCollectionBehaviorCanJoinAllSpaces
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: use of deprecated struct `tauri_nspanel::cocoa::appkit::NSWindowCollectionBehavior`: use the objc2-app-kit crate instead
+   --> src/panel.rs:122:15
+    |
+122 |             | NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary
+    |               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: use of deprecated struct `tauri_nspanel::cocoa::appkit::NSWindowCollectionBehavior`: use the objc2-app-kit crate instead
+   --> src/panel.rs:123:15
+    |
+123 |             | NSWindowCollectionBehavior::NSWindowCollectionBehaviorStationary,
+    |               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: use of deprecated type alias `tauri_nspanel::cocoa::base::id`: use the objc2 crate instead
+   --> src/panel.rs:127:20
+    |
+127 |       let delegate = panel_delegate!(RaffPanelDelegate {
+    |  ____________________^
+128 | |         window_did_resign_key,
+129 | |         window_did_move
+130 | |     });
+    | |______^
+    |
+    = note: this warning originates in the macro `panel_delegate` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated constant `tauri_nspanel::cocoa::base::nil`: use the objc2 crate instead
+   --> src/panel.rs:127:20
+    |
+127 |       let delegate = panel_delegate!(RaffPanelDelegate {
+    |  ____________________^
+128 | |         window_did_resign_key,
+129 | |         window_did_move
+130 | |     });
+    | |______^
+    |
+    = note: this warning originates in the macro `panel_delegate` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated associated constant `objc2_app_kit::generated::__NSRunningApplication::_::<impl objc2_app_kit::NSApplicationActivationOptions>::ActivateIgnoringOtherApps`: ignoringOtherApps is deprecated in macOS 14 and will have no effect.
+   --> src/macos.rs:442:65
+    |
+442 |         app.activateWithOptions(NSApplicationActivationOptions::ActivateIgnoringOtherApps);
+    |                                                                 ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: use of deprecated associated constant `tauri_nspanel::cocoa::appkit::_::<impl tauri_nspanel::cocoa::appkit::NSWindowCollectionBehavior>::NSWindowCollectionBehaviorCanJoinAllSpaces`: use the objc2-app-kit crate instead
+   --> src/panel.rs:121:37
+    |
+121 |         NSWindowCollectionBehavior::NSWindowCollectionBehaviorCanJoinAllSpaces
+    |                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: use of deprecated associated constant `tauri_nspanel::cocoa::appkit::_::<impl tauri_nspanel::cocoa::appkit::NSWindowCollectionBehavior>::NSWindowCollectionBehaviorFullScreenAuxiliary`: use the objc2-app-kit crate instead
+   --> src/panel.rs:122:43
+    |
+122 |             | NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary
+    |                                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: use of deprecated associated constant `tauri_nspanel::cocoa::appkit::_::<impl tauri_nspanel::cocoa::appkit::NSWindowCollectionBehavior>::NSWindowCollectionBehaviorStationary`: use the objc2-app-kit crate instead
+   --> src/panel.rs:123:43
+    |
+123 |             | NSWindowCollectionBehavior::NSWindowCollectionBehaviorStationary,
+    |                                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `raff` (bin "raff" test) generated 20 warnings (7 duplicates)
+    Finished `release` profile [optimized] target(s) in 31.55s
+warning: the following packages contain code that will be rejected by a future version of Rust: block v0.1.6
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+     Running unittests src/main.rs (src-tauri/target/release/deps/raff-2acbfca6d2a882e9)
+
+running 2 tests
+test storage::audit_tests::perf_probe_capture_at_limit_with_heavy_rows ... perf: fill1000=208.852708ms worst_capture_at_limit=52.999125ms history_bytes=32993011 load=24.018833ms rows=1000
+ok
+test storage::audit_tests::perf_probe_normalize_large_text ... perf: normalize 1720000 bytes -> 1080000 bytes in 4.769917ms
+ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 147 filtered out; finished in 0.66s
+
+exit=0

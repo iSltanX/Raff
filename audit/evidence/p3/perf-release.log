@@ -1,0 +1,2 @@
+perf: fill1000=237.440542ms worst_capture_at_limit=52.42525ms history_bytes=32993011 load=32.606959ms rows=1000
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 147 filtered out; finished in 0.92s

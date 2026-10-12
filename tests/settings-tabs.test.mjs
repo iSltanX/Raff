@@ -50,7 +50,7 @@ function createFakeTauri() {
               version: '4.0.0',
             });
           case 'update_settings':
-            settings = structuredClone(args.settings);
+            settings = { ...settings, ...structuredClone(args.settings) };
             return Promise.resolve(null);
           case 'list_running_apps':
             return Promise.resolve([

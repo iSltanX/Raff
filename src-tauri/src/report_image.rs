@@ -95,7 +95,12 @@ fn encode_png(img: &DynamicImage) -> Option<Vec<u8>> {
     let rgba = img.to_rgba8();
     let mut out = Vec::new();
     PngEncoder::new(Cursor::new(&mut out))
-        .write_image(rgba.as_raw(), rgba.width(), rgba.height(), image::ExtendedColorType::Rgba8)
+        .write_image(
+            rgba.as_raw(),
+            rgba.width(),
+            rgba.height(),
+            image::ExtendedColorType::Rgba8,
+        )
         .ok()?;
     Some(out)
 }
@@ -104,7 +109,12 @@ fn encode_jpeg(img: &DynamicImage) -> Option<Vec<u8>> {
     let rgb = img.to_rgb8();
     let mut out = Vec::new();
     JpegEncoder::new_with_quality(Cursor::new(&mut out), JPEG_QUALITY)
-        .write_image(rgb.as_raw(), rgb.width(), rgb.height(), image::ExtendedColorType::Rgb8)
+        .write_image(
+            rgb.as_raw(),
+            rgb.width(),
+            rgb.height(),
+            image::ExtendedColorType::Rgb8,
+        )
         .ok()?;
     Some(out)
 }
@@ -136,7 +146,10 @@ pub fn prepare(bytes: &[u8], from_pasteboard: bool) -> Result<Prepared, ImageErr
         if let Some(jpeg) = encode_jpeg(&img).filter(|b| b.len() <= MAX_OUTPUT_BYTES) {
             return Ok(finish("image/jpeg", jpeg, &img));
         }
-        let (nw, nh) = ((img.width() as f32 * 0.8) as u32, (img.height() as f32 * 0.8) as u32);
+        let (nw, nh) = (
+            (img.width() as f32 * 0.8) as u32,
+            (img.height() as f32 * 0.8) as u32,
+        );
         if nw < 64 || nh < 64 {
             break;
         }
@@ -189,7 +202,11 @@ mod tests {
         for &b in bytes {
             crc ^= u32::from(b);
             for _ in 0..8 {
-                crc = if crc & 1 != 0 { (crc >> 1) ^ 0xEDB8_8320 } else { crc >> 1 };
+                crc = if crc & 1 != 0 {
+                    (crc >> 1) ^ 0xEDB8_8320
+                } else {
+                    crc >> 1
+                };
             }
         }
         !crc
@@ -197,12 +214,25 @@ mod tests {
 
     #[test]
     fn the_format_is_read_from_the_signature_only() {
-        assert_eq!(sniff(b"\x89PNG\r\n\x1a\nrest", false), Some(ImageFormat::Png));
-        assert_eq!(sniff(&[0xFF, 0xD8, 0xFF, 0xE0], false), Some(ImageFormat::Jpeg));
+        assert_eq!(
+            sniff(b"\x89PNG\r\n\x1a\nrest", false),
+            Some(ImageFormat::Png)
+        );
+        assert_eq!(
+            sniff(&[0xFF, 0xD8, 0xFF, 0xE0], false),
+            Some(ImageFormat::Jpeg)
+        );
         assert_eq!(sniff(b"GIF89a", false), None);
-        assert_eq!(sniff(b"II*\0", false), None, "TIFF only from the pasteboard");
+        assert_eq!(
+            sniff(b"II*\0", false),
+            None,
+            "TIFF only from the pasteboard"
+        );
         assert_eq!(sniff(b"II*\0", true), Some(ImageFormat::Tiff));
-        assert_eq!(prepare(b"<svg/>", false).err(), Some(ImageError::Unsupported));
+        assert_eq!(
+            prepare(b"<svg/>", false).err(),
+            Some(ImageError::Unsupported)
+        );
     }
 
     #[test]
@@ -212,7 +242,10 @@ mod tests {
         assert!(window(&input), "the fixture carries a text chunk");
         let out = prepare(&input, false).expect("prepares");
         assert!(!window(&out.bytes), "no text chunk survives");
-        assert!(!out.bytes.windows(7).any(|w| w == b"private"), "nor the file name it held");
+        assert!(
+            !out.bytes.windows(7).any(|w| w == b"private"),
+            "nor the file name it held"
+        );
         assert_eq!((out.mime, out.width, out.height), ("image/png", 32, 24));
         assert!(out.thumb.starts_with("data:image/png;base64,"));
     }

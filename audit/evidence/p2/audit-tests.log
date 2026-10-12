@@ -1,0 +1,209 @@
+✔ normalizeArabic: متساوية القوة (idempotent) (5.0945ms)
+✔ normalizeArabic: الناتج خالٍ من كل ما يُطوى (1.394166ms)
+✔ normalizeArabic: لا يزيد الطول (بلا حروف تتمدد عند الخفض) (2.906042ms)
+✔ filterItems: الاستعلام الفارغ أو الفراغات يعيد القائمة نفسها (2.678084ms)
+✔ filterItems: الناتج مجموعة جزئية بالترتيب نفسه (66.285916ms)
+✔ filterItems: إطالة الاستعلام لا توسّع النتيجة (رتابة البادئة) (142.597ms)
+✔ filterItems: كل نص يجد نفسه بعد التشكيل أو بدونه (21.846583ms)
+✔ relativeTimeAr: لا يرمي ولا يعيد نصًا فارغًا عبر نطاق واسع وقيم شاذة (2.220709ms)
+✔ relativeTimeAr: قيم غير منتهية تنتج نصًا مقروءًا لا "NaN" (0.217875ms)
+ℹ نواتج غير مقروءة: ["NaN/NaN/NaN","NaN/NaN/NaN"]
+✔ hotkeyFromEvent ↔ hotkeyDisplay: كل تركيبة صالحة تُعرض برموز macOS وبمفتاح واحد (3.562583ms)
+✔ arabicDigits ثم normalizeArabic يعيدان الأرقام الغربية (0.936584ms)
+✔ فحص ساكن: لا واجهات شبكة في شيفرة الواجهة (5.152ms)
+✔ فحص ساكن: لا موارد خارجية في HTML (0.914791ms)
+✔ فحص ساكن: CSP يمنع الاتصال بغير الأصل (0.271125ms)
+✔ تشغيلي: تفاعلات اللوحة لا تحاول أي اتصال (101.330583ms)
+✔ المتجهات ما زالت تطابق normalizeArabic الحالي (حماية من تقادم الملف) (2.894542ms)
+✔ التطابق مع نموذج Rust (خفض حرفًا حرفًا) لكل متجه غير موسوم (0.164292ms)
+✔ عدد المتجهات المختلفة ثابت ومعروف (0.122625ms)
+⚠ RAFF-AUD-007: «سيغما نهائية» يجب أن يطوي JS وRust النص نفسه (1.751209ms) # RAFF-AUD-007: toLowerCase() السياقي في JS مقابل char::to_lowercase في Rust
+⚠ RAFF-AUD-007: «سيغما نهائية مكررة» يجب أن يطوي JS وRust النص نفسه (0.217417ms) # RAFF-AUD-007: toLowerCase() السياقي في JS مقابل char::to_lowercase في Rust
+⚠ RAFF-AUD-007: «سيغما قبل مسافة» يجب أن يطوي JS وRust النص نفسه (0.130666ms) # RAFF-AUD-007: toLowerCase() السياقي في JS مقابل char::to_lowercase في Rust
+⚠ RAFF-AUD-007: «مولَّد #25 (seed 0x5eed)» يجب أن يطوي JS وRust النص نفسه (0.17875ms) # RAFF-AUD-007: toLowerCase() السياقي في JS مقابل char::to_lowercase في Rust
+⚠ RAFF-AUD-007: «مولَّد #168 (seed 0x5eed)» يجب أن يطوي JS وRust النص نفسه (0.105916ms) # RAFF-AUD-007: toLowerCase() السياقي في JS مقابل char::to_lowercase في Rust
+✔ أثر الاختلاف على المستخدم: صف يوناني يظهر في JS ويختفي في البحث العميق (0.188709ms)
+✔ trim " أ " (0.164417ms)
+✔ trim "\tx\n" (0.079542ms)
+✔ trim " x " (0.060834ms)
+✔ trim "　x" (0.0525ms)
+⚠ trim "﻿x" (0.140291ms) # RAFF-AUD-008: JS trim يزيل U+FEFF وRust لا يزيله
+⚠ trim "x﻿" (0.086458ms) # RAFF-AUD-008: JS trim يزيل U+FEFF وRust لا يزيله
+✔ trim "​x" (0.066292ms)
+✔ trim " x" (0.048584ms)
+✔ كل الصفوف تُعرض (3.670208ms)
+✔ لا عناصر محقونة داخل القائمة (14.173583ms)
+✔ الحمولة تظهر حرفيًا كنص (22.955666ms)
+✔ النص الطويل جدًا لا يُعلّق اللوحة ولا يُدرج كاملًا مرات عديدة (23.874125ms)
+✔ لا أخطاء غير ملتقطة (1.338666ms)
+✔ نقرتان متتاليتان على «إرسال» = نداء واحد (HTMLElement.click يحترم disabled) (93.637792ms)
+✔ بعد النجاح يُخفى «إرسال» فلا يصل إليه المستخدم (0.236208ms)
+✔ ملاحظة: send() بلا حارس busy خاص به (دفاع بطبقة واحدة) (34.77075ms)
+ℹ نداءات إضافية عبر dispatchEvent على زر معطّل: 1
+✔ رد قديم يصل بعد الأحدث لا يُطبَّق (84.430625ms)
+✔ مسح الاستعلام ثم وصول رد متأخر لا يضيق أو يوسع القائمة الكاملة (25.213ms)
+✔ العودة إلى استعلام سابق لا تستعمل نتيجة قديمة له (34.044583ms)
+✔ لا أخطاء غير ملتقطة (0.735583ms)
+ℹ tests 44
+ℹ suites 0
+ℹ pass 37
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 7
+ℹ duration_ms 1136.079625
+
+✖ failing tests:
+
+test at tests/audit-normalize-parity.test.mjs:35:3
+⚠ RAFF-AUD-007: «سيغما نهائية» يجب أن يطوي JS وRust النص نفسه (1.751209ms) # RAFF-AUD-007: toLowerCase() السياقي في JS مقابل char::to_lowercase في Rust
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  'οδος' !== 'οδοσ'
+  
+      at TestContext.<anonymous> (file:///Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/audit-normalize-parity.test.mjs:39:14)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:911:18)
+      at Test.postRun (node:internal/test_runner/test:1465:19)
+      at Test.run (node:internal/test_runner/test:1390:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'οδος',
+    expected: 'οδοσ',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/audit-normalize-parity.test.mjs:35:3
+⚠ RAFF-AUD-007: «سيغما نهائية مكررة» يجب أن يطوي JS وRust النص نفسه (0.217417ms) # RAFF-AUD-007: toLowerCase() السياقي في JS مقابل char::to_lowercase في Rust
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  'σας' !== 'σασ'
+  
+      at TestContext.<anonymous> (file:///Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/audit-normalize-parity.test.mjs:39:14)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:911:18)
+      at Test.postRun (node:internal/test_runner/test:1465:19)
+      at Test.run (node:internal/test_runner/test:1390:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'σας',
+    expected: 'σασ',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/audit-normalize-parity.test.mjs:35:3
+⚠ RAFF-AUD-007: «سيغما قبل مسافة» يجب أن يطوي JS وRust النص نفسه (0.130666ms) # RAFF-AUD-007: toLowerCase() السياقي في JS مقابل char::to_lowercase في Rust
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  'ας β' !== 'ασ β'
+  
+      at TestContext.<anonymous> (file:///Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/audit-normalize-parity.test.mjs:39:14)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:911:18)
+      at Test.postRun (node:internal/test_runner/test:1465:19)
+      at Test.run (node:internal/test_runner/test:1390:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'ας β',
+    expected: 'ασ β',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/audit-normalize-parity.test.mjs:35:3
+⚠ RAFF-AUD-007: «مولَّد #25 (seed 0x5eed)» يجب أن يطوي JS وRust النص نفسه (0.17875ms) # RAFF-AUD-007: toLowerCase() السياقي في JS مقابل char::to_lowercase في Rust
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + '3اωςاظرع66نzه3ايت05ض'
+  - '3اωσاظرع66نzه3ايت05ض'
+        ^
+  
+      at TestContext.<anonymous> (file:///Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/audit-normalize-parity.test.mjs:39:14)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:911:18)
+      at Test.postRun (node:internal/test_runner/test:1465:19)
+      at Test.run (node:internal/test_runner/test:1390:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: '3اωςاظرع66نzه3ايت05ض',
+    expected: '3اωσاظرع66نzه3ايت05ض',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/audit-normalize-parity.test.mjs:35:3
+⚠ RAFF-AUD-007: «مولَّد #168 (seed 0x5eed)» يجب أن يطوي JS وRust النص نفسه (0.105916ms) # RAFF-AUD-007: toLowerCase() السياقي في JS مقابل char::to_lowercase في Rust
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + '3ذ́7c2ثو72حقzςهدω'
+  - '3ذ́7c2ثو72حقzσهدω'
+                  ^
+  
+      at TestContext.<anonymous> (file:///Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/audit-normalize-parity.test.mjs:39:14)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:911:18)
+      at Test.postRun (node:internal/test_runner/test:1465:19)
+      at Test.run (node:internal/test_runner/test:1390:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: '3ذ́7c2ثو72حقzςهدω',
+    expected: '3ذ́7c2ثو72حقzσهدω',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/audit-normalize-parity.test.mjs:57:3
+⚠ trim "﻿x" (0.140291ms) # RAFF-AUD-008: JS trim يزيل U+FEFF وRust لا يزيله
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  'x' !== '﻿x'
+  
+      at TestContext.<anonymous> (file:///Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/audit-normalize-parity.test.mjs:62:14)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:911:18)
+      at Test.postRun (node:internal/test_runner/test:1465:19)
+      at Test.run (node:internal/test_runner/test:1390:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'x',
+    expected: '﻿x',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/audit-normalize-parity.test.mjs:57:3
+⚠ trim "x﻿" (0.086458ms) # RAFF-AUD-008: JS trim يزيل U+FEFF وRust لا يزيله
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  'x' !== 'x﻿'
+  
+      at TestContext.<anonymous> (file:///Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/audit-normalize-parity.test.mjs:62:14)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:911:18)
+      at Test.postRun (node:internal/test_runner/test:1465:19)
+      at Test.run (node:internal/test_runner/test:1390:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'x',
+    expected: 'x﻿',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

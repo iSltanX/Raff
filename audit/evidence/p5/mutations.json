@@ -1,0 +1,130 @@
+[
+  {
+    "id": "M1",
+    "file": "src/js/logic.js",
+    "desc": "حذف طيّ الألف في normalizeArabic",
+    "status": "KILLED",
+    "baselineFail": 2,
+    "auditFail": 2,
+    "baselineFailing": [
+      "normalizeArabic folds the alef forms and the dotless ya",
+      "search folding matches across alef and ya spellings both ways"
+    ],
+    "auditFailing": [
+      "normalizeArabic: الناتج خالٍ من كل ما يُطوى",
+      "المتجهات ما زالت تطابق normalizeArabic الحالي (حماية من تقادم الملف)"
+    ]
+  },
+  {
+    "id": "M2",
+    "file": "src/js/logic.js",
+    "desc": "حذف إزالة التشكيل في normalizeArabic",
+    "status": "KILLED",
+    "baselineFail": 2,
+    "auditFail": 2,
+    "baselineFailing": [
+      "normalizeArabic strips tashkeel and tatweel",
+      "filterItems matches text and source app, diacritic-insensitive"
+    ],
+    "auditFailing": [
+      "normalizeArabic: الناتج خالٍ من كل ما يُطوى",
+      "المتجهات ما زالت تطابق normalizeArabic الحالي (حماية من تقادم الملف)"
+    ]
+  },
+  {
+    "id": "M3",
+    "file": "src/js/logic.js",
+    "desc": "حذف طيّ الألف المقصورة",
+    "status": "KILLED",
+    "baselineFail": 2,
+    "auditFail": 2,
+    "baselineFailing": [
+      "normalizeArabic folds the alef forms and the dotless ya",
+      "search folding matches across alef and ya spellings both ways"
+    ],
+    "auditFailing": [
+      "normalizeArabic: الناتج خالٍ من كل ما يُطوى",
+      "المتجهات ما زالت تطابق normalizeArabic الحالي (حماية من تقادم الملف)"
+    ]
+  },
+  {
+    "id": "M4",
+    "file": "src/js/logic.js",
+    "desc": "تجاهل alsoMatchIds في filterItems",
+    "status": "KILLED",
+    "baselineFail": 2,
+    "auditFail": 2,
+    "baselineFailing": [
+      "panel: search reaches the text the preview cut off"
+    ],
+    "auditFailing": [
+      "رد قديم يصل بعد الأحدث لا يُطبَّق",
+      "العودة إلى استعلام سابق لا تستعمل نتيجة قديمة له"
+    ]
+  },
+  {
+    "id": "M5",
+    "file": "src/js/panel.js",
+    "desc": "errorMessage يعيد String(err)",
+    "status": "KILLED",
+    "baselineFail": 3,
+    "auditFail": 0,
+    "baselineFailing": [
+      "panel: a backend failure is shown in Raff’s own words"
+    ],
+    "auditFailing": []
+  },
+  {
+    "id": "M6",
+    "file": "src/js/panel.js",
+    "desc": "حذف فحص الرمز القديم بعد getState في refresh",
+    "status": "KILLED",
+    "baselineFail": 2,
+    "auditFail": 0,
+    "baselineFailing": [
+      "panel lifecycle: copy/paste an old item, hide, reopen — the list must survive"
+    ],
+    "auditFailing": []
+  },
+  {
+    "id": "M7",
+    "file": "src/js/panel.js",
+    "desc": "حذف فحص deepSearchToken",
+    "status": "KILLED-BY-AUDIT",
+    "baselineFail": 0,
+    "auditFail": 2,
+    "baselineFailing": [],
+    "auditFailing": [
+      "رد قديم يصل بعد الأحدث لا يُطبَّق",
+      "العودة إلى استعلام سابق لا تستعمل نتيجة قديمة له"
+    ]
+  },
+  {
+    "id": "M8",
+    "file": "src/js/panel.js",
+    "desc": "عرض نص المقطع عبر innerHTML",
+    "status": "KILLED",
+    "baselineFail": 1,
+    "auditFail": 3,
+    "baselineFailing": [
+      "icons are drawn as masks and never injected as markup"
+    ],
+    "auditFailing": [
+      "فحص ساكن: لا واجهات شبكة في شيفرة الواجهة",
+      "لا عناصر محقونة داخل القائمة",
+      "الحمولة تظهر حرفيًا كنص"
+    ]
+  },
+  {
+    "id": "M9",
+    "file": "scripts/build-frontend.mjs",
+    "desc": "إضافة mock.js إلى قائمة السماح في البناء",
+    "status": "KILLED",
+    "baselineFail": 1,
+    "auditFail": 0,
+    "baselineFailing": [
+      "frontend distribution contains exactly the production allowlist"
+    ],
+    "auditFailing": []
+  }
+]

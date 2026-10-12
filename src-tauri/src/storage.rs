@@ -96,6 +96,78 @@ pub struct Settings {
     /// for another. `0` is what every existing install migrates to, which is
     /// exactly today's behaviour.
     pub retention_days: u32,
+    /// These are the defaults standing in for a `settings.json` that could not
+    /// be read. Written down, so the notice outlives a restart and any other
+    /// save; only turning capture back on — the user's confirmation — clears it.
+    /// Absent from the file whenever it is false.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub settings_recovered: bool,
+}
+
+/// The settings a caller wants changed, and only those.
+///
+/// A window used to send a whole `Settings` built from its last view of them,
+/// so a change made anywhere else in between — «إيقاف الالتقاط» from the menu
+/// bar while Settings was open, say — was silently put back by the next
+/// unrelated save (H6). Now an absent field keeps whatever the store holds
+/// when the patch lands. A complete object is still a valid patch.
+///
+/// `settings_recovered` has no field here: the store owns it.
+#[derive(Deserialize, Clone, Debug, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct SettingsPatch {
+    pub hotkey: Option<String>,
+    pub launch_at_login: Option<bool>,
+    pub history_limit: Option<usize>,
+    pub capture_enabled: Option<bool>,
+    pub respect_concealed: Option<bool>,
+    pub excluded_apps: Option<Vec<String>>,
+    pub learning_enabled: Option<bool>,
+    pub first_run_shown: Option<bool>,
+    pub appearance: Option<Appearance>,
+    pub follow_system: Option<bool>,
+    pub retention_days: Option<u32>,
+}
+
+impl SettingsPatch {
+    /// `current`, with this patch's fields laid over it.
+    pub fn applied_to(self, current: &Settings) -> Settings {
+        let mut next = current.clone();
+        if let Some(value) = self.hotkey {
+            next.hotkey = value;
+        }
+        if let Some(value) = self.launch_at_login {
+            next.launch_at_login = value;
+        }
+        if let Some(value) = self.history_limit {
+            next.history_limit = value;
+        }
+        if let Some(value) = self.capture_enabled {
+            next.capture_enabled = value;
+        }
+        if let Some(value) = self.respect_concealed {
+            next.respect_concealed = value;
+        }
+        if let Some(value) = self.excluded_apps {
+            next.excluded_apps = value;
+        }
+        if let Some(value) = self.learning_enabled {
+            next.learning_enabled = value;
+        }
+        if let Some(value) = self.first_run_shown {
+            next.first_run_shown = value;
+        }
+        if let Some(value) = self.appearance {
+            next.appearance = value;
+        }
+        if let Some(value) = self.follow_system {
+            next.follow_system = value;
+        }
+        if let Some(value) = self.retention_days {
+            next.retention_days = value;
+        }
+        next
+    }
 }
 
 impl Default for Settings {
@@ -112,6 +184,7 @@ impl Default for Settings {
             appearance: Appearance::Light,
             follow_system: true,
             retention_days: 0,
+            settings_recovered: false,
         }
     }
 }
@@ -159,9 +232,15 @@ pub(crate) enum CaptureUndo {
     /// whatever fell off the end.
     Added,
     /// The pinned row at `index` was overwritten; here it is as it was.
-    PinnedBumped { index: usize, previous: Box<ClipItem> },
+    PinnedBumped {
+        index: usize,
+        previous: Box<ClipItem>,
+    },
     /// The history row at `index` was moved to the head and overwritten.
-    HistoryBumped { index: usize, previous: Box<ClipItem> },
+    HistoryBumped {
+        index: usize,
+        previous: Box<ClipItem>,
+    },
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
@@ -205,10 +284,20 @@ pub struct Store {
     pub history: Vec<ClipItem>,
     pub pinned: Vec<ClipItem>,
     pub settings: Settings,
-    /// A layer could not be parsed on this launch and was copied aside. The
-    /// panel needs this to tell "nothing is saved" apart from "your content is
-    /// there, it just was not read" — two states an empty list looks identical in.
+    /// A layer — history, pinned or settings — could not be parsed on this
+    /// launch and was copied aside.
     pub unreadable_layer: bool,
+    /// The layer that did not parse is the shelf itself (history or pinned).
+    /// The panel needs this to tell "nothing is saved" apart from "your content
+    /// is there, it just was not read" — two states an empty list looks
+    /// identical in.
+    pub unreadable_shelf: bool,
+    /// `settings.json` did not parse — on this launch or an earlier one. The
+    /// defaults would turn capture back on with no app excluded — the very
+    /// choices the file existed to keep — so capture is held off and this stays
+    /// set until the user turns it back on themselves
+    /// (`Settings::settings_recovered` carries it across launches).
+    pub unreadable_settings: bool,
     pending_delete: Option<PendingDelete>,
     pending_pin: Option<PendingPin>,
     /// Layers whose learning counters moved and have not been written yet.
@@ -297,22 +386,44 @@ fn migrate_image_hashes(items: &mut [ClipItem], images_dir: &Path) -> bool {
 /// one and asks this one about everything it cannot, and a query that means
 /// two different things on the two sides would show and hide the same row.
 pub fn normalize_for_search(text: &str) -> String {
-    let mut out = String::with_capacity(text.len());
+    let mut folded = String::with_capacity(text.len());
     for ch in text.chars() {
         match ch {
             // Arabic-Indic digits fold to Western, so either spelling finds both.
             '\u{0660}'..='\u{0669}' => {
-                out.push(char::from(b'0' + (ch as u32 - 0x0660) as u8));
+                folded.push(char::from(b'0' + (ch as u32 - 0x0660) as u8));
             }
             // Tashkeel and the superscript alef carry no search meaning...
             '\u{064B}'..='\u{065F}' | '\u{0670}' => {}
-            '\u{0640}' => {}                       // ...nor does tatweel
-            '\u{0623}' | '\u{0625}' | '\u{0622}' => out.push('\u{0627}'),
-            '\u{0649}' => out.push('\u{064A}'),
-            _ => out.extend(ch.to_lowercase()),
+            '\u{0640}' => {} // ...nor does tatweel
+            '\u{0623}' | '\u{0625}' | '\u{0622}' => folded.push('\u{0627}'),
+            '\u{0649}' => folded.push('\u{064A}'),
+            _ => folded.push(ch),
         }
     }
-    out
+    // Lowercased as a whole, after the folds, as `toLowerCase()` is: case is
+    // contextual — a capital sigma that ends a word becomes ς, not σ — and a
+    // character at a time cannot see the word it ends.
+    folded.to_lowercase()
+}
+
+/// Trims a search query exactly as `String.prototype.trim` does in `logic.js`.
+///
+/// `str::trim` goes by Unicode's White_Space; JavaScript has its own list. It
+/// also strips U+FEFF — a byte-order mark is how text pasted from some files
+/// begins — and leaves U+0085 alone. Trimmed two ways, one query is two.
+pub fn trim_query(query: &str) -> &str {
+    query.trim_matches(|ch| {
+        matches!(
+            ch,
+            // WhiteSpace: TAB, VT, FF, ZWNBSP and every Zs space...
+            '\t' | '\u{000B}' | '\u{000C}' | '\u{FEFF}' | ' ' | '\u{00A0}' | '\u{1680}' | '\u{2000}'
+                ..='\u{200A}'
+                | '\u{202F}' | '\u{205F}' | '\u{3000}'
+                // ...and LineTerminator.
+                | '\n' | '\r' | '\u{2028}' | '\u{2029}'
+        )
+    })
 }
 
 /// Schemes the «روابط» filter recognises.
@@ -435,7 +546,8 @@ pub fn detect_kind(text: &str) -> ItemKind {
     }
 }
 
-/// Image filenames named by a set-aside `*.json.corrupt` copy.
+/// Image filenames named by any set-aside copy — the newest `*.json.corrupt`
+/// and every stamped `*.json.<ms>.corrupt` before it.
 ///
 /// Such a copy exists precisely because it did not parse, so it is read
 /// leniently: every `"imageFile"` / `"thumbFile"` value that can still be
@@ -488,16 +600,104 @@ fn load_json_with_status<T: serde::de::DeserializeOwned + Default>(path: &Path) 
         Ok(v) => (v, true),
         Err(err) => {
             // Never destroy user data silently: keep the unreadable file aside.
-            let corrupt = path.with_extension("json.corrupt");
-            let _ = fs::copy(path, &corrupt);
-            eprintln!(
-                "raff: unreadable {} ({err}); copied to {}",
-                path.display(),
-                corrupt.display()
-            );
+            match set_aside(path) {
+                Ok(copy) => eprintln!(
+                    "raff: unreadable {} ({err}); copied to {}",
+                    path.display(),
+                    copy.display()
+                ),
+                Err(copy_err) => eprintln!(
+                    "raff: unreadable {} ({err}); could not copy it aside: {copy_err}",
+                    path.display()
+                ),
+            }
             (T::default(), false)
         }
     }
+}
+
+/// Set-aside copies kept per layer, the newest included.
+///
+/// Every copy keeps the images it names alive (`referenced_by_recovery_copies`),
+/// and a history copy can weigh as much as the layer's whole byte budget, so
+/// "all of them, forever" is not an option. Five distinct unreadable versions
+/// of one file is already far past anything but a disk that is failing.
+const MAX_RECOVERY_COPIES: usize = 5;
+
+/// Copies an unreadable layer aside without ever replacing an earlier copy.
+///
+/// The newest copy is `<file>.corrupt`, where it always was. An earlier one is
+/// first moved to `<file>.<ms>.corrupt`, stamped with the time it was set
+/// aside. Bytes already kept are not copied again: a layer that stays
+/// unreadable is met at every launch, and each launch would otherwise push a
+/// genuinely different copy out of the cap. Past the cap, the oldest go.
+///
+/// The new copy is written beside the others before anything moves, so a
+/// write that fails (a full disk) leaves every existing copy where it was.
+fn set_aside(path: &Path) -> std::io::Result<PathBuf> {
+    let bytes = fs::read(path)?;
+    let newest = path.with_extension("json.corrupt");
+    let copies = recovery_copies(path);
+    if let Some((_, same)) = copies
+        .iter()
+        .find(|(_, copy)| fs::read(copy).is_ok_and(|kept| kept == bytes))
+    {
+        return Ok(same.clone());
+    }
+    let staged = path.with_extension("json.corrupt.tmp");
+    fs::write(&staged, &bytes)?;
+    if newest.exists() {
+        let mut stamp = fs::metadata(&newest)
+            .and_then(|meta| meta.modified())
+            .ok()
+            .and_then(|at| at.duration_since(std::time::UNIX_EPOCH).ok())
+            .map_or_else(now_ms, |since| since.as_millis() as u64);
+        let mut archived = path.with_extension(format!("json.{stamp}.corrupt"));
+        while archived.exists() {
+            stamp += 1;
+            archived = path.with_extension(format!("json.{stamp}.corrupt"));
+        }
+        if let Err(err) = fs::rename(&newest, &archived) {
+            let _ = fs::remove_file(&staged);
+            return Err(err);
+        }
+    }
+    fs::rename(&staged, &newest)?;
+
+    let mut stamped: Vec<(u64, PathBuf)> = recovery_copies(path)
+        .into_iter()
+        .filter_map(|(stamp, copy)| stamp.map(|stamp| (stamp, copy)))
+        .collect();
+    stamped.sort();
+    let excess = (stamped.len() + 1).saturating_sub(MAX_RECOVERY_COPIES);
+    for (_, oldest) in stamped.into_iter().take(excess) {
+        let _ = fs::remove_file(oldest);
+    }
+    Ok(newest)
+}
+
+/// Every set-aside copy of the layer at `path`, with its stamp; the newest,
+/// unstamped `<file>.corrupt` comes back with `None`.
+fn recovery_copies(path: &Path) -> Vec<(Option<u64>, PathBuf)> {
+    let (Some(dir), Some(name)) = (path.parent(), path.file_name().and_then(|n| n.to_str())) else {
+        return Vec::new();
+    };
+    let Ok(entries) = fs::read_dir(dir) else {
+        return Vec::new();
+    };
+    let prefix = format!("{name}.");
+    entries
+        .flatten()
+        .filter_map(|entry| {
+            let file = entry.file_name().to_str()?.to_owned();
+            let middle = file.strip_prefix(&prefix)?.strip_suffix("corrupt")?;
+            let stamp = match middle {
+                "" => None,
+                stamped => Some(stamped.strip_suffix('.')?.parse::<u64>().ok()?),
+            };
+            Some((stamp, entry.path()))
+        })
+        .collect()
 }
 
 fn load_json<T: serde::de::DeserializeOwned + Default>(path: &Path) -> T {
@@ -534,9 +734,56 @@ fn next_write_ticket() -> u64 {
 
 fn write_layer_bytes(path: &Path, bytes: &[u8]) -> Result<(), String> {
     let tmp = path.with_extension("json.tmp");
-    fs::write(&tmp, bytes)
+    let durable = is_durable_layer(path);
+    let written = if durable {
+        write_synced(&tmp, bytes)
+    } else {
+        fs::write(&tmp, bytes)
+    };
+    written
         .and_then(|_| fs::rename(&tmp, path))
-        .map_err(|err| format!("تعذّر حفظ {}: {err}", path.display()))
+        .map_err(|err| format!("تعذّر حفظ {}: {err}", path.display()))?;
+    if durable {
+        sync_parent_dir(path);
+    }
+    Ok(())
+}
+
+/// The files whose writes reach the platter before they count as done (H3):
+/// the settings, and the two journals the delete and pin transactions start
+/// with. Each is small and written only on a deliberate act, so the flush —
+/// about 7 ms on an SSD — is paid rarely. History is not among them: it is
+/// rewritten whole on every copy (tens of megabytes at the limit, ~50 ms to
+/// flush), and a power cut costs it at most the last few copies.
+fn is_durable_layer(path: &Path) -> bool {
+    matches!(
+        path.file_name().and_then(|name| name.to_str()),
+        Some(SETTINGS_FILE | PENDING_DELETE_FILE | PENDING_PIN_FILE)
+    )
+}
+
+/// Writes `bytes` to `path` and flushes them to the device. `sync_all` is
+/// `fcntl(F_FULLFSYNC)` on macOS, the only call that gets past the drive's
+/// own cache; a plain `fsync` there does not.
+fn write_synced(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    use std::io::Write;
+    let mut file = fs::File::create(path)?;
+    file.write_all(bytes)?;
+    file.sync_all()?;
+    #[cfg(test)]
+    tests::note_sync();
+    Ok(())
+}
+
+/// Makes the rename that just landed `path` durable too. Best effort: the
+/// write has already happened by now, and reporting it as failed would have
+/// the caller undo in memory a change that is on disk — a pin journal, say,
+/// replayed at the next launch after the user was told the pin failed.
+fn sync_parent_dir(path: &Path) {
+    let Some(dir) = path.parent() else { return };
+    if let Err(err) = fs::File::open(dir).and_then(|dir| dir.sync_all()) {
+        eprintln!("raff: could not flush {}: {err}", dir.display());
+    }
 }
 
 /// The newest serialization of each layer that has reached the disk.
@@ -545,9 +792,8 @@ fn write_layer_bytes(path: &Path, bytes: &[u8]) -> Result<(), String> {
 /// so two captures can be in flight at once. The ticket each carries lets the
 /// writer refuse to lay an older layer over a newer one.
 fn write_gate() -> &'static std::sync::Mutex<std::collections::HashMap<PathBuf, u64>> {
-    static GATE: std::sync::OnceLock<
-        std::sync::Mutex<std::collections::HashMap<PathBuf, u64>>,
-    > = std::sync::OnceLock::new();
+    static GATE: std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<PathBuf, u64>>> =
+        std::sync::OnceLock::new();
     GATE.get_or_init(Default::default)
 }
 
@@ -624,15 +870,27 @@ impl Store {
             load_json_with_status(&dir.join(HISTORY_FILE));
         let (pinned, pinned_metadata_loaded): (Vec<ClipItem>, bool) =
             load_json_with_status(&dir.join(PINNED_FILE));
-        let settings: Settings = load_json(&dir.join(SETTINGS_FILE));
+        let (mut settings, settings_loaded): (Settings, bool) =
+            load_json_with_status(&dir.join(SETTINGS_FILE));
+        if !settings_loaded {
+            settings.capture_enabled = false;
+            settings.settings_recovered = true;
+            // A file that existed means the welcome already ran; reopening it
+            // would put its «أبقِه يعمل» ahead of the review this calls for.
+            settings.first_run_shown = true;
+        }
         let pending_delete: Option<PendingDelete> = load_json(&dir.join(PENDING_DELETE_FILE));
         let pending_pin: Option<PendingPin> = load_json(&dir.join(PENDING_PIN_FILE));
+        let unreadable_shelf = !(history_metadata_loaded && pinned_metadata_loaded);
+        let unreadable_settings = settings.settings_recovered;
         let mut store = Self {
             dir,
             history,
             pinned,
             settings,
-            unreadable_layer: !(history_metadata_loaded && pinned_metadata_loaded),
+            unreadable_layer: unreadable_shelf || !settings_loaded,
+            unreadable_shelf,
+            unreadable_settings,
             pending_delete,
             pending_pin,
             dirty_signals: DirtySignals::default(),
@@ -734,8 +992,12 @@ impl Store {
     /// from the command's point of view. A failed write restores both in-memory
     /// and durable snapshots; pruned image files are deleted only after both
     /// JSON files have landed successfully.
-    pub fn update_settings_persisted(&mut self, settings: Settings) -> Result<(), String> {
+    pub fn update_settings_persisted(&mut self, mut settings: Settings) -> Result<(), String> {
         self.try_finish_pending_pin()?;
+        // The store owns the recovery marker, whatever the caller sent: turning
+        // capture on is the confirmation it was waiting for; any other change
+        // is saved with the marker still on.
+        settings.settings_recovered = self.settings.settings_recovered && !settings.capture_enabled;
         let old_settings = self.settings.clone();
         let old_history = self.history.clone();
         self.settings = settings;
@@ -750,6 +1012,7 @@ impl Store {
             save_json(&self.dir.join(HISTORY_FILE), &self.history);
             return Err(err);
         }
+        self.unreadable_settings = self.settings.settings_recovered;
         for item in &dropped {
             self.delete_files(item);
         }
@@ -952,6 +1215,27 @@ impl Store {
                 }
             }
             self.history = kept;
+        }
+        dropped
+    }
+
+    /// `prune_history`, except that the row `id` is never one that goes.
+    ///
+    /// An unpinned row returns to history at its recency position, and when it
+    /// is older than everything a full history holds, that position is past
+    /// the end: the count limit would drop the very row the user just asked to
+    /// keep. It stays — one over the limit if need be — until the next prune
+    /// (a capture, the hourly sweep, launch) weighs it like any other row.
+    fn prune_history_sparing(&mut self, id: &str) -> Vec<ClipItem> {
+        let mut dropped = self.prune_history();
+        if let Some(at) = dropped.iter().position(|item| item.id == id) {
+            let item = dropped.remove(at);
+            let to = self
+                .history
+                .iter()
+                .position(|candidate| candidate.created_at < item.created_at)
+                .unwrap_or(self.history.len());
+            self.history.insert(to, item);
         }
         dropped
     }
@@ -1264,6 +1548,8 @@ impl Store {
     /// (a crash can at worst leave a recoverable duplicate, never lose the
     /// item); any write failure restores both vectors and best-effort rewrites
     /// their previous durable snapshots before returning an error to the UI.
+    /// History is trimmed by the whole retention policy (`prune_history`),
+    /// never by the row being moved.
     pub fn set_pin_persisted(&mut self, id: &str, desired: bool) -> Result<bool, String> {
         self.try_finish_pending_pin()?;
         let was_pinned = self
@@ -1279,17 +1565,14 @@ impl Store {
             return Err("تعذّر تغيير حالة التثبيت".into());
         }
 
-        let limit = self.settings.history_limit.max(1);
-        let dropped = if self.history.len() > limit {
-            self.history.split_off(limit)
-        } else {
-            Vec::new()
-        };
+        let dropped = self.prune_history_sparing(id);
 
-        let moved = self
-            .find(id)
-            .cloned()
-            .ok_or_else(|| "العنصر غير موجود".to_string())?;
+        // From here on every early return puts both layers back first.
+        let Some(moved) = self.find(id).cloned() else {
+            self.history = old_history;
+            self.pinned = old_pinned;
+            return Err("العنصر غير موجود".into());
+        };
         self.pending_pin = Some(PendingPin {
             item: moved,
             desired,
@@ -1572,6 +1855,75 @@ impl Store {
 mod tests {
     use super::*;
 
+    thread_local! {
+        static SYNCED_WRITES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    }
+
+    /// Counts flushed writes on the calling thread, so parallel tests do not
+    /// see each other's.
+    pub(super) fn note_sync() {
+        SYNCED_WRITES.with(|count| count.set(count.get() + 1));
+    }
+
+    fn synced_writes() -> usize {
+        SYNCED_WRITES.with(std::cell::Cell::get)
+    }
+
+    #[test]
+    fn the_settings_and_the_two_journals_are_the_durable_layers() {
+        for file in [SETTINGS_FILE, PENDING_DELETE_FILE, PENDING_PIN_FILE] {
+            assert!(is_durable_layer(&Path::new("/data").join(file)), "{file}");
+        }
+        for file in [
+            HISTORY_FILE,
+            PINNED_FILE,
+            PANEL_PLACEMENT_FILE,
+            "history.json.corrupt",
+        ] {
+            assert!(!is_durable_layer(&Path::new("/data").join(file)), "{file}");
+        }
+    }
+
+    /// H3: what is flushed is exactly the settings and the journals — never
+    /// the history every copy rewrites.
+    #[test]
+    fn settings_and_journals_are_flushed_and_a_capture_is_not() {
+        let mut s = store();
+        let before = synced_writes();
+
+        capture_text(&mut s, "copied text");
+        s.save_history();
+        assert_eq!(
+            synced_writes(),
+            before,
+            "a capture rewrites history without a flush"
+        );
+
+        let mut next = s.settings.clone();
+        next.retention_days = 7;
+        s.update_settings_persisted(next).unwrap();
+        assert_eq!(
+            synced_writes(),
+            before + 1,
+            "settings.json is flushed; the history beside it is not"
+        );
+
+        let id = s.history[0].id.clone();
+        s.set_pin_persisted(&id, true).unwrap();
+        assert_eq!(
+            synced_writes(),
+            before + 2,
+            "the pin journal is flushed, the layers it moves between are not"
+        );
+
+        s.delete_reversible(&id).unwrap();
+        assert_eq!(synced_writes(), before + 3, "so is the delete journal");
+
+        let reloaded = Store::load(s.dir.clone());
+        assert_eq!(reloaded.settings.retention_days, 7);
+        assert!(reloaded.find(&id).is_none());
+    }
+
     fn store() -> Store {
         let dir = std::env::temp_dir().join(format!("raff-test-{}", uuid::Uuid::new_v4()));
         Store::load(dir)
@@ -1707,7 +2059,11 @@ mod tests {
         };
         fs::write(
             dir.join(HISTORY_FILE),
-            format!("[{},{}]", row("nine-days", 9, "old"), row("two-days", 2, "kept")),
+            format!(
+                "[{},{}]",
+                row("nine-days", 9, "old"),
+                row("two-days", 2, "kept")
+            ),
         )
         .unwrap();
         fs::write(
@@ -1729,11 +2085,18 @@ mod tests {
         let store = Store::load(dir.clone());
 
         assert_eq!(
-            store.history.iter().map(|i| i.id.as_str()).collect::<Vec<_>>(),
+            store
+                .history
+                .iter()
+                .map(|i| i.id.as_str())
+                .collect::<Vec<_>>(),
             vec!["two-days"],
             "past the window goes, inside it stays"
         );
-        assert!(!images.join("old.png").exists(), "and its image goes with it");
+        assert!(
+            !images.join("old.png").exists(),
+            "and its image goes with it"
+        );
         assert!(!images.join("old.thumb.png").exists());
         assert_eq!(store.pinned.len(), 1, "a pinned item is outside the policy");
 
@@ -1811,10 +2174,13 @@ mod tests {
         let before = pinned_ids_in_order(&s);
 
         for wrong in [
-            vec![first.clone()],                                  // one short
-            vec![first.clone(), second.clone(), first.clone()],   // one too many
-            vec![first.clone(), first.clone()],                   // right length, repeated
-            vec![first.clone(), "\u{063a}\u{0631}\u{064a}\u{0628}".to_string()], // a stranger
+            vec![first.clone()],                                // one short
+            vec![first.clone(), second.clone(), first.clone()], // one too many
+            vec![first.clone(), first.clone()],                 // right length, repeated
+            vec![
+                first.clone(),
+                "\u{063a}\u{0631}\u{064a}\u{0628}".to_string(),
+            ], // a stranger
         ] {
             assert!(
                 s.reorder_pinned_persisted(&wrong).is_err(),
@@ -1928,6 +2294,91 @@ mod tests {
         assert!(recovered.pinned.is_empty());
         assert!(recovered.find(&old_id).is_none());
         assert!(!dir.join(PENDING_PIN_FILE).exists());
+    }
+
+    /// A full history, and a pinned row older than everything in it — so the
+    /// recency position it returns to on unpin is past the count limit.
+    fn full_history_and_an_older_pinned_row() -> (Store, String) {
+        let mut s = store();
+        s.settings.history_limit = 2;
+        capture_text(&mut s, "pinned long ago");
+        let id = s.history[0].id.clone();
+        s.set_pin_persisted(&id, true).unwrap();
+        s.find_mut(&id).unwrap().created_at = 1;
+        s.save_pinned();
+        capture_text(&mut s, "recent a");
+        capture_text(&mut s, "recent b");
+        s.save_history();
+        (s, id)
+    }
+
+    fn layer_on_disk(s: &Store, file: &str) -> Vec<ClipItem> {
+        serde_json::from_slice(&fs::read(s.dir.join(file)).unwrap()).unwrap()
+    }
+
+    #[test]
+    fn unpinning_into_a_full_history_keeps_the_row_in_memory_and_on_disk() {
+        let (mut s, id) = full_history_and_an_older_pinned_row();
+        let recent: Vec<String> = s.history.iter().map(|item| item.id.clone()).collect();
+
+        assert_eq!(s.set_pin_persisted(&id, false), Ok(false));
+
+        assert!(
+            !s.find(&id)
+                .expect("the unpinned row is still there")
+                .is_pinned
+        );
+        assert_eq!(
+            s.history.last().map(|item| item.id.as_str()),
+            Some(id.as_str()),
+            "at its recency position, one over the limit"
+        );
+        assert!(
+            recent.iter().all(|other| s.find(other).is_some()),
+            "and nothing else was dropped to make room for it"
+        );
+        assert!(
+            layer_on_disk(&s, HISTORY_FILE)
+                .iter()
+                .any(|item| item.id == id),
+            "written down, not only kept in memory"
+        );
+        assert!(layer_on_disk(&s, PINNED_FILE).is_empty());
+        assert!(!s.dir.join(PENDING_PIN_FILE).exists());
+    }
+
+    #[test]
+    fn the_next_capture_weighs_an_unpinned_row_like_any_other() {
+        let (mut s, id) = full_history_and_an_older_pinned_row();
+        s.set_pin_persisted(&id, false).unwrap();
+
+        capture_text(&mut s, "recent c");
+
+        assert_eq!(s.history.len(), 2, "back within the limit");
+        assert!(s.find(&id).is_none(), "the oldest row is the one that goes");
+    }
+
+    #[test]
+    fn unpinning_applies_the_whole_retention_policy_not_just_the_count() {
+        let mut s = store();
+        s.settings.retention_days = 7;
+        capture_text(&mut s, "to pin and back");
+        let id = s.history[0].id.clone();
+        s.set_pin_persisted(&id, true).unwrap();
+        capture_text(&mut s, "past the window");
+        let expired = s.history[0].id.clone();
+        s.find_mut(&expired).unwrap().created_at = now_ms() - 9 * 24 * 60 * 60 * 1000;
+
+        s.set_pin_persisted(&id, false).unwrap();
+
+        assert!(
+            s.find(&expired).is_none(),
+            "the age limit applies here as well"
+        );
+        assert!(!layer_on_disk(&s, HISTORY_FILE)
+            .iter()
+            .any(|item| item.id == expired));
+        assert!(s.find(&id).is_some());
     }
 
     #[test]
@@ -2218,6 +2669,125 @@ mod tests {
         );
     }
 
+    fn set_aside_contents(dir: &Path) -> Vec<Vec<u8>> {
+        let mut kept: Vec<Vec<u8>> = recovery_copies(&dir.join(HISTORY_FILE))
+            .into_iter()
+            .map(|(_, copy)| fs::read(copy).unwrap())
+            .collect();
+        kept.sort();
+        kept
+    }
+
+    #[test]
+    fn a_second_unreadable_history_does_not_replace_the_first_copy() {
+        let dir = std::env::temp_dir().join(format!("raff-test-{}", uuid::Uuid::new_v4()));
+        let images = dir.join(IMAGES_DIR);
+        fs::create_dir_all(&images).unwrap();
+        for name in ["first.png", "second.png", "orphan.png"] {
+            fs::write(images.join(name), name).unwrap();
+        }
+
+        fs::write(
+            dir.join(HISTORY_FILE),
+            r#"[{"type":"image","imageFile":"first.png""#,
+        )
+        .unwrap();
+        Store::load(dir.clone());
+        fs::write(
+            dir.join(HISTORY_FILE),
+            r#"[{"type":"image","imageFile":"second.png""#,
+        )
+        .unwrap();
+        Store::load(dir.clone());
+
+        assert_eq!(
+            set_aside_contents(&dir),
+            [
+                br#"[{"type":"image","imageFile":"first.png""#.to_vec(),
+                br#"[{"type":"image","imageFile":"second.png""#.to_vec(),
+            ],
+            "both versions are kept"
+        );
+        assert_eq!(
+            fs::read(dir.join("history.json.corrupt")).unwrap(),
+            br#"[{"type":"image","imageFile":"second.png""#,
+            "the newest stays where it always was"
+        );
+
+        // History heals; from here on collection runs, and has to count every
+        // copy, not only the newest.
+        fs::write(dir.join(HISTORY_FILE), "[]").unwrap();
+        Store::load(dir.clone());
+        assert!(
+            images.join("first.png").exists(),
+            "named only by the earlier copy"
+        );
+        assert!(
+            images.join("second.png").exists(),
+            "named only by the newest copy"
+        );
+        assert!(
+            !images.join("orphan.png").exists(),
+            "and collection did run"
+        );
+    }
+
+    #[test]
+    fn a_copy_that_cannot_be_written_moves_nothing() {
+        let dir = std::env::temp_dir().join(format!("raff-test-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join(HISTORY_FILE), "{first").unwrap();
+        Store::load(dir.clone());
+        // Whatever stops the write — a full disk, here a directory in the way.
+        fs::create_dir(dir.join("history.json.corrupt.tmp")).unwrap();
+        fs::write(dir.join(HISTORY_FILE), "{second").unwrap();
+
+        Store::load(dir.clone());
+
+        assert_eq!(
+            fs::read(dir.join("history.json.corrupt")).unwrap(),
+            b"{first",
+            "the newest slot still holds the earlier copy, not nothing"
+        );
+        assert_eq!(set_aside_contents(&dir), [b"{first".to_vec()]);
+    }
+
+    #[test]
+    fn a_layer_that_stays_unreadable_is_set_aside_once() {
+        let dir = std::env::temp_dir().join(format!("raff-test-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join(HISTORY_FILE), "{still not json").unwrap();
+
+        for _ in 0..3 {
+            Store::load(dir.clone());
+        }
+
+        assert_eq!(set_aside_contents(&dir), [b"{still not json".to_vec()]);
+    }
+
+    #[test]
+    fn set_aside_copies_are_capped_and_the_oldest_go_first() {
+        let dir = std::env::temp_dir().join(format!("raff-test-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&dir).unwrap();
+
+        for version in 0..MAX_RECOVERY_COPIES + 2 {
+            fs::write(dir.join(HISTORY_FILE), format!("{{broken {version}")).unwrap();
+            Store::load(dir.clone());
+        }
+
+        let kept = set_aside_contents(&dir);
+        assert_eq!(kept.len(), MAX_RECOVERY_COPIES);
+        assert!(
+            !kept.contains(&b"{broken 0".to_vec()),
+            "the oldest went first"
+        );
+        assert!(!kept.contains(&b"{broken 1".to_vec()));
+        assert_eq!(
+            fs::read(dir.join("history.json.corrupt")).unwrap(),
+            format!("{{broken {}", MAX_RECOVERY_COPIES + 1).into_bytes()
+        );
+    }
+
     #[test]
     fn a_failed_capture_write_restores_the_model_from_its_undo_record() {
         // 1000 is the highest limit `validate_settings` allows, and the size
@@ -2251,7 +2821,11 @@ mod tests {
         assert!(persist_capture(&store, capture).is_err());
 
         let s = crate::lock_store(&store);
-        assert_eq!(s.history.len(), before_len, "the row it pushed off came back");
+        assert_eq!(
+            s.history.len(),
+            before_len,
+            "the row it pushed off came back"
+        );
         assert_eq!(s.history[0].id, before_head, "the new row is gone");
         assert_eq!(
             s.history[before_len - 1].id,
@@ -2294,7 +2868,10 @@ mod tests {
         // fingerprint already on disk has just stopped matching.
         assert_eq!(content_hash(b""), "f1:cbf29ce484222325");
         assert_eq!(content_hash(b"raff"), "f1:6dcf031fd20381b8");
-        assert_eq!(content_hash(&[0x89, b'P', b'N', b'G']), "f1:09935de427cea543");
+        assert_eq!(
+            content_hash(&[0x89, b'P', b'N', b'G']),
+            "f1:09935de427cea543"
+        );
     }
 
     #[test]
@@ -2378,12 +2955,12 @@ mod tests {
     fn prose_that_merely_contains_a_link_stays_text() {
         for text in [
             "\u{0627}\u{0641}\u{062a}\u{062d} https://example.com \u{0627}\u{0644}\u{0622}\u{0646}", // prose around a URL
-            "example",                 // a word, not a domain
-            "3.5",                     // a number
-            "file.txt",                // a filename, not a host
-            "\u{0645}\u{0644}\u{0641}.\u{0646}\u{0635}",  // ...in Arabic too
-            "a@b",                     // not an address, and no scheme
-            "mailto:",                 // a scheme with nothing after it
+            "example",                                   // a word, not a domain
+            "3.5",                                       // a number
+            "file.txt",                                  // a filename, not a host
+            "\u{0645}\u{0644}\u{0641}.\u{0646}\u{0635}", // ...in Arabic too
+            "a@b",                                       // not an address, and no scheme
+            "mailto:",                                   // a scheme with nothing after it
         ] {
             assert_ne!(detect_kind(text), ItemKind::Link, "{text}");
         }
@@ -2476,6 +3053,167 @@ mod tests {
     }
 
     #[test]
+    fn unreadable_settings_hold_capture_off_until_the_user_turns_it_back_on() {
+        let dir = std::env::temp_dir().join(format!("raff-test-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&dir).unwrap();
+        let unreadable: &[u8] = br#"{"captureEnabled": false, "excludedApps": ["com.bank""#;
+        fs::write(dir.join(SETTINGS_FILE), unreadable).unwrap();
+
+        let mut s = Store::load(dir.clone());
+
+        assert!(
+            !s.settings.capture_enabled,
+            "the defaults would capture everything the file was keeping out"
+        );
+        assert!(s.unreadable_settings && s.unreadable_layer);
+        assert!(
+            !s.unreadable_shelf,
+            "history and pinned were read: the shelf is not in question"
+        );
+        assert_eq!(
+            fs::read(dir.join(SETTINGS_FILE)).unwrap(),
+            unreadable,
+            "the original is not overwritten at launch"
+        );
+        assert!(
+            !Store::load(dir.clone()).settings.capture_enabled,
+            "and every launch holds off the same way"
+        );
+        assert!(
+            s.settings.first_run_shown,
+            "the welcome does not stand in for the review"
+        );
+
+        // Any other change is saved, but it is not the confirmation — not even
+        // one that sent the marker back cleared.
+        let mut next = s.settings.clone();
+        next.excluded_apps = vec!["com.bank".into()];
+        next.settings_recovered = false;
+        s.update_settings_persisted(next).unwrap();
+        assert!(s.unreadable_settings);
+        assert!(!s.settings.capture_enabled);
+        s.mark_first_run_shown_persisted().unwrap();
+        let after_saves = Store::load(dir.clone());
+        assert!(
+            after_saves.unreadable_settings && !after_saves.settings.capture_enabled,
+            "the file parses again now, and the notice still stands"
+        );
+        assert!(
+            !after_saves.unreadable_layer,
+            "though nothing was unreadable on this launch"
+        );
+
+        let mut next = s.settings.clone();
+        next.capture_enabled = true;
+        s.update_settings_persisted(next).unwrap();
+        assert!(!s.unreadable_settings, "turning capture on is");
+
+        let reloaded = Store::load(dir);
+        assert!(reloaded.settings.capture_enabled);
+        assert!(!reloaded.unreadable_settings && !reloaded.unreadable_layer);
+        assert_eq!(reloaded.settings.excluded_apps, ["com.bank"]);
+        assert!(
+            !fs::read_to_string(reloaded.dir.join(SETTINGS_FILE))
+                .unwrap()
+                .contains("settingsRecovered"),
+            "a settings file with nothing to recover from does not mention it"
+        );
+    }
+
+    /// H6: Settings was opened with capture on; the menu bar has turned it
+    /// off since. A save from the window that changes one other field must
+    /// leave capture as the menu bar put it.
+    #[test]
+    fn a_patch_changes_only_its_own_fields() {
+        let mut current = Settings::default();
+        current.capture_enabled = false; // the menu bar, after the window loaded
+        current.excluded_apps = vec!["com.bank".into()];
+
+        let patch: SettingsPatch = serde_json::from_str(r#"{"launchAtLogin": true}"#).unwrap();
+        let next = patch.applied_to(&current);
+
+        assert!(next.launch_at_login);
+        assert!(!next.capture_enabled, "the menu bar's change survives");
+        assert_eq!(next.excluded_apps, ["com.bank"]);
+        assert_eq!(next.hotkey, current.hotkey);
+    }
+
+    /// Every field a patch can carry, each set away from its default, so a
+    /// dropped or crossed assignment in `applied_to` shows. And the list of
+    /// settings is pinned: a field added to `Settings` fails here until
+    /// `SettingsPatch` learns it too — otherwise saving it would silently do
+    /// nothing.
+    #[test]
+    fn a_patch_carries_every_setting_and_nothing_crosses() {
+        let wanted = Settings {
+            hotkey: "ctrl+alt+k".into(),
+            launch_at_login: true,
+            history_limit: 1000,
+            capture_enabled: false,
+            respect_concealed: false,
+            excluded_apps: vec!["com.bank".into()],
+            learning_enabled: false,
+            first_run_shown: true,
+            appearance: Appearance::Dark,
+            follow_system: false,
+            retention_days: 30,
+            settings_recovered: false,
+        };
+        let json = serde_json::to_value(&wanted).unwrap();
+        let mut keys: Vec<&str> = json
+            .as_object()
+            .unwrap()
+            .keys()
+            .map(String::as_str)
+            .collect();
+        keys.sort_unstable();
+        assert_eq!(
+            keys,
+            [
+                "appearance",
+                "captureEnabled",
+                "excludedApps",
+                "firstRunShown",
+                "followSystem",
+                "historyLimit",
+                "hotkey",
+                "launchAtLogin",
+                "learningEnabled",
+                "respectConcealed",
+                "retentionDays",
+            ],
+            "a new setting needs a SettingsPatch field before it can be saved"
+        );
+
+        let patch: SettingsPatch = serde_json::from_value(json).unwrap();
+        let next = patch.applied_to(&Settings::default());
+
+        assert_eq!(
+            serde_json::to_value(&next).unwrap(),
+            serde_json::to_value(&wanted).unwrap()
+        );
+    }
+
+    #[test]
+    fn a_complete_object_is_still_a_valid_patch_and_the_marker_is_not_the_caller_s() {
+        let mut sent = Settings::default();
+        sent.capture_enabled = false;
+        sent.history_limit = 200;
+        sent.settings_recovered = true;
+        let patch: SettingsPatch =
+            serde_json::from_str(&serde_json::to_string(&sent).unwrap()).unwrap();
+
+        let next = patch.applied_to(&Settings::default());
+
+        assert!(!next.capture_enabled);
+        assert_eq!(next.history_limit, 200);
+        assert!(
+            !next.settings_recovered,
+            "only the store sets the recovery marker"
+        );
+    }
+
+    #[test]
     fn settings_from_older_versions_get_appearance_defaults() {
         let dir = std::env::temp_dir().join(format!("raff-test-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
@@ -2562,5 +3300,490 @@ mod tests {
         s.clear_learning();
         assert_eq!(s.history[0].copy_count, 0);
         assert_eq!(s.history[0].paste_count, 0);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// وحدة اختبارات التدقيق (RAFF-COPILOT-AUDIT). اختبارات فقط؛ لا تغيّر سلوك المنتج.
+// الاختبارات المعلَّمة #[ignore = "RAFF-AUD-00N: ..."] تعيد إنتاج خلل مؤكد،
+// وتفشل حتى يُصلَح. تُشغَّل بـ: cargo test audit_tests -- --ignored
+// ---------------------------------------------------------------------------
+#[cfg(test)]
+mod audit_tests {
+    use super::*;
+    use std::sync::{Arc, Mutex};
+
+    fn tmp_dir(tag: &str) -> PathBuf {
+        std::env::temp_dir().join(format!("raff-audit-{tag}-{}", uuid::Uuid::new_v4()))
+    }
+
+    fn cap(s: &mut Store, text: &str) -> CaptureResult {
+        s.capture(
+            detect_kind(text),
+            text.into(),
+            None,
+            None,
+            None,
+            None,
+            None,
+            ("Audit".into(), "com.audit".into()),
+        )
+    }
+
+    fn cap_persist(store: &Mutex<Store>, text: &str) -> Result<CaptureOutcome, String> {
+        let result = cap(&mut crate::lock_store(store), text);
+        persist_capture(store, result)
+    }
+
+    fn ids(items: &[ClipItem]) -> Vec<String> {
+        items.iter().map(|i| i.id.clone()).collect()
+    }
+
+    /// xorshift64 بذرة ثابتة: تسلسلات حتمية قابلة للإعادة.
+    struct Rng(u64);
+    impl Rng {
+        fn next(&mut self) -> u64 {
+            let mut x = self.0;
+            x ^= x << 13;
+            x ^= x >> 7;
+            x ^= x << 17;
+            self.0 = x;
+            x
+        }
+        fn below(&mut self, n: u64) -> u64 {
+            self.next() % n
+        }
+    }
+
+    /// يحضّر حالة RAFF-AUD-001: تاريخ ممتلئ عند الحد، وعنصر مثبّت أقدم من كل ما فيه.
+    fn full_history_with_old_pinned(dir: &Path) -> (Store, String) {
+        let mut s = Store::load(dir.to_path_buf());
+        s.settings.history_limit = 2;
+        cap(&mut s, "pinned-old");
+        let pinned_id = s.history[0].id.clone();
+        assert!(s.set_pin_persisted(&pinned_id, true).unwrap());
+        s.find_mut(&pinned_id).unwrap().created_at = 1;
+        s.save_pinned();
+        cap(&mut s, "recent-a");
+        cap(&mut s, "recent-b");
+        s.save_history();
+        assert_eq!(s.history.len(), 2);
+        (s, pinned_id)
+    }
+
+    // --- H4 / RAFF-AUD-001 ------------------------------------------------
+
+    #[test]
+    fn aud001_unpin_at_cap_keeps_item_or_refuses_without_side_effects() {
+        let dir = tmp_dir("aud001");
+        let (mut s, pinned_id) = full_history_with_old_pinned(&dir);
+        let before = (ids(&s.history), ids(&s.pinned));
+        match s.set_pin_persisted(&pinned_id, false) {
+            Ok(_) => assert!(s.find(&pinned_id).is_some(), "نجاح يجب ألا يفقد العنصر"),
+            Err(_) => assert_eq!(
+                (ids(&s.history), ids(&s.pinned)),
+                before,
+                "الرفض يجب أن يعيد الطبقتين كما كانتا"
+            ),
+        }
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // --- H1 / H2 / RAFF-AUD-002 / RAFF-AUD-003: مصفوفة الفساد ------------------
+
+    fn corruption_payloads() -> Vec<(&'static str, Vec<u8>)> {
+        vec![
+            ("empty", Vec::new()),
+            ("truncated", b"[{\"id\":\"x\",\"type\":\"te".to_vec()),
+            ("wrong-type", b"{\"not\":\"an array\"}".to_vec()),
+            ("binary", vec![0xff, 0xfe, 0x00, 0x13, 0x37]),
+            ("nul-only", vec![0u8; 64]),
+            ("bom-empty-array", b"\xef\xbb\xbf[]".to_vec()),
+        ]
+    }
+
+    #[test]
+    fn h1_corrupt_history_or_pinned_is_flagged_copied_aside_and_images_survive() {
+        for layer in [HISTORY_FILE, PINNED_FILE] {
+            for (name, bytes) in corruption_payloads() {
+                let dir = tmp_dir("h1");
+                fs::create_dir_all(dir.join(IMAGES_DIR)).unwrap();
+                let image = dir.join(IMAGES_DIR).join("orphan-candidate.png");
+                fs::write(&image, b"png").unwrap();
+                fs::write(dir.join(layer), &bytes).unwrap();
+
+                let s = Store::load(dir.clone());
+
+                assert!(
+                    s.unreadable_layer,
+                    "{layer}/{name}: يجب رفع علامة الطبقة غير المقروءة"
+                );
+                let copy = dir.join(layer).with_extension("json.corrupt");
+                assert_eq!(
+                    fs::read(&copy).unwrap(),
+                    bytes,
+                    "{layer}/{name}: النسخة الجانبية مطابقة"
+                );
+                assert_eq!(
+                    fs::read(dir.join(layer)).unwrap(),
+                    bytes,
+                    "{layer}/{name}: الأصل لم يُستبدل عند الإقلاع"
+                );
+                assert!(
+                    image.exists(),
+                    "{layer}/{name}: لا تنظيف للصور اليتيمة مع طبقة غير مقروءة"
+                );
+                let _ = fs::remove_dir_all(dir);
+            }
+        }
+    }
+
+    #[test]
+    fn aud002_corrupt_settings_is_surfaced() {
+        let dir = tmp_dir("aud002");
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join(SETTINGS_FILE), b"{oops").unwrap();
+        let s = Store::load(dir.clone());
+        assert!(
+            s.unreadable_layer,
+            "فساد الإعدادات يجب أن يصل إلى الواجهة كما في الطبقتين الأخريين"
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    fn two_successive_corruptions(dir: &Path) {
+        fs::create_dir_all(dir).unwrap();
+        fs::write(dir.join(HISTORY_FILE), b"FIRST-CORRUPTION").unwrap();
+        let s = Store::load(dir.to_path_buf());
+        drop(s);
+        fs::write(dir.join(HISTORY_FILE), b"SECOND-CORRUPTION").unwrap();
+        let _ = Store::load(dir.to_path_buf());
+    }
+
+    #[test]
+    fn aud003_every_recovery_copy_is_kept() {
+        let dir = tmp_dir("aud003");
+        two_successive_corruptions(&dir);
+        let mut found_first = false;
+        for entry in fs::read_dir(&dir).unwrap().flatten() {
+            if fs::read(entry.path())
+                .map(|b| b == b"FIRST-CORRUPTION")
+                .unwrap_or(false)
+            {
+                found_first = true;
+            }
+        }
+        assert!(found_first, "نسخة الفساد الأول يجب أن تبقى في مكان ما");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // --- حقن الأعطال: مجلد مكان ملف .tmp يجعل الكتابة تفشل ---------------------
+
+    #[test]
+    fn fault_capture_write_failure_rolls_back_memory_and_disk() {
+        let dir = tmp_dir("fault-cap");
+        let store = Mutex::new(Store::load(dir.clone()));
+        cap_persist(&store, "kept").unwrap();
+        let before = ids(&crate::lock_store(&store).history);
+        fs::create_dir(dir.join("history.json.tmp")).unwrap();
+
+        let result = cap_persist(&store, "doomed");
+
+        assert!(result.is_err());
+        assert_eq!(
+            ids(&crate::lock_store(&store).history),
+            before,
+            "الذاكرة تعود كما كانت"
+        );
+        fs::remove_dir(dir.join("history.json.tmp")).unwrap();
+        assert_eq!(
+            ids(&Store::load(dir.clone()).history),
+            before,
+            "القرص لم يتغيّر"
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn fault_settings_write_failure_restores_settings() {
+        let dir = tmp_dir("fault-set");
+        let mut s = Store::load(dir.clone());
+        s.save_settings();
+        fs::create_dir(dir.join("settings.json.tmp")).unwrap();
+        let mut next = s.settings.clone();
+        next.capture_enabled = false;
+        next.excluded_apps = vec!["com.bank".into()];
+
+        assert!(s.update_settings_persisted(next).is_err());
+        assert!(s.settings.capture_enabled, "الإعداد يعود في الذاكرة");
+        assert!(s.settings.excluded_apps.is_empty());
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn fault_pin_journal_failure_leaves_item_unpinned_everywhere() {
+        let dir = tmp_dir("fault-pin");
+        let mut s = Store::load(dir.clone());
+        cap(&mut s, "x");
+        s.save_history();
+        let id = s.history[0].id.clone();
+        fs::create_dir(dir.join("pending-pin.json.tmp")).unwrap();
+        assert!(s.set_pin_persisted(&id, true).is_err());
+        assert!(!s.find(&id).unwrap().is_pinned);
+        fs::remove_dir(dir.join("pending-pin.json.tmp")).unwrap();
+        let r = Store::load(dir.clone());
+        assert!(r.pinned.is_empty() && r.history.len() == 1);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // --- اختبار قائم على نموذج: تسلسلات عشوائية ببذرة ثابتة + تطابق إعادة التحميل --
+
+    fn check_invariants(s: &Store, step: usize, op: &str) {
+        let mut seen = std::collections::HashSet::new();
+        for item in s.history.iter().chain(s.pinned.iter()) {
+            assert!(
+                seen.insert(item.id.clone()),
+                "خطوة {step} ({op}): معرّف مكرر {}",
+                item.id
+            );
+        }
+        assert!(
+            s.history.iter().all(|i| !i.is_pinned),
+            "خطوة {step} ({op}): عنصر مثبت في التاريخ"
+        );
+        assert!(
+            s.pinned.iter().all(|i| i.is_pinned),
+            "خطوة {step} ({op}): عنصر غير مثبت في الرف"
+        );
+        assert!(
+            s.history.len() <= s.settings.history_limit.max(1),
+            "خطوة {step} ({op}): تجاوز الحد"
+        );
+    }
+
+    fn run_model(seed: u64, steps: usize) {
+        let dir = tmp_dir("model");
+        let store = Mutex::new(Store::load(dir.clone()));
+        {
+            let mut s = crate::lock_store(&store);
+            let mut settings = s.settings.clone();
+            settings.history_limit = 1000;
+            s.update_settings_persisted(settings).unwrap();
+        }
+        let mut rng = Rng(seed);
+        let mut pending_token: Option<String> = None;
+        for step in 0..steps {
+            let roll = rng.below(100);
+            let op;
+            if roll < 45 {
+                op = "capture";
+                let text = format!("item-{}", rng.below(60));
+                cap_persist(&store, &text).unwrap();
+            } else {
+                let mut s = crate::lock_store(&store);
+                let all: Vec<String> = ids(&s.history).into_iter().chain(ids(&s.pinned)).collect();
+                if all.is_empty() {
+                    continue;
+                }
+                let target = all[rng.below(all.len() as u64) as usize].clone();
+                if roll < 65 {
+                    op = "pin-toggle";
+                    let desired = !s.find(&target).unwrap().is_pinned;
+                    s.set_pin_persisted(&target, desired).unwrap();
+                } else if roll < 80 {
+                    op = "delete";
+                    pending_token = Some(s.delete_reversible(&target).unwrap());
+                } else if roll < 88 {
+                    op = "undo";
+                    if let Some(token) = pending_token.take() {
+                        s.undo_delete(&token).unwrap();
+                    }
+                } else if roll < 94 {
+                    op = "commit";
+                    if let Some(token) = pending_token.take() {
+                        s.commit_delete(&token).unwrap();
+                    }
+                } else {
+                    op = "reorder";
+                    let mut order = ids(&s.pinned);
+                    order.reverse();
+                    s.reorder_pinned_persisted(&order).unwrap();
+                }
+            }
+            let s = crate::lock_store(&store);
+            check_invariants(&s, step, op);
+            if step % 10 == 9 {
+                let r = Store::load(dir.clone());
+                assert_eq!(
+                    ids(&r.history),
+                    ids(&s.history),
+                    "بذرة {seed} خطوة {step} ({op}): التاريخ بعد إعادة التحميل"
+                );
+                assert_eq!(
+                    ids(&r.pinned),
+                    ids(&s.pinned),
+                    "بذرة {seed} خطوة {step} ({op}): الرف بعد إعادة التحميل"
+                );
+            }
+        }
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn model_based_sequences_preserve_invariants_and_reload_equality() {
+        for seed in [0x5eed_u64, 0xC0FFEE, 0xBADD_CAFE, 42, 7] {
+            run_model(seed, 200);
+        }
+    }
+
+    // --- التزامن: التقاطات متوازية عبر persist_capture --------------------------
+
+    #[test]
+    fn concurrent_persist_capture_loses_nothing() {
+        let dir = tmp_dir("conc");
+        let store = Arc::new(Mutex::new(Store::load(dir.clone())));
+        {
+            let mut s = crate::lock_store(&store);
+            let mut settings = s.settings.clone();
+            settings.history_limit = 1000;
+            s.update_settings_persisted(settings).unwrap();
+        }
+        let threads: Vec<_> = (0..8)
+            .map(|t| {
+                let store = Arc::clone(&store);
+                std::thread::spawn(move || {
+                    for i in 0..40 {
+                        cap_persist(&store, &format!("t{t}-i{i}")).unwrap();
+                    }
+                })
+            })
+            .collect();
+        for t in threads {
+            t.join().unwrap();
+        }
+        let mem = ids(&crate::lock_store(&store).history);
+        assert_eq!(mem.len(), 320);
+        let disk = Store::load(dir.clone());
+        assert_eq!(
+            ids(&disk.history),
+            mem,
+            "القرص يطابق الذاكرة بعد كتابات متزامنة"
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // --- تكافؤ التطبيع JS ↔ Rust عبر متجهات مشتركة -----------------------------
+
+    fn vectors() -> serde_json::Value {
+        serde_json::from_str(include_str!("../../audit/fixtures/normalize-vectors.json")).unwrap()
+    }
+
+    #[test]
+    fn normalize_parity_with_js_for_all_non_divergent_vectors() {
+        let v = vectors();
+        let mut checked = 0;
+        for vec in v["vectors"].as_array().unwrap() {
+            let input = vec["input"].as_str().unwrap();
+            let got = normalize_for_search(input);
+            if vec["divergence"].is_null() {
+                assert_eq!(
+                    got,
+                    vec["expected"].as_str().unwrap(),
+                    "تباين غير متوقع للمدخل {input:?}"
+                );
+            } else {
+                // نموذج JS لـRust (طيّ حرفًا حرفًا ثم خفض النص كاملًا) يطابق Rust تمامًا،
+                // وهو هنا مساوٍ لـexpected منذ RAFF-AUD-007.
+                assert_eq!(
+                    got,
+                    vec["perCharModel"].as_str().unwrap(),
+                    "نموذج Rust في المولِّد لا يطابق Rust: {input:?}"
+                );
+            }
+            checked += 1;
+        }
+        assert!(checked >= 200);
+    }
+
+    #[test]
+    fn aud007_normalize_parity_for_divergent_vectors() {
+        let v = vectors();
+        for vec in v["vectors"].as_array().unwrap() {
+            if !vec["divergence"].is_null() {
+                let input = vec["input"].as_str().unwrap();
+                assert_eq!(
+                    normalize_for_search(input),
+                    vec["expected"].as_str().unwrap(),
+                    "{input:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn aud008_trim_parity_with_js() {
+        let v = vectors();
+        for t in v["trimVectors"].as_array().unwrap() {
+            let input = t["input"].as_str().unwrap();
+            assert_eq!(
+                trim_query(input),
+                t["jsTrim"].as_str().unwrap(),
+                "{input:?}"
+            );
+        }
+    }
+
+    // --- مجسّات أداء (تقيس ولا تحكم؛ تُشغَّل يدويًا) ----------------------------
+
+    #[test]
+    #[ignore = "perf-probe: قياس فقط"]
+    fn perf_probe_capture_at_limit_with_heavy_rows() {
+        let dir = tmp_dir("perf");
+        let store = Mutex::new(Store::load(dir.clone()));
+        {
+            let mut s = crate::lock_store(&store);
+            let mut settings = s.settings.clone();
+            settings.history_limit = 1000;
+            s.update_settings_persisted(settings).unwrap();
+        }
+        let filler = "ع".repeat(16 * 1024);
+        let t0 = std::time::Instant::now();
+        {
+            let mut s = crate::lock_store(&store);
+            for i in 0..1000 {
+                cap(&mut s, &format!("{i}-{filler}"));
+            }
+            s.save_history();
+        }
+        let fill = t0.elapsed();
+        let mut worst = std::time::Duration::ZERO;
+        for i in 0..20 {
+            let t = std::time::Instant::now();
+            cap_persist(&store, &format!("extra-{i}-{filler}")).unwrap();
+            worst = worst.max(t.elapsed());
+        }
+        let size = fs::metadata(dir.join(HISTORY_FILE)).unwrap().len();
+        let t = std::time::Instant::now();
+        let r = Store::load(dir.clone());
+        let load = t.elapsed();
+        println!(
+            "perf: fill1000={fill:?} worst_capture_at_limit={worst:?} history_bytes={size} load={load:?} rows={}",
+            r.history.len()
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    #[ignore = "perf-probe: قياس فقط"]
+    fn perf_probe_normalize_large_text() {
+        let text = "أَهْلًا بِكُمْ ٠١٢٣ Hello ".repeat(40_000);
+        let t = std::time::Instant::now();
+        let out = normalize_for_search(&text);
+        println!(
+            "perf: normalize {} bytes -> {} bytes in {:?}",
+            text.len(),
+            out.len(),
+            t.elapsed()
+        );
     }
 }

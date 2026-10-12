@@ -1,0 +1,844 @@
+✔ the bundle declares exactly one icon set, and no dark variant (1.419083ms)
+✔ the generator derives every shipped icon from the one brand master (0.203458ms)
+✔ the Icon Composer asset pins every appearance to the SAME light artwork (2.376291ms)
+✔ no dark app icon is reachable from bundle metadata or runtime code (2.822625ms)
+✔ icon patching happens before DMG creation, and before the updater archive (2.033125ms)
+✔ the DMG and the updater archive are built from the SAME app directory that was patched (0.302542ms)
+✔ a local build failure (missing updater signing key) does not abort before the icon patch (0.088084ms)
+✔ checks the target-triple-qualified bundle path CI actually produces (1.851958ms)
+✔ still falls back to the unqualified path, for robustness (0.207667ms)
+✔ fails loudly, listing every path checked, if neither exists (0.243792ms)
+✔ the background exists at 1× and Retina 2×, at the window size (9.66225ms)
+✔ Finder places each icon at the centre of its dashed frame (1.36625ms)
+✔ the design takes its identity from the app, not from copied values (1.231416ms)
+✔ both release paths style the DMG between creating and compressing it (0.340958ms)
+✔ the layout addresses its own mount, and the window shows the background unscaled (0.153375ms)
+▶ first run: «أوقفه» actually stops capture
+  ✔ the window says capture is already running (1.625125ms)
+  ✔ declining saves captureEnabled: false (16.822ms)
+  ✔ then the optional permission step, which can be skipped (17.389ms)
+  ✔ then it teaches the way back in (1.206208ms)
+✔ first run: «أوقفه» actually stops capture (344.424125ms)
+▶ first run: accepting capture also lands on the completion state
+  ✔ accepting saves nothing — capture is already the default (0.714583ms)
+  ✔ and the same completion text is shown (0.195ms)
+✔ first run: accepting capture also lands on the completion state (134.810542ms)
+raff: could not stop capture raff/save-failed
+✔ a permission granted before the welcome does not skip the capture decision (258.806375ms)
+✔ granting the permission mid-welcome does not answer the capture question (59.650416ms)
+✔ a failed «keep it stopped» does not announce that رفّ is ready (49.074708ms)
+✔ the welcome does not present the optional permission as a requirement (28.564417ms)
+✔ changing your mind after «أوقفه» turns capture back on (27.854459ms)
+✔ the summary follows a permission granted while it is on screen (30.380709ms)
+raff: accessibility status check failed Error: AX bridge unavailable
+    at invoke (file:///Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/firstrun-recovery.test.mjs:55:56)
+    at Object.axStatus (file:///Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src/js/store.js:40:19)
+    at checkGranted (file:///Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src/js/firstrun.js?firstrun-recovery:165:33)
+    at Object.callback (file:///Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src/js/firstrun.js?firstrun-recovery:139:10)
+    at Object.runNext (file:///Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/firstrun-recovery.test.mjs:35:13)
+    at TestContext.<anonymous> (file:///Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/firstrun-recovery.test.mjs:79:16)
+    at async Test.run (node:internal/test_runner/test:1332:7)
+    at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3)
+raff: accessibility status check failed Error: AX bridge unavailable
+    at invoke (file:///Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/firstrun-recovery.test.mjs:55:56)
+    at Object.axStatus (file:///Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src/js/store.js:40:19)
+    at checkGranted (file:///Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src/js/firstrun.js?firstrun-recovery:165:33)
+    at Object.callback (file:///Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src/js/firstrun.js?firstrun-recovery:139:10)
+    at Object.runNext (file:///Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/firstrun-recovery.test.mjs:35:13)
+    at TestContext.<anonymous> (file:///Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/firstrun-recovery.test.mjs:83:16)
+    at async Test.run (node:internal/test_runner/test:1332:7)
+    at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3)
+raff: accessibility status check failed Error: AX bridge unavailable
+    at invoke (file:///Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/firstrun-recovery.test.mjs:55:56)
+    at Object.axStatus (file:///Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src/js/store.js:40:19)
+    at checkGranted (file:///Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src/js/firstrun.js?firstrun-recovery:165:33)
+    at Object.callback (file:///Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src/js/firstrun.js?firstrun-recovery:139:10)
+    at Object.runNext (file:///Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/firstrun-recovery.test.mjs:35:13)
+    at TestContext.<anonymous> (file:///Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/firstrun-recovery.test.mjs:87:16)
+    at async Test.run (node:internal/test_runner/test:1332:7)
+    at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3)
+✔ first-run permission polling backs off and recovers without unhandled rejection (242.9835ms)
+✔ frontend distribution contains exactly the production allowlist (236.693625ms)
+✔ Tauri packages the generated frontend instead of the design source tree (0.325334ms)
+✔ every asset the pages reference ships in the bundle (4.372916ms)
+✔ the «قريب ومرتب» palette is the only palette, in both appearances (6.488541ms)
+✔ reading text keeps AA contrast on its surfaces in Light and Dark (1.73775ms)
+✔ type is Cairo and Almarai only (2.235958ms)
+✔ every icon and brand asset the UI references exists (9.543917ms)
+✔ icons are drawn as masks and never injected as markup (4.711167ms)
+✔ panel window geometry agrees across config, native code and CSS (0.8655ms)
+✔ secondary windows use the native overlay title bar at their designed sizes (2.7945ms)
+✔ panel chrome stays fixed while only results scroll (0.415667ms)
+✔ row actions cost resting rows nothing and appear for mouse, selection and focus (0.302833ms)
+✔ quick-paste slots are revealed only while ⌘ is held (0.430583ms)
+✔ history rows never resolve application artwork (1.609958ms)
+✔ the menu-bar glyph is an 18pt template drawn natively (0.2925ms)
+✔ the app icon keeps transparent corners and one artwork for every appearance (0.296375ms)
+✔ native and CSS thumbnail contracts agree at 2x without cropping (2.14975ms)
+✔ image rows expose a designed loading/fallback surface (0.406083ms)
+✔ the .sig file content is used verbatim as the signature, never re-base64-encoded (1.191292ms)
+✔ arabicDigits converts Western digits (1.809709ms)
+✔ normalizeArabic strips tashkeel and tatweel (0.323667ms)
+✔ normalizeArabic folds the alef forms and the dotless ya (0.202833ms)
+✔ search folding matches across alef and ya spellings both ways (1.614375ms)
+✔ filterItems matches text and source app, diacritic-insensitive (0.163041ms)
+✔ relativeTimeAr matches identity samples (0.186958ms)
+✔ metaLine joins source and time like the reference (0.147209ms)
+✔ hotkeyDisplay renders macOS symbols in convention order (0.437958ms)
+✔ hotkeyFromEvent builds accelerators and rejects invalid combos (0.533375ms)
+✔ the welcome opens on first run whether or not Accessibility is already granted (1.383834ms)
+✔ the menu-bar icon reflects capture the user turned off (2.129ms)
+raff/diag 0ms module:start
+raff/diag 6ms mount:ok
+raff/diag 7ms refresh:ok — items=2
+raff/diag 38ms repaint
+✔ the optional permission is offered once per session, not on every paste (413.215208ms)
+raff/diag 0ms module:start
+raff/diag 6ms mount:ok
+raff/diag 8ms refresh:ok — items=1
+raff/diag 38ms repaint
+✔ a trusted choice pastes with no toast and no permission action (378.786958ms)
+raff/diag 0ms module:start
+raff/diag 11ms mount:ok
+raff/diag 12ms refresh:ok — items=2
+raff/diag 42ms repaint
+✔ ⌘C copies the selected item without pasting it (395.2415ms)
+raff/diag 0ms module:start
+raff/diag 6ms mount:ok
+raff/diag 7ms refresh:ok — items=2
+raff/diag 24ms repaint
+▶ panel: search reaches the text the preview cut off
+  ✔ a word only in the hidden tail still finds its row (35.258625ms)
+  ✔ what the panel can see itself still matches without waiting (16.381291ms)
+  ✔ clearing the query asks nothing and shows everything (17.820916ms)
+✔ panel: search reaches the text the preview cut off (377.786208ms)
+raff/diag 0ms module:start
+raff/diag 2ms mount:ok
+raff/diag 2ms refresh:ok — items=3
+raff/diag 47ms repaint
+▶ delete shortcut: ⌘⌫ removes the selected item
+  ✔ idle content exposes quick paste, Search and Settings (5.832625ms)
+  ✔ selected items expose exactly the four live row actions (18.243417ms)
+  ✔ the pin shortcut label follows the selected item state (8.860417ms)
+  ✔ does not delete anything when nothing is selected (48.45475ms)
+raff/diag 275ms changed:deferred-while-hidden
+raff/diag 275ms refresh:ok — items=3
+  ✔ does not fire while the search field is focused (native ⌘⌫ text editing wins) (73.793875ms)
+  ✔ ⌥P (pin) still works and is not shadowed by the delete shortcut (31.382333ms)
+  ✔ extra modifier combinations never trigger the destructive shortcut (22.287417ms)
+raff/diag 347ms changed:deferred-while-hidden
+raff/diag 347ms refresh:ok — items=2
+  ✔ ↩ (paste) still works and is not shadowed by the delete shortcut (7.334833ms)
+raff/diag 361ms event:panel-shown
+raff/diag 364ms refresh:ok — items=2
+  ✔ deleting the middle item moves selection to the next item (25.368208ms)
+raff/diag 384ms refresh:ok — items=1
+raff/diag 388ms refresh:ok — items=1
+  ✔ the deletion survives a refresh — it does not come back (11.858791ms)
+raff/diag 417ms refresh:ok — items=0
+raff/diag 418ms refresh:ok — items=0
+  ✔ deleting the last item in the list moves selection to the previous item (36.87025ms)
+  ✔ deleting the only remaining item leaves selection empty, not stuck (31.223625ms)
+  ✔ no uncaught errors across the whole flow (0.175625ms)
+✔ delete shortcut: ⌘⌫ removes the selected item (722.120834ms)
+raff/diag 0ms module:start
+raff/diag 5ms mount:ok
+raff/diag 6ms refresh:ok — items=4
+raff/diag 36ms repaint
+raff/diag 46ms event:panel-shown
+raff/diag 50ms refresh:ok — items=4
+raff/diag 68ms refresh:ok — items=4
+raff/diag 90ms event:panel-shown
+raff/diag 91ms refresh:ok — items=4
+raff/diag 101ms refresh:ok — items=4
+raff/diag 117ms event:panel-shown
+raff/diag 117ms refresh:ok — items=4
+raff/diag 130ms refresh:ok — items=4
+raff/diag 138ms event:panel-shown
+raff/diag 139ms refresh:ok — items=4
+raff/diag 152ms refresh:ok — items=4
+raff/diag 159ms event:panel-shown
+raff/diag 160ms refresh:ok — items=4
+raff/diag 180ms refresh:ok — items=4
+raff/diag 193ms event:panel-shown
+raff/diag 193ms refresh:ok — items=4
+raff/diag 205ms refresh:ok — items=4
+raff/diag 215ms event:panel-shown
+raff/diag 215ms refresh:ok — items=4
+raff/diag 225ms refresh:ok — items=4
+raff/diag 233ms event:panel-shown
+raff/diag 233ms refresh:ok — items=4
+raff/diag 243ms refresh:ok — items=4
+raff/diag 252ms event:panel-shown
+raff/diag 253ms refresh:ok — items=4
+raff/diag 261ms refresh:ok — items=4
+raff/diag 269ms event:panel-shown
+raff/diag 270ms refresh:ok — items=4
+raff/diag 278ms refresh:ok — items=4
+raff/diag 286ms event:panel-shown
+raff/diag 286ms refresh:ok — items=4
+raff/diag 294ms refresh:ok — items=4
+raff/diag 303ms event:panel-shown
+raff/diag 303ms refresh:ok — items=4
+raff/diag 328ms refresh:ok — items=4
+raff/diag 342ms event:panel-shown
+raff/diag 343ms refresh:ok — items=4
+raff/diag 351ms refresh:ok — items=4
+raff/diag 357ms event:panel-shown
+raff/diag 357ms refresh:ok — items=4
+raff/diag 365ms refresh:ok — items=4
+raff/diag 370ms event:panel-shown
+raff/diag 371ms refresh:ok — items=4
+raff/diag 386ms refresh:ok — items=4
+raff/diag 394ms event:panel-shown
+raff/diag 395ms refresh:ok — items=4
+raff/diag 405ms refresh:ok — items=4
+raff/diag 413ms event:panel-shown
+raff/diag 414ms refresh:ok — items=4
+raff/diag 425ms refresh:ok — items=4
+raff/diag 432ms event:panel-shown
+raff/diag 433ms refresh:ok — items=4
+raff/diag 444ms refresh:ok — items=4
+raff/diag 454ms event:panel-shown
+raff/diag 457ms refresh:ok — items=4
+raff/diag 465ms refresh:ok — items=4
+raff/diag 479ms event:panel-shown
+raff/diag 479ms refresh:ok — items=4
+raff/diag 489ms refresh:ok — items=4
+raff/diag 497ms event:panel-shown
+raff/diag 498ms refresh:ok — items=4
+raff/diag 506ms refresh:ok — items=4
+raff/diag 520ms event:panel-shown
+raff/diag 520ms refresh:ok — items=4
+raff/diag 528ms refresh:ok — items=4
+raff/diag 545ms event:panel-shown
+raff/diag 545ms refresh:ok — items=4
+raff/diag 552ms refresh:ok — items=4
+raff/diag 576ms event:panel-shown
+raff/diag 577ms refresh:ok — items=4
+raff/diag 593ms refresh:ok — items=4
+raff/diag 613ms event:panel-shown
+raff/diag 614ms refresh:ok — items=4
+raff/diag 630ms refresh:ok — items=4
+raff/diag 640ms event:panel-shown
+raff/diag 640ms refresh:ok — items=4
+raff/diag 660ms refresh:ok — items=4
+raff/diag 670ms event:panel-shown
+raff/diag 670ms refresh:ok — items=4
+raff/diag 684ms refresh:ok — items=4
+raff/diag 689ms event:panel-shown
+raff/diag 690ms refresh:ok — items=4
+raff/diag 709ms refresh:ok — items=4
+raff/diag 719ms event:panel-shown
+raff/diag 719ms refresh:ok — items=4
+raff/diag 735ms refresh:ok — items=4
+raff/diag 742ms event:panel-shown
+raff/diag 743ms refresh:ok — items=4
+raff/diag 751ms refresh:ok — items=4
+▶ panel endurance: 30 show/hide cycles leak nothing and lose nothing
+  ✔ 30 open/hide cycles keep exactly one row per item (714.846625ms)
+  ✔ no listener accumulation across all 30 cycles (0.352583ms)
+  ✔ no repeating-timer accumulation across all 30 cycles (0.101791ms)
+  ✔ no DOM accumulation across all 30 cycles (1.140542ms)
+  ✔ no reload happened anywhere in the healthy path (0.103542ms)
+raff/diag 1064ms event:panel-shown
+raff/diag 1065ms refresh:ok — items=5
+raff/diag 1081ms repaint
+raff/diag 1081ms refresh:ok — items=2
+  ✔ long-hidden then shown: the list repopulates (316.23725ms)
+raff/diag 1097ms recover:start
+raff/diag 1097ms refresh:ok — items=2
+raff/diag 1104ms repaint
+raff/diag 1104ms recover:soft-ok — ok
+  ✔ wake-from-sleep shape: focus regained without panel://shown (15.743166ms)
+raff/diag 1113ms recover:start
+raff/diag 1114ms refresh:ok — items=2
+raff/diag 1118ms repaint
+raff/diag 1118ms recover:soft-ok — ok
+raff/diag 1119ms recover:start
+raff/diag 1119ms refresh:ok — items=2
+raff/diag 1122ms repaint
+raff/diag 1122ms recover:soft-ok — ok
+raff/diag 1123ms recover:start
+raff/diag 1124ms refresh:ok — items=2
+raff/diag 1125ms repaint
+raff/diag 1125ms recover:soft-ok — ok
+raff/diag 1127ms recover:start
+raff/diag 1127ms refresh:ok — items=2
+raff/diag 1130ms repaint
+raff/diag 1130ms recover:soft-ok — ok
+raff/diag 1131ms recover:start
+raff/diag 1132ms refresh:ok — items=2
+raff/diag 1133ms repaint
+raff/diag 1133ms recover:soft-ok — ok
+raff/diag 1141ms recover:start
+raff/diag 1141ms refresh:ok — items=2
+raff/diag 1143ms repaint
+raff/diag 1143ms recover:soft-ok — ok
+raff/diag 1152ms recover:start
+raff/diag 1152ms refresh:ok — items=2
+raff/diag 1156ms repaint
+raff/diag 1156ms recover:soft-ok — ok
+raff/diag 1157ms recover:start
+raff/diag 1157ms refresh:ok — items=2
+raff/diag 1159ms repaint
+raff/diag 1159ms recover:soft-ok — ok
+raff/diag 1160ms recover:start
+raff/diag 1160ms refresh:ok — items=2
+raff/diag 1163ms repaint
+raff/diag 1164ms recover:soft-ok — ok
+raff/diag 1165ms recover:start
+raff/diag 1165ms refresh:ok — items=2
+raff/diag 1168ms repaint
+raff/diag 1169ms recover:soft-ok — ok
+raff/diag 1170ms recover:start
+raff/diag 1170ms refresh:ok — items=2
+raff/diag 1174ms repaint
+raff/diag 1174ms recover:soft-ok — ok
+raff/diag 1178ms recover:start
+raff/diag 1178ms refresh:ok — items=2
+raff/diag 1179ms repaint
+raff/diag 1179ms recover:soft-ok — ok
+raff/diag 1187ms recover:start
+raff/diag 1188ms refresh:ok — items=2
+raff/diag 1189ms repaint
+raff/diag 1189ms recover:soft-ok — ok
+raff/diag 1190ms recover:start
+raff/diag 1190ms refresh:ok — items=2
+raff/diag 1192ms repaint
+raff/diag 1192ms recover:soft-ok — ok
+raff/diag 1193ms recover:start
+raff/diag 1193ms refresh:ok — items=2
+raff/diag 1195ms repaint
+raff/diag 1195ms recover:soft-ok — ok
+raff/diag 1197ms recover:start
+raff/diag 1197ms refresh:ok — items=2
+raff/diag 1199ms repaint
+raff/diag 1200ms recover:soft-ok — ok
+raff/diag 1201ms recover:start
+raff/diag 1201ms refresh:ok — items=2
+raff/diag 1203ms repaint
+raff/diag 1203ms recover:soft-ok — ok
+raff/diag 1204ms recover:start
+raff/diag 1204ms refresh:ok — items=2
+raff/diag 1208ms repaint
+raff/diag 1208ms recover:soft-ok — ok
+raff/diag 1210ms recover:start
+raff/diag 1210ms refresh:ok — items=2
+raff/diag 1213ms repaint
+raff/diag 1213ms recover:soft-ok — ok
+  ✔ hammering ⌘R 20x produces no reload loop (128.717083ms)
+  ✔ the empty state never appeared while items existed (0.453084ms)
+  ✔ no uncaught errors over the whole endurance run (0.070625ms)
+✔ panel endurance: 30 show/hide cycles leak nothing and lose nothing (1534.321459ms)
+raff/diag 0ms module:start
+raff/diag 4ms mount:ok
+raff/diag 7ms refresh:ok — items=1
+raff/diag 35ms repaint
+▶ panel: a backend failure is shown in Raff’s own words
+  ✔ a storage failure says what went wrong, and only that (161.058208ms)
+  ✔ and an unclassified failure is never rendered verbatim (51.063292ms)
+✔ panel: a backend failure is shown in Raff’s own words (588.220917ms)
+raff/diag 0ms module:start
+raff/diag 4ms mount:ok
+raff/diag 11ms refresh:failed — Error: IPC unavailable
+▶ panel failure state: a permanently failing load shows a recoverable Arabic error
+  ✔ while the first fetch is still in flight the panel reads as loading (38.397542ms)
+raff/diag 261ms refresh:retry — 1
+raff/diag 262ms refresh:failed — Error: IPC unavailable
+raff/diag 1017ms refresh:retry — 2
+raff/diag 1017ms refresh:failed — Error: IPC unavailable
+raff/diag 1023ms repaint
+raff/diag 2066ms reload:manual — failure-view
+  ✔ retries are attempted, then bounded — not an infinite loop (2000.77ms)
+  ✔ the failure state is shown instead of a blank list (2.074459ms)
+  ✔ it is not confused with a genuinely empty shelf (1.306ms)
+  ✔ it offers an Arabic way out and leaks no technical detail (0.605709ms)
+  ✔ the failure copy is the approved wording, reassuring and non-technical (1.35725ms)
+  ✔ the app did not reload itself behind the scenes (0.131167ms)
+raff/diag 2072ms event:panel-shown
+raff/diag 2074ms refresh:ok — items=1
+  ✔ the failure button reloads the frontend when pressed (7.023042ms)
+  ✔ recovery is possible without a reload once IPC returns (14.380708ms)
+  ✔ the whole failure path produced no uncaught errors (0.122959ms)
+✔ panel failure state: a permanently failing load shows a recoverable Arabic error (2374.896459ms)
+raff/diag 0ms module:start
+raff/diag 2ms mount:ok
+raff/diag 3ms refresh:ok — items=200
+raff/diag 251ms repaint
+▶ panel: incremental updates
+  ✔ moving the selection keeps the very same row nodes (71.689375ms)
+raff/diag 344ms changed:deferred-while-hidden
+raff/diag 350ms event:panel-shown
+raff/diag 353ms refresh:ok — items=200
+  ✔ a capture arriving while hidden is not fetched or rebuilt (11.583834ms)
+  ✔ and showing it again picks up whatever was missed (211.653708ms)
+✔ panel: incremental updates (768.182666ms)
+raff/diag 0ms module:start
+raff/diag 7ms mount:ok
+raff/diag 8ms refresh:ok — items=5
+raff/diag 47ms repaint
+raff/diag 89ms changed:deferred-while-hidden
+raff/diag 89ms refresh:ok — items=5
+▶ row actions and feedback are transactional, accessible, and deterministic
+  ✔ interactive rows use valid grid semantics and exact control names (10.696709ms)
+raff/diag 146ms changed:deferred-while-hidden
+raff/diag 146ms refresh:ok — items=5
+raff/diag 257ms changed:deferred-while-hidden
+raff/diag 257ms refresh:ok — items=4
+  ✔ mouse pin and unpin paint immediately and use exact three-second feedback (142.114583ms)
+raff/diag 289ms changed:deferred-while-hidden
+raff/diag 289ms refresh:ok — items=5
+raff/diag 322ms changed:deferred-while-hidden
+raff/diag 322ms refresh:ok — items=4
+  ✔ mouse delete targets its own row and Undo restores the exact index (97.246292ms)
+raff/diag 366ms changed:deferred-while-hidden
+raff/diag 366ms refresh:ok — items=5
+raff/diag 390ms changed:deferred-while-hidden
+raff/diag 390ms refresh:ok — items=4
+  ✔ Undo restores a deleted pinned item with its prior pinned state (69.447ms)
+raff/diag 442ms changed:deferred-while-hidden
+raff/diag 442ms refresh:ok — items=3
+  ✔ five-second expiry commits the delete and dismisses the one toast (47.040042ms)
+raff/diag 464ms changed:deferred-while-hidden
+raff/diag 465ms refresh:ok — items=2
+raff/diag 494ms changed:deferred-while-hidden
+raff/diag 495ms refresh:ok — items=3
+raff/diag 516ms changed:deferred-while-hidden
+raff/diag 517ms refresh:ok — items=2
+  ✔ sequential deletes replace safely; only the newest receipt can be undone (78.806958ms)
+raff/diag 537ms changed:deferred-while-hidden
+raff/diag 537ms refresh:ok — items=2
+raff/diag 743ms changed:deferred-while-hidden
+raff/diag 744ms refresh:ok — items=2
+raff/diag 771ms changed:deferred-while-hidden
+raff/diag 771ms refresh:ok — items=2
+  ✔ later feedback queues without shortening the five-second Undo window (251.329458ms)
+raff/diag 813ms changed:deferred-while-hidden
+raff/diag 813ms refresh:ok — items=1
+raff/diag 848ms changed:deferred-while-hidden
+raff/diag 848ms refresh:ok — items=2
+  ✔ Option-P and Command-Backspace use the same live paths (74.103959ms)
+  ✔ Undo accepts exactly Command-Z and rejects extra modifiers (23.563458ms)
+  ✔ all action flows stay free of uncaught errors (0.208292ms)
+✔ row actions and feedback are transactional, accessible, and deterministic (1040.388875ms)
+raff/diag 0ms module:start
+raff/diag 3ms mount:ok
+raff/diag 3ms refresh:ok — items=10
+raff/diag 34ms repaint
+▶ panel keyboard contract: navigation, actions, search routing, and native editing
+  ✔ idle list starts intentionally unselected and exposes no active descendant (24.717917ms)
+  ✔ filter tabs rove in RTL order and automatically activate (76.386375ms)
+  ✔ Settings is tabbable and has the standard macOS shortcut (9.079625ms)
+  ✔ Arrow and Page navigation clamp at both list boundaries (25.768334ms)
+  ✔ selection scrolls only the results container, never the WebView document (2.071583ms)
+  ✔ ⌘F focuses and selects the search field (14.790167ms)
+  ✔ ⌘C copies the selected row when focus is outside the editor (37.841583ms)
+  ✔ Enter pastes normally and Option-Enter requests plain text (47.97475ms)
+raff/diag 393ms changed:deferred-while-hidden
+raff/diag 393ms refresh:ok — items=10
+  ✔ Escape clears an active query first, then hides on the next press (42.046875ms)
+  ✔ a printable key routes typing focus to search without cancelling its default input (1.624542ms)
+  ✔ non-printable and composing keys never steal focus (1.495792ms)
+  ✔ Option-P invokes pin for the selected row (74.715208ms)
+  ✔ extra modifiers do not trigger exact pin or copy shortcuts (23.843875ms)
+  ✔ native search editing shortcuts are not stolen by row actions (42.901041ms)
+  ✔ the complete keyboard flow produces no uncaught errors (0.178541ms)
+✔ panel keyboard contract: navigation, actions, search routing, and native editing (657.028125ms)
+raff/diag 0ms module:start
+raff/diag 2ms mount:ok
+raff/diag 3ms refresh:ok — items=1
+raff/diag 25ms repaint
+▶ choosing without Accessibility permission: explained, not silent
+  ✔ the copy half runs, and the toast explains why auto-paste did not (22.792333ms)
+  ✔ the toast action requests Accessibility and opens the settings pane (6.381708ms)
+✔ choosing without Accessibility permission: explained, not silent (219.758084ms)
+raff/diag 0ms module:start
+raff/diag 3ms mount:ok
+raff/diag 4ms refresh:ok — items=1
+raff/diag 19ms repaint
+✔ clipboard-only paste keeps Raff visible and announces the manual fallback (256.996291ms)
+raff/diag 0ms module:start
+raff/diag 8ms mount:ok
+raff/diag 8ms refresh:ok — items=5
+raff/diag 27ms repaint
+▶ panel: the pinned shelf is arranged, not dated
+  ✔ the default list is still one timeline (8.1115ms)
+raff/diag 91ms refresh:ok — items=5
+  ✔ the مثبّت segment follows pinnedOrder instead (32.482333ms)
+  ✔ move buttons are offered there, and bounded (1.257417ms)
+  ✔ moving one down sends the whole new order (52.273542ms)
+  ✔ the buttons are absent where the order has no meaning (74.374916ms)
+✔ panel: the pinned shelf is arranged, not dated (385.567458ms)
+raff/diag 0ms module:start
+raff/diag 3ms mount:ok
+raff/diag 4ms refresh:ok — items=3
+raff/diag 53ms repaint
+▶ choosing an item: one click, one paste, mouse and keyboard agree
+  ✔ a single click pastes that exact row (28.501ms)
+  ✔ a pinned row is chosen the same way (29.667958ms)
+  ✔ ⌥click chooses as plain text, matching ⌥⏎ (16.187375ms)
+raff/diag 171ms changed:deferred-while-hidden
+raff/diag 171ms refresh:ok — items=2
+  ✔ Enter performs the identical action on the selection (10.607292ms)
+  ✔ the row action buttons are not a choice (37.160333ms)
+✔ choosing an item: one click, one paste, mouse and keyboard agree (555.098583ms)
+raff/diag 0ms module:start
+raff/diag 3ms mount:ok
+raff/diag 3ms refresh:failed — Error: IPC unavailable
+raff/diag 255ms refresh:retry — 1
+raff/diag 255ms refresh:ok — items=3
+raff/diag 278ms repaint
+▶ panel recovery: first load retries, then ⌘R re-initialises in place
+  ✔ a failed first load is retried automatically and succeeds (509.189792ms)
+  ✔ the transient failure never showed the error state to the user (2.713041ms)
+  ✔ one chronological list — pinned items stay in place with one clear action (6.2565ms)
+  ✔ the header actions carry Arabic labels only (0.28075ms)
+raff/diag 543ms recover:start
+raff/diag 543ms refresh:ok — items=4
+raff/diag 550ms repaint
+raff/diag 550ms recover:soft-ok — ok
+  ✔ the header actions are wired to their commands (12.401959ms)
+raff/diag 558ms recover:start
+raff/diag 558ms refresh:ok — items=4
+raff/diag 563ms repaint
+raff/diag 563ms recover:soft-ok — ok
+  ✔ ⌘R re-initialises the data without reloading (16.025916ms)
+raff/diag 570ms recover:start
+raff/diag 571ms refresh:ok — items=4
+raff/diag 582ms repaint
+raff/diag 582ms recover:soft-ok — ok
+  ✔ ⌘R never loses already-saved items (12.351417ms)
+raff/diag 595ms event:panel-shown
+raff/diag 596ms refresh:ok — items=4
+  ✔ a burst of ⌘R is collapsed by the busy state (21.475583ms)
+  ✔ recovering does not re-subscribe the background events (0.962166ms)
+raff/diag 605ms recover:start
+raff/diag 605ms refresh:ok — items=4
+raff/diag 611ms repaint
+raff/diag 611ms recover:soft-ok — ok
+raff/diag 619ms event:panel-shown
+raff/diag 620ms refresh:ok — items=4
+raff/diag 629ms recover:start
+raff/diag 629ms refresh:ok — items=4
+raff/diag 632ms repaint
+raff/diag 632ms recover:soft-ok — ok
+raff/diag 639ms event:panel-shown
+raff/diag 640ms refresh:ok — items=4
+raff/diag 652ms recover:start
+raff/diag 652ms refresh:ok — items=4
+raff/diag 661ms repaint
+raff/diag 661ms recover:soft-ok — ok
+raff/diag 669ms event:panel-shown
+raff/diag 670ms refresh:ok — items=4
+raff/diag 680ms recover:start
+raff/diag 681ms refresh:ok — items=4
+raff/diag 684ms repaint
+raff/diag 684ms recover:soft-ok — ok
+raff/diag 693ms event:panel-shown
+raff/diag 693ms refresh:ok — items=4
+raff/diag 703ms recover:start
+raff/diag 703ms refresh:ok — items=4
+raff/diag 706ms repaint
+raff/diag 706ms recover:soft-ok — ok
+raff/diag 716ms event:panel-shown
+raff/diag 716ms refresh:ok — items=0
+  ✔ repeated show/recover cycles never trigger a reload loop (120.291375ms)
+raff/diag 735ms event:panel-shown
+raff/diag 735ms refresh:ok — items=2
+  ✔ an empty shelf reads as empty, never as an error (15.536792ms)
+  ✔ the panel exposes no English "Reload" affordance (0.924291ms)
+  ✔ the native page menu is suppressed over inert areas (0.822625ms)
+  ✔ the search field keeps its native editing menu (0.125541ms)
+  ✔ selected text keeps its native copy menu (1.319625ms)
+  ✔ typing or pasting into the search field still filters (47.460167ms)
+raff/diag 804ms event:panel-shown
+raff/diag 805ms refresh:ok — items=5
+  ✔ the search-clear button appears with a query and resets it (20.986959ms)
+raff/diag 862ms event:panel-shown
+raff/diag 862ms refresh:ok — items=1
+  ✔ each filter segment narrows the list to its own kind (41.496083ms)
+  ✔ the active segment is the only one marked selected (16.798208ms)
+  ✔ a filter with no matches reads as «لا نتائج», never as an empty shelf (25.286791ms)
+  ✔ the row icon represents content type while source metadata remains accessible (2.736625ms)
+  ✔ no uncaught errors during the whole session (0.13675ms)
+✔ panel recovery: first load retries, then ⌘R re-initialises in place (1124.089458ms)
+raff/diag 0ms module:start
+raff/diag 3ms mount:ok
+raff/diag 8ms refresh:ok — items=2
+raff/diag 46ms repaint
+raff/diag 82ms recover:start
+raff/diag 82ms refresh:failed — Error: IPC unavailable
+▶ ⌘R recovery: falls back to a frontend reload only when re-initialising fails
+  ✔ the panel starts healthy (3.759834ms)
+raff/diag 337ms refresh:retry — 1
+raff/diag 337ms refresh:failed — Error: IPC unavailable
+raff/diag 1089ms refresh:retry — 2
+raff/diag 1090ms refresh:failed — Error: IPC unavailable
+raff/diag 1090ms recover:fallback-reload
+raff/diag 1090ms reload:manual — recover-fallback
+  ✔ with IPC wedged, ⌘R tries in place first and only then reloads (1418.665ms)
+  ✔ a wedged panel keeps the last good list rather than blanking (0.718291ms)
+raff/diag 2110ms recover:start
+raff/diag 2111ms event:panel-shown
+raff/diag 2112ms refresh:ok — items=2
+raff/diag 2115ms repaint
+raff/diag 2115ms recover:soft-ok — superseded
+  ✔ the fallback does not loop (607.375208ms)
+  ✔ a panel://shown landing mid-recovery is not mistaken for a failure (1407.067875ms)
+  ✔ no uncaught errors (0.17725ms)
+✔ ⌘R recovery: falls back to a frontend reload only when re-initialising fails (3699.737542ms)
+raff/diag 0ms module:start
+raff/diag 2ms mount:ok
+raff/diag 2ms refresh:ok — items=12
+raff/diag 67ms repaint
+✔ image rows defer their thumbnail until they are actually near the viewport (317.455041ms)
+raff/diag 1ms module:start
+raff/diag 21ms mount:ok
+raff/diag 21ms refresh:ok — items=1
+raff/diag 58ms repaint
+✔ without IntersectionObserver the panel still loads thumbnails eagerly (294.719583ms)
+raff/diag 0ms module:start
+raff/diag 3ms mount:ok
+raff/diag 4ms refresh:ok — items=0
+raff/diag 16ms repaint
+▶ panel: an unreadable layer replaces the empty shelf with its own state
+  ✔ the unreadable-layer state is shown instead of «رفّك جاهز» (1.724584ms)
+  ✔ it is announced, and does not borrow the empty-shelf illustration (4.008625ms)
+✔ panel: an unreadable layer replaces the empty shelf with its own state (319.267625ms)
+raff/diag 0ms module:start
+raff/diag 2ms mount:ok
+raff/diag 4ms refresh:ok — items=3
+raff/diag 25ms repaint
+raff/diag 44ms changed:deferred-while-hidden
+▶ panel lifecycle: copy/paste an old item, hide, reopen — the list must survive
+  ✔ initial load renders one chronological list, pinned marked in place (14.025083ms)
+raff/diag 60ms event:panel-shown
+raff/diag 62ms refresh:ok — items=3
+  ✔ reopening after copying an OLD TEXT item still shows the full list (27.293917ms)
+raff/diag 74ms refresh:ok — items=3
+raff/diag 85ms event:panel-shown
+raff/diag 87ms refresh:ok — items=3
+  ✔ reopening after copying an OLD IMAGE item still shows the full list (22.871333ms)
+raff/diag 96ms refresh:ok — items=2
+raff/diag 103ms event:panel-shown
+raff/diag 104ms refresh:ok — items=2
+raff/diag 112ms event:panel-shown
+  ✔ reopening after copying a PINNED item keeps it in its chronological place (16.569583ms)
+raff/diag 117ms refresh:ok — items=2
+raff/diag 147ms event:panel-shown
+raff/diag 148ms refresh:ok — items=2
+  ✔ search text is cleared on reopen but does not lose items (43.907417ms)
+raff/diag 156ms refresh:ok — items=3
+raff/diag 163ms event:panel-shown
+raff/diag 165ms refresh:ok — items=3
+raff/diag 181ms refresh:ok — items=3
+raff/diag 188ms event:panel-shown
+raff/diag 190ms refresh:ok — items=3
+raff/diag 201ms refresh:ok — items=3
+raff/diag 209ms event:panel-shown
+raff/diag 211ms refresh:ok — items=3
+raff/diag 221ms refresh:ok — items=3
+raff/diag 228ms event:panel-shown
+raff/diag 228ms refresh:ok — items=3
+raff/diag 237ms refresh:ok — items=3
+raff/diag 244ms event:panel-shown
+raff/diag 246ms refresh:ok — items=3
+raff/diag 253ms refresh:ok — items=3
+raff/diag 260ms event:panel-shown
+raff/diag 262ms refresh:ok — items=3
+raff/diag 270ms refresh:ok — items=3
+raff/diag 277ms event:panel-shown
+raff/diag 279ms refresh:ok — items=3
+raff/diag 288ms refresh:ok — items=3
+raff/diag 294ms event:panel-shown
+raff/diag 297ms refresh:ok — items=3
+raff/diag 309ms refresh:ok — items=3
+raff/diag 319ms event:panel-shown
+raff/diag 321ms refresh:ok — items=3
+raff/diag 330ms refresh:ok — items=3
+raff/diag 336ms event:panel-shown
+raff/diag 338ms refresh:ok — items=3
+raff/diag 345ms event:panel-shown
+  ✔ repeated hide/show cycles (10x) never duplicate rows (188.74025ms)
+  ✔ each event was subscribed to exactly once for the whole session (0.39125ms)
+raff/diag 347ms refresh:ok — items=2
+raff/diag 359ms event:panel-shown
+raff/diag 368ms refresh:ok — items=1
+raff/diag 512ms event:panel-shown
+  ✔ a slow, stale get_state response cannot overwrite a newer one (race safety) (166.41275ms)
+raff/diag 516ms refresh:ok — items=2
+raff/diag 530ms refresh:ok — items=2
+raff/diag 541ms event:panel-shown
+  ✔ a rejected get_state on panel://shown does not leave the panel permanently blank (28.829834ms)
+raff/diag 545ms refresh:ok — items=1
+raff/diag 550ms repaint
+raff/diag 553ms refresh:ok — items=2
+  ✔ regaining window focus also resyncs the list through the official refresh path (26.835125ms)
+  ✔ no console/uncaught errors happened during the whole session (0.293375ms)
+✔ panel lifecycle: copy/paste an old item, hide, reopen — the list must survive (841.270416ms)
+✔ the chosen item STAYS on the clipboard after being pasted (1.6015ms)
+✔ writing our own item back does not create a duplicate history entry (1.805542ms)
+✔ the full pasteboard payload is restored, not flattened to text (0.318666ms)
+✔ no surface claims رفّ never uses the network (3.488958ms)
+✔ the clipboard promise itself is still made (0.375959ms)
+✔ the release runner supports Icon Composer (not macos-14) (1.465125ms)
+✔ the icon-fix step runs after tauri-action, in the same job (0.1415ms)
+✔ the icon-fix step has the secrets it needs to sign the regenerated archive (0.18275ms)
+✔ the report window never reaches past Rust (5.713584ms)
+✔ compose: a kind and a description, within the limit, are needed (8.441833ms)
+✔ preview: Rust freezes the payload and the window shows all of it (32.718ms)
+✔ a failed send retries the same frozen payload (34.482542ms)
+✔ a rate limit counts down instead of offering a retry that cannot work (16.427667ms)
+✔ a rejection names the field, isolated from the Arabic around it (37.008208ms)
+✔ Escape keeps what the user wrote (1.099541ms)
+✔ sent: the number is the reference, copied through Rust (85.42675ms)
+✔ «التالي» waits for an image still being prepared (111.646ms)
+✔ a pasted Finder file is refused with a way forward, not attached as its icon (29.778292ms)
+✔ a text paste is left to the description (15.790291ms)
+▶ settings: the Accessibility permission has a door in Privacy
+  ✔ without the permission the row states it and offers an action (1.846125ms)
+  ✔ the action asks macOS, then opens the right settings pane (23.271667ms)
+  ✔ once granted the row says so and drops the action (17.198875ms)
+✔ settings: the Accessibility permission has a door in Privacy (418.243625ms)
+▶ settings: a capture loop that died is stated, not left looking healthy
+  ✔ the row appears and says capture stopped (2.060458ms)
+  ✔ the toggle still reads on — which is exactly the trap (0.818583ms)
+  ✔ and it disappears again once capture is alive (15.731375ms)
+✔ settings: a capture loop that died is stated, not left looking healthy (325.030041ms)
+▶ «مسح سجل الحافظة» confirmation flow
+  ✔ the button alone deletes nothing — it only opens the dialog (32.310083ms)
+  ✔ the dialog names the consequence and offers both choices (1.939958ms)
+  ✔ the destructive button is never focused by default (0.155625ms)
+  ✔ rejecting via Cancel deletes nothing (6.090166ms)
+  ✔ rejecting via Escape deletes nothing (12.329458ms)
+  ✔ rejecting via a backdrop click deletes nothing (12.529167ms)
+  ✔ confirming deletes the unpinned items only (13.883667ms)
+  ✔ a quiet success message confirms what happened (0.35ms)
+  ✔ settings, hotkey and appearance are untouched by the wipe (0.0825ms)
+  ✔ clearing again on an already-empty history is harmless (13.222542ms)
+  ✔ no uncaught errors during the whole session (0.261542ms)
+✔ «مسح سجل الحافظة» confirmation flow (404.327541ms)
+raff: settings load failed Error: state unavailable
+    at invoke (file:///Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/settings-error-recovery.test.mjs:49:35)
+    at Object.getSettings (file:///Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src/js/store.js:19:22)
+    at load (file:///Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src/js/settings.js?settings-error-recovery:153:27)
+    at loadWithRetries (file:///Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src/js/settings.js?settings-error-recovery:269:15)
+▶ Settings exposes recoverable, announced IPC failures
+  ✔ initial defaults remain inert through retries and failure (547.863417ms)
+raff: running apps load failed Error: app list unavailable
+    at invoke (file:///Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/settings-error-recovery.test.mjs:60:54)
+    at Object.listRunningApps (file:///Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src/js/store.js:44:26)
+    at populateRunningApps (file:///Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src/js/settings.js?settings-error-recovery:550:28)
+    at HTMLButtonElement.<anonymous> (file:///Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src/js/settings.js?settings-error-recovery:513:30)
+    at HTMLButtonElement.callTheUserObjectsOperation (/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/node_modules/jsdom/lib/generated/idl/EventListener.js:26:30)
+    at innerInvokeEventListeners (/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:360:16)
+    at invokeEventListeners (/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:296:3)
+    at HTMLButtonElementImpl._dispatch (/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:243:9)
+    at fireAnEvent (/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/node_modules/jsdom/lib/jsdom/living/helpers/events.js:18:36)
+    at HTMLButtonElementImpl.click (/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/node_modules/jsdom/lib/jsdom/living/nodes/HTMLElement-impl.js:85:5)
+  ✔ explicit retry restores the real settings and interactions (17.937667ms)
+raff: settings save failed Error: save refused
+    at invoke (file:///Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/settings-error-recovery.test.mjs:64:47)
+    at Object.updateSettings (file:///Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src/js/store.js:32:33)
+    at commitSettingsPatch (file:///Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src/js/settings.js?settings-error-recovery:343:15)
+    at file:///Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src/js/settings.js?settings-error-recovery:371:38
+  ✔ running-app failure replaces the add controls with an alert and retry (24.658917ms)
+raff: clearing history failed Error: clear refused
+    at invoke (file:///Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/settings-error-recovery.test.mjs:69:48)
+    at Object.clearHistory (file:///Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src/js/store.js:29:23)
+    at HTMLButtonElement.<anonymous> (file:///Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src/js/settings.js?settings-error-recovery:756:15)
+  ✔ a non-hotkey save failure is visible, assertive, and reverts (5.589667ms)
+raff: clear-learning failed Error: learning clear refused
+    at invoke (file:///Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/tests/settings-error-recovery.test.mjs:73:56)
+    at Object.clearLearning (file:///Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src/js/store.js:30:24)
+    at file:///Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src/js/settings.js?settings-error-recovery:665:13
+    at HTMLButtonElement.<anonymous> (file:///Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/src/js/settings.js?settings-error-recovery:654:13)
+    at HTMLButtonElement.callTheUserObjectsOperation (/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/node_modules/jsdom/lib/generated/idl/EventListener.js:26:30)
+    at innerInvokeEventListeners (/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:360:16)
+    at invokeEventListeners (/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:296:3)
+    at HTMLButtonElementImpl._dispatch (/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:243:9)
+    at fireAnEvent (/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/node_modules/jsdom/lib/jsdom/living/helpers/events.js:18:36)
+    at HTMLButtonElementImpl.click (/Users/abutalal/.copilot/repos/copilot-worktrees/Raff/isltanx-curly-bassoon/node_modules/jsdom/lib/jsdom/living/nodes/HTMLElement-impl.js:85:5)
+  ✔ clear-history failure reports that nothing was deleted (6.880084ms)
+  ✔ clear-learning failure is handled, announced, and retryable (6.703583ms)
+✔ Settings exposes recoverable, announced IPC failures (883.927ms)
+✔ settings: a refused hotkey is announced, not just painted (272.977708ms)
+raff: learning summary failed raff/save-failed
+▶ settings: a refused learning summary is stated and retryable
+  ✔ the refusal is shown, not swallowed (2.556166ms)
+  ✔ a retry button is offered, and it works (29.051333ms)
+✔ settings: a refused learning summary is stated and retryable (327.704583ms)
+▶ settings: refreshing costs the preferences, not the whole shelf
+  ✔ the first load asks for the settings payload only (1.239209ms)
+  ✔ and so does every capture that follows (16.169583ms)
+✔ settings: refreshing costs the preferences, not the whole shelf (296.54525ms)
+▶ settings: a bundle id can be typed in
+  ✔ the field sits beside the picker, which stays the main road (1.383291ms)
+raff: settings save failed قائمة التطبيقات المستثناة غير صالحة
+  ✔ a well-formed id is saved (26.669291ms)
+  ✔ an id with a space is refused and changes nothing (36.606ms)
+  ✔ and an id already on the list is not added twice (32.478833ms)
+✔ settings: a bundle id can be typed in (325.5235ms)
+▶ settings: retention is a choice, and its wording is honest
+  ✔ the control exists and reflects the saved value (2.566333ms)
+  ✔ the wording says which items it does not touch (0.798125ms)
+  ✔ choosing a window saves it (19.342542ms)
+✔ settings: retention is a choice, and its wording is honest (282.128875ms)
+▶ settings complete-object saves are serialized and composed
+  ✔ rapid unrelated controls cannot clobber one another (19.7105ms)
+  ✔ two rapid clicks deterministically toggle twice (5.827417ms)
+✔ settings complete-object saves are serialized and composed (238.181917ms)
+▶ compact tabbed Settings contract and interactions
+  ▶ exactly five labelled ARIA tabs expose one initial page
+    ✔ عام (1.004583ms)
+    ✔ الالتقاط (0.101083ms)
+    ✔ الخصوصية (0.074ms)
+    ✔ التعلّم (0.0675ms)
+    ✔ حول (0.081667ms)
+  ✔ exactly five labelled ARIA tabs expose one initial page (9.990542ms)
+  ✔ clicking switches selection and leaves one page visible (3.398792ms)
+  ✔ RTL arrows, Home, and End select and focus the expected page (27.350042ms)
+  ✔ appearance radios use one roving stop and RTL arrow selection (36.72725ms)
+  ✔ each page retains its production controls and legacy columns are gone (8.341833ms)
+  ✔ About, clear, learning, exclusions, and hotkey actions remain wired (41.518292ms)
+✔ compact tabbed Settings contract and interactions (313.802292ms)
+✔ update window announces state and exposes native progress semantics (179.36ms)
+✔ About opens the update window when a newer version exists (143.330584ms)
+✔ Settings opens the update window when a newer version exists (152.91675ms)
+ℹ tests 280
+ℹ suites 0
+ℹ pass 280
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 11229.4445
+ℹ start of coverage report
+ℹ ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ℹ file                 | line % | branch % | funcs % | uncovered lines
+ℹ ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ℹ scripts              |        |          |         | 
+ℹ  build-frontend.mjs  | 100.00 |   100.00 |  100.00 | 
+ℹ  dmg-layout.mjs      |  37.17 |   100.00 |    0.00 | 36-39 41-70 77-113
+ℹ src                  |        |          |         | 
+ℹ  js                  |        |          |         | 
+ℹ   about.js           |  84.76 |    50.00 |   36.36 | 32-35 40 52-53 59-60 64 68 93-96 98
+ℹ   diag.js            |  88.24 |    92.00 |   55.56 | 44-45 49-50 59-60 63-64
+ℹ   firstrun.js        |  80.44 |    70.45 |   61.54 | 94-97 101-103 175 182-196 204-216 220-221 241-253 257-258
+ℹ   icons.js           | 100.00 |    80.00 |  100.00 | 
+ℹ   logic.js           |  96.77 |    93.44 |  100.00 | 69-72
+ℹ   panel.js           |  91.42 |    83.49 |   84.50 | 280 471-473 530-531 595-602 604-611 614-629 633-639 651-652 654-656 663-667 735-750 812-813 815-816 821-826 841-842 939-942 977-978 995 1029-1030 1035-1036 1051-1056 1138-1143 1171-1175 1199-1201 1291-1292 1451-1456 1502 1508-1510 1512-1519 1575-1587 1738-1740
+ℹ   report.js          |  91.87 |    74.24 |   87.76 | 14-16 87 126-128 157-168 303-306 333 382-386 448-450 463-468 478 481-482
+ℹ   settings.js        |  49.53 |    62.71 |   31.51 | 41-42 49-50 74-88 98-105 126-131 134-146 187 191-198 208-215 233-236 274-278 283-287 291 301-321 346-348 353-359 362-367 382-396 407 410 432-435 442-458 466-468 474-484 489-493 505-513 520-538 541-578 581 588-591 594 598-616 620-627 637-660 665-676 691-712 716-727 733 740-750 753-777 785-790 800-817 819-843 846-849
+ℹ   store.js           |  96.92 |    94.44 |   73.33 | 11-12
+ℹ   update-flow.js     |  66.67 |    66.67 |   50.00 | 30-33 35 42-56 59-66 79-83
+ℹ   update.js          |  88.71 |    70.59 |   45.45 | 67-69 103-107 128-132 146-148 156 166-167 182-183
+ℹ tests                |        |          |         | 
+ℹ  helpers             |        |          |         | 
+ℹ   panel-harness.mjs  |  97.91 |    93.39 |   89.23 | 45-46 176 310-311 382-383 416-417
+ℹ ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ℹ all files            |  65.74 |    72.60 |   49.42 | 
+ℹ ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ℹ end of coverage report
+exit=0 dur=21s

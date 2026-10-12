@@ -6,7 +6,7 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_autostart::ManagerExt as AutostartExt;
 
-use crate::storage::{Appearance, ItemKind, Settings, Store};
+use crate::storage::{Appearance, ItemKind, Settings, SettingsPatch, Store};
 use crate::{macos, panel, paste, AppState};
 
 const PREVIEW_MAX_CHARS: usize = 1000;
@@ -80,9 +80,13 @@ pub struct StatePayload {
     pub settings: Settings,
     pub ax_trusted: bool,
     pub version: String,
-    /// True when a stored layer could not be read on this launch. An empty
-    /// list then means something very different, and the panel says so.
+    /// True when a layer of the shelf (history or pinned) could not be read on
+    /// this launch. An empty list then means something very different, and
+    /// the panel says so.
     pub unreadable_layer: bool,
+    /// True while defaults stand in for a `settings.json` that could not be
+    /// read, with capture held off until the user turns it back on.
+    pub unreadable_settings: bool,
     /// False once the capture loop has given up. Distinct from
     /// `settings.capture_enabled`, which only says what the user asked for.
     pub capture_alive: bool,
@@ -102,6 +106,7 @@ pub struct SettingsPayload {
     pub settings: Settings,
     pub ax_trusted: bool,
     pub version: String,
+    pub unreadable_settings: bool,
     pub capture_alive: bool,
     pub capture_pause: crate::PauseView,
 }
@@ -117,7 +122,10 @@ pub fn get_settings(app: AppHandle, state: State<AppState>) -> SettingsPayload {
         settings: store.settings.clone(),
         ax_trusted: ax_trusted_noted(),
         version: app.package_info().version.to_string(),
-        capture_alive: state.capture_alive.load(std::sync::atomic::Ordering::SeqCst),
+        unreadable_settings: store.unreadable_settings,
+        capture_alive: state
+            .capture_alive
+            .load(std::sync::atomic::Ordering::SeqCst),
         capture_pause: pause_view(&state),
     }
 }
@@ -134,8 +142,11 @@ pub fn get_state(app: AppHandle, state: State<AppState>) -> StatePayload {
         settings: store.settings.clone(),
         ax_trusted: ax_trusted_noted(),
         version: app.package_info().version.to_string(),
-        unreadable_layer: store.unreadable_layer,
-        capture_alive: state.capture_alive.load(std::sync::atomic::Ordering::SeqCst),
+        unreadable_layer: store.unreadable_shelf,
+        unreadable_settings: store.unreadable_settings,
+        capture_alive: state
+            .capture_alive
+            .load(std::sync::atomic::Ordering::SeqCst),
         capture_pause: pause_view(&state),
     }
 }
@@ -149,11 +160,16 @@ pub fn get_state(app: AppHandle, state: State<AppState>) -> StatePayload {
 /// what keeps that bounded.
 #[tauri::command]
 pub fn search_items(state: State<AppState>, query: String) -> Vec<String> {
-    let needle = crate::storage::normalize_for_search(query.trim());
+    matching_ids(&crate::lock_store(&state.store), &query)
+}
+
+/// `search_items` without the lock: the query trimmed and folded the way the
+/// panel's own filter does it, then every row's full text.
+fn matching_ids(store: &Store, query: &str) -> Vec<String> {
+    let needle = crate::storage::normalize_for_search(crate::storage::trim_query(query));
     if needle.is_empty() {
         return Vec::new();
     }
-    let store = crate::lock_store(&state.store);
     store
         .pinned
         .iter()
@@ -216,7 +232,9 @@ pub fn toggle_pin(
 ) -> Result<bool, String> {
     let is_pinned = {
         let mut store = crate::lock_store(&state.store);
-        store.set_pin_persisted(&id, is_pinned).map_err(save_failed)?
+        store
+            .set_pin_persisted(&id, is_pinned)
+            .map_err(save_failed)?
     };
     notify(&app);
     Ok(is_pinned)
@@ -314,17 +332,23 @@ pub fn learning_summary(state: State<AppState>) -> Vec<LearnDto> {
         .collect()
 }
 
+/// Changes the settings named in `settings` and leaves every other one as the
+/// store holds it (H6): callers send what changed, not their last full view.
+///
+/// Like every synchronous command this runs on the main thread, where the
+/// menu bar's handlers run too, so nothing lands between reading the current
+/// settings here and persisting the result below.
 #[tauri::command]
 pub fn update_settings(
     app: AppHandle,
     state: State<AppState>,
-    settings: Settings,
+    settings: SettingsPatch,
 ) -> Result<(), String> {
-    validate_settings(&settings)?;
-    let old = {
+    let (old, settings) = {
         let store = crate::lock_store(&state.store);
-        store.settings.clone()
+        (store.settings.clone(), settings.applied_to(&store.settings))
     };
+    validate_settings(&settings)?;
 
     // Hotkey first: if the new accelerator cannot be registered, fail without
     // persisting anything — and re-register the old one, because registration
@@ -356,12 +380,8 @@ pub fn update_settings(
     // Persist only after fallible system integration succeeds. If storage
     // fails, restore both external side effects so Settings cannot claim a
     // configuration macOS or the next launch will not actually honor.
-    if let Err(err) = state
-        .store
-        .lock()
-        .unwrap()
-        .update_settings_persisted(settings.clone())
-    {
+    let persisted = crate::lock_store(&state.store).update_settings_persisted(settings.clone());
+    if let Err(err) = persisted {
         if autostart_changed {
             let autolaunch = app.autolaunch();
             let _ = if old.launch_at_login {
@@ -388,10 +408,11 @@ pub fn update_settings(
 /// Turns capture on or off from outside Settings (the menu bar's «تفعيل
 /// الالتقاط»), through the same validated, persisted path.
 pub fn set_capture_enabled(app: &AppHandle, enabled: bool) -> Result<(), String> {
-    let state = app.state::<AppState>();
-    let mut next = crate::lock_store(&state.store).settings.clone();
-    next.capture_enabled = enabled;
-    update_settings(app.clone(), state, next)
+    let patch = SettingsPatch {
+        capture_enabled: Some(enabled),
+        ..SettingsPatch::default()
+    };
+    update_settings(app.clone(), app.state::<AppState>(), patch)
 }
 
 /// Ends a pause from the panel strip or Settings.
@@ -581,13 +602,7 @@ const WINDOW_REVEAL_FALLBACK_MS: u64 = 1500;
 /// Every secondary window uses the native title bar in overlay mode: real
 /// traffic lights and window dragging from macOS, with the page drawing the
 /// whole content area underneath.
-fn open_window_when_ready(
-    app: &AppHandle,
-    label: &str,
-    page: &str,
-    title: &str,
-    size: (f64, f64),
-) {
+fn open_window_when_ready(app: &AppHandle, label: &str, page: &str, title: &str, size: (f64, f64)) {
     if let Some(w) = app.get_webview_window(label) {
         // Visible → just focus it. Hidden → it is still loading; the
         // page-load handler (or the watchdog below) will reveal it.
@@ -681,13 +696,7 @@ pub fn open_settings_window(app: &AppHandle) {
 pub fn open_about_window(app: &AppHandle) {
     let handle = app.clone();
     let _ = app.run_on_main_thread(move || {
-        open_window_when_ready(
-            &handle,
-            "about",
-            "about.html",
-            "عن رفّ",
-            (320.0, 420.0),
-        );
+        open_window_when_ready(&handle, "about", "about.html", "عن رفّ", (320.0, 420.0));
     });
 }
 
@@ -712,13 +721,7 @@ pub fn open_report_window(app: &AppHandle) {
 }
 
 pub fn open_firstrun_window(app: &AppHandle) {
-    open_window_when_ready(
-        app,
-        "firstrun",
-        "firstrun.html",
-        "رفّ",
-        (460.0, 520.0),
-    );
+    open_window_when_ready(app, "firstrun", "firstrun.html", "رفّ", (460.0, 520.0));
 }
 
 /// Small, tab-less window dedicated to the update cycle (opened by the tray's
@@ -742,13 +745,7 @@ pub fn open_update_window(app: &AppHandle) {
             let _ = w.set_focus();
             return;
         }
-        open_window_when_ready(
-            &handle,
-            "update",
-            "update.html",
-            "تحديث رفّ",
-            (360.0, 280.0),
-        );
+        open_window_when_ready(&handle, "update", "update.html", "تحديث رفّ", (360.0, 280.0));
     });
 }
 
@@ -770,17 +767,46 @@ mod tests {
 
     /// The store-side half of `search_items`: everything except taking the lock.
     fn ids_matching(store: &Store, query: &str) -> Vec<String> {
-        let needle = crate::storage::normalize_for_search(query.trim());
-        if needle.is_empty() {
-            return Vec::new();
+        matching_ids(store, query)
+    }
+
+    fn store_with_rows(texts: &[&str]) -> Store {
+        let dir = std::env::temp_dir().join(format!("raff-search-test-{}", uuid::Uuid::new_v4()));
+        let mut store = Store::load(dir);
+        for text in texts {
+            store.capture(
+                ItemKind::Text,
+                (*text).into(),
+                None,
+                None,
+                None,
+                None,
+                None,
+                ("Notes".into(), "com.apple.Notes".into()),
+            );
         }
         store
-            .pinned
-            .iter()
-            .chain(store.history.iter())
-            .filter(|item| crate::storage::normalize_for_search(&item.text).contains(&needle))
-            .map(|item| item.id.clone())
-            .collect()
+    }
+
+    /// Mirrors `tests/audit-normalize-parity.test.mjs`: the panel's own filter
+    /// finds «ΟΔΟΣ» by «οδος» and not by «οδοσ» (RAFF-AUD-007).
+    #[test]
+    fn a_final_sigma_is_found_by_the_same_query_on_both_sides() {
+        let store = store_with_rows(&["\u{039F}\u{0394}\u{039F}\u{03A3}"]); // ΟΔΟΣ
+        assert_eq!(
+            ids_matching(&store, "\u{03BF}\u{03B4}\u{03BF}\u{03C2}").len(),
+            1
+        ); // οδος
+        assert!(ids_matching(&store, "\u{03BF}\u{03B4}\u{03BF}\u{03C3}").is_empty());
+        // οδοσ
+    }
+
+    /// A query pasted with a byte-order mark is the query without it, as in
+    /// the panel (RAFF-AUD-008).
+    #[test]
+    fn a_leading_byte_order_mark_is_trimmed_from_the_query() {
+        let store = store_with_rows(&["\u{0631}\u{0641}\u{0651}"]); // رفّ
+        assert_eq!(ids_matching(&store, "\u{FEFF}\u{0631}\u{0641}").len(), 1);
     }
 
     #[test]
@@ -790,7 +816,9 @@ mod tests {
         );
         // The distinctive word sits at character 2500 — well past the cut.
         let mut text = "\u{0645} ".repeat(1_250);
-        text.push_str("\u{0634}\u{0641}\u{0631}\u{0629}\u{0627}\u{0644}\u{062e}\u{0632}\u{0646}\u{0629}");
+        text.push_str(
+            "\u{0634}\u{0641}\u{0631}\u{0629}\u{0627}\u{0644}\u{062e}\u{0632}\u{0646}\u{0629}",
+        );
         text.push_str(&"\u{0645} ".repeat(250));
         assert!(text.chars().count() > 3_000);
         store.capture(
@@ -806,7 +834,10 @@ mod tests {
         let id = store.history[0].id.clone();
 
         assert_eq!(
-            ids_matching(&store, "\u{0634}\u{0641}\u{0631}\u{0629}\u{0627}\u{0644}\u{062e}\u{0632}\u{0646}\u{0629}"),
+            ids_matching(
+                &store,
+                "\u{0634}\u{0641}\u{0631}\u{0629}\u{0627}\u{0644}\u{062e}\u{0632}\u{0646}\u{0629}"
+            ),
             vec![id],
             "the shelf is searched, not the preview"
         );
@@ -842,9 +873,7 @@ mod tests {
             1,
             "a query written with bare alef still finds it"
         );
-        assert!(
-            ids_matching(&store, "\u{0645}\u{062f}\u{0631}\u{0633}\u{0647}").is_empty()
-        );
+        assert!(ids_matching(&store, "\u{0645}\u{062f}\u{0631}\u{0633}\u{0647}").is_empty());
     }
 
     fn image_store(original: &[u8], thumb: Option<(&str, &[u8])>) -> (Store, String) {
@@ -886,5 +915,82 @@ mod tests {
             image_data_url(&store, &id),
             Some(format!("data:image/png;base64,{expected}"))
         );
+    }
+}
+
+// وحدة اختبارات التدقيق (RAFF-COPILOT-AUDIT). اختبارات فقط.
+#[cfg(test)]
+mod audit_tests {
+    use super::*;
+
+    fn valid() -> Settings {
+        Settings::default()
+    }
+
+    #[test]
+    fn validate_settings_boundaries() {
+        assert!(validate_settings(&valid()).is_ok());
+        for limit in [0usize, 1, 199, 201, 499, 999, 1001, usize::MAX] {
+            let mut s = valid();
+            s.history_limit = limit;
+            assert!(validate_settings(&s).is_err(), "history_limit={limit}");
+        }
+        for days in [1u32, 6, 8, 29, 31, 89, 91, u32::MAX] {
+            let mut s = valid();
+            s.retention_days = days;
+            assert!(validate_settings(&s).is_err(), "retention_days={days}");
+        }
+        let mut s = valid();
+        s.hotkey = "a".repeat(128);
+        assert!(validate_settings(&s).is_ok(), "128 حرفًا مسموح");
+        s.hotkey = "a".repeat(129);
+        assert!(validate_settings(&s).is_err());
+        s.hotkey.clear();
+        assert!(validate_settings(&s).is_err());
+
+        let mut s = valid();
+        s.excluded_apps = (0..128).map(|i| format!("com.app{i}")).collect();
+        assert!(validate_settings(&s).is_ok(), "128 تطبيقًا مسموح");
+        s.excluded_apps.push("com.extra".into());
+        assert!(validate_settings(&s).is_err());
+        for bad in [
+            "",
+            "com.a b",
+            "com.a\u{0000}",
+            "com.a\t",
+            "com.\u{00A0}x",
+            "com.\u{2028}x",
+        ] {
+            let mut s = valid();
+            s.excluded_apps = vec![bad.into()];
+            assert!(validate_settings(&s).is_err(), "{bad:?}");
+        }
+        let mut s = valid();
+        s.excluded_apps = vec!["a".repeat(255)];
+        assert!(validate_settings(&s).is_ok());
+        s.excluded_apps = vec!["a".repeat(256)];
+        assert!(validate_settings(&s).is_err());
+    }
+
+    #[test]
+    fn observation_bidi_controls_pass_bundle_validation() {
+        // U+202E (RLO) ليس control ولا whitespace في Rust، فيقبله المدقق.
+        // ملاحظة فقط: معرّف الحزمة لا يُعرض كنص منسَّق في واجهة الالتقاط.
+        let mut s = valid();
+        s.excluded_apps = vec!["com.\u{202E}evil".into()];
+        assert!(validate_settings(&s).is_ok());
+    }
+
+    /// RAFF-AUD-004: موضع واحد في الملف يقفل المخزن بـ unwrap بدل crate::lock_store.
+    fn raw_unwrap_lock_sites() -> usize {
+        let src = include_str!("commands.rs");
+        let product = src.split("#[cfg(test)]").next().unwrap();
+        let compact: String = product.chars().filter(|c| !c.is_whitespace()).collect();
+        compact.matches("store.lock().unwrap()").count()
+    }
+
+    #[test]
+    fn aud004_no_raw_unwrap_lock() {
+        assert_eq!(raw_unwrap_lock_sites(), 0);
     }
 }

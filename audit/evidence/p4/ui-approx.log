@@ -1,0 +1,12 @@
+index.html [light] 460x540 dir=rtl lang=ar axe=page-has-heading-one(moderate×1) tabStops=2 noVisibleFocus=1 altTabStops=19 altNoVisibleFocus=1 docOverflow= overflowEls=- consoleErrors=0 external=0
+index.html [dark] 460x540 dir=rtl lang=ar axe=color-contrast(serious×9),page-has-heading-one(moderate×1) tabStops=2 noVisibleFocus=1 altTabStops=19 altNoVisibleFocus=1 docOverflow= overflowEls=- consoleErrors=0 external=0
+settings.html [light] 560x440 dir=rtl lang=ar axe=heading-order(moderate×1),label-content-name-mismatch(serious×1) tabStops=3 noVisibleFocus=1 altTabStops=6 altNoVisibleFocus=1 docOverflow= overflowEls=- consoleErrors=0 external=0
+settings.html [dark] 560x440 dir=rtl lang=ar axe=heading-order(moderate×1),label-content-name-mismatch(serious×1) tabStops=3 noVisibleFocus=1 altTabStops=6 altNoVisibleFocus=1 docOverflow= overflowEls=- consoleErrors=0 external=0
+about.html [light] 320x420 dir=rtl lang=ar axe=0 tabStops=0 noVisibleFocus=0 altTabStops=4 altNoVisibleFocus=0 docOverflow= overflowEls=- consoleErrors=0 external=0
+about.html [dark] 320x420 dir=rtl lang=ar axe=0 tabStops=0 noVisibleFocus=0 altTabStops=4 altNoVisibleFocus=0 docOverflow= overflowEls=- consoleErrors=0 external=0
+report.html [light] 460x600 dir=rtl lang=ar axe=page-has-heading-one(moderate×1) tabStops=3 noVisibleFocus=0 altTabStops=5 altNoVisibleFocus=0 docOverflow= overflowEls=- consoleErrors=0 external=0
+report.html [dark] 460x600 dir=rtl lang=ar axe=page-has-heading-one(moderate×1) tabStops=3 noVisibleFocus=0 altTabStops=5 altNoVisibleFocus=0 docOverflow= overflowEls=- consoleErrors=0 external=0
+firstrun.html [light] 460x520 dir=rtl lang=ar axe=0 tabStops=0 noVisibleFocus=0 altTabStops=1 altNoVisibleFocus=0 docOverflow= overflowEls=- consoleErrors=0 external=0
+firstrun.html [dark] 460x520 dir=rtl lang=ar axe=0 tabStops=0 noVisibleFocus=0 altTabStops=1 altNoVisibleFocus=0 docOverflow= overflowEls=- consoleErrors=0 external=0
+update.html [light] 360x280 dir=rtl lang=ar axe=page-has-heading-one(moderate×1) tabStops=0 noVisibleFocus=0 altTabStops=0 altNoVisibleFocus=0 docOverflow= overflowEls=- consoleErrors=0 external=0
+update.html [dark] 360x280 dir=rtl lang=ar axe=page-has-heading-one(moderate×1) tabStops=0 noVisibleFocus=0 altTabStops=0 altNoVisibleFocus=0 docOverflow= overflowEls=- consoleErrors=0 external=0

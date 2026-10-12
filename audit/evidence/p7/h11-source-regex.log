@@ -1,0 +1,56 @@
+source-only: 10 ملفات، 36 اختبارًا
+  app-icon-authority.test.mjs (4) ← src-tauri/tauri.conf.json, .rs
+  build-candidate-pipeline.test.mjs (3)
+  ci-fix-release-icon-paths.test.mjs (3)
+  identity-contract.test.mjs (13) ← src-tauri/tauri.conf.json, src-tauri/src/panel.rs, src-tauri/src/commands.rs, src-tauri/src/tray.rs
+  image-thumbnail-contract.test.mjs (2) ← src-tauri/src/monitor.rs
+  latest-json-signature-encoding.test.mjs (1)
+  native-state-contract.test.mjs (2) ← src-tauri/src/main.rs, src-tauri/src/tray.rs, src-tauri/src/commands.rs
+  paste-clipboard-contract.test.mjs (3) ← src-tauri/src/paste.rs, src-tauri/src/monitor.rs
+  privacy-promises.test.mjs (2) ← src-tauri/src/main.rs, src-tauri/Cargo.toml
+  release-workflow-icon-fix.test.mjs (3) ← release.yml
+mixed: 17 ملفات، 98 اختبارًا
+  dmg-installer.test.mjs (5)
+  firstrun-capture-consent.test.mjs (8)
+  firstrun-decision-gaps.test.mjs (6)
+  firstrun-recovery.test.mjs (1)
+  frontend-dist-manifest.test.mjs (3) ← src-tauri/tauri.conf.json
+  panel.test.mjs (12)
+  report-window.test.mjs (11)
+  settings-accessibility-row.test.mjs (4)
+  settings-capture-alive.test.mjs (4)
+  settings-clear-history.test.mjs (12)
+  settings-error-recovery.test.mjs (7)
+  settings-learning-failure.test.mjs (3)
+  settings-light-refresh.test.mjs (3)
+  settings-manual-exclusion.test.mjs (5)
+  settings-retention.test.mjs (4)
+  settings-save-serialization.test.mjs (3)
+  settings-tabs.test.mjs (7)
+behavioural: 25 ملفات، 143 اختبارًا
+  logic.test.mjs (9)
+  panel-accessibility-offer-once.test.mjs (1)
+  panel-accessibility-trusted-no-toast.test.mjs (1)
+  panel-copy-only-action.test.mjs (1)
+  panel-deep-search.test.mjs (4)
+  panel-delete-shortcut.test.mjs (15)
+  panel-endurance.test.mjs (11)
+  panel-error-wording.test.mjs (3)
+  panel-failure-state.test.mjs (11)
+  panel-incremental-updates.test.mjs (4)
+  panel-item-actions.test.mjs (11)
+  panel-keyboard-shortcuts.test.mjs (16)
+  panel-no-accessibility-fallback.test.mjs (4)
+  panel-paste-fallback.test.mjs (1)
+  panel-pinned-order.test.mjs (6)
+  panel-primary-action.test.mjs (6)
+  panel-recovery.test.mjs (23)
+  panel-refresh-fallback.test.mjs (7)
+  panel-thumbnail-deferral.test.mjs (1)
+  panel-thumbnail-eager-fallback.test.mjs (1)
+  panel-unreadable-layer.test.mjs (3)
+  settings-hotkey-announcement.test.mjs (1)
+  update-accessibility.test.mjs (1)
+  update-entry-about.test.mjs (1)
+  update-entry-points.test.mjs (1)
+other: 0 ملفات، 0 اختبارًا

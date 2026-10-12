@@ -1,8 +1,8 @@
 //! Clipboard capture: a background thread polls the pasteboard change count
 //! every ~350ms (the standard macOS approach — there is no push notification).
 
-use std::sync::atomic::Ordering;
 use std::ops::ControlFlow;
+use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
@@ -135,7 +135,7 @@ fn poll_once(app: &AppHandle, last: &mut isize) {
 
     let state = app.state::<AppState>();
     // Skip our own paste/copy writes.
-    if state.skip_change_count.swap(-1, Ordering::SeqCst) == count as i64 {
+    if is_own_write(&state.skip_change_count, count) {
         return;
     }
 
@@ -195,12 +195,20 @@ fn poll_once(app: &AppHandle, last: &mut isize) {
         before,
         after,
         clip,
-        source: macos::front_at(&activations, detected_at, SOURCE_WINDOW)
-            .unwrap_or(front_now),
+        source: macos::front_at(&activations, detected_at, SOURCE_WINDOW).unwrap_or(front_now),
     };
     if capture_reading(&state.store, reading) {
         let _ = app.emit("raff://changed", ());
     }
+}
+
+/// Whether the change at `count` is رفّ's own write, spending the record.
+///
+/// One slot is enough: a poll only ever sees the pasteboard as it is now, so
+/// of two writes رفّ makes before one poll, the first is already gone — the
+/// count compared, and the content that would be read, are the second's.
+fn is_own_write(skip_change_count: &AtomicI64, count: isize) -> bool {
+    skip_change_count.swap(-1, Ordering::SeqCst) == count as i64
 }
 
 /// A pasteboard read bracketed by change counts, plus the app credited with it.
@@ -268,17 +276,13 @@ fn capture_reading(store_lock: &Mutex<Store>, reading: ClipReading) -> bool {
         // row whose file had vanished swallow the re-copy as a duplicate, so
         // no replacement was ever written and the row stayed broken for good —
         // while copying it back out failed with «العنصر غير موجود».
-        let dup = store
-            .pinned
-            .iter()
-            .chain(store.history.iter())
-            .any(|i| {
-                i.kind == ItemKind::Image
-                    && i.hash.as_deref() == Some(hash.as_str())
-                    && i.image_file
-                        .as_ref()
-                        .is_some_and(|file| dir.join(file).exists())
-            });
+        let dup = store.pinned.iter().chain(store.history.iter()).any(|i| {
+            i.kind == ItemKind::Image
+                && i.hash.as_deref() == Some(hash.as_str())
+                && i.image_file
+                    .as_ref()
+                    .is_some_and(|file| dir.join(file).exists())
+        });
 
         let (image_file, thumb_file) = if dup {
             (None, None)
@@ -394,7 +398,11 @@ mod tests {
             std::ops::ControlFlow::Continue(())
         });
 
-        assert_eq!(outcome, Supervision::Finished, "the loop was not given up on");
+        assert_eq!(
+            outcome,
+            Supervision::Finished,
+            "the loop was not given up on"
+        );
         assert_eq!(turns, 5, "polling carried on across the panic");
     }
 
@@ -411,6 +419,22 @@ mod tests {
             turns, MAX_CONSECUTIVE_PANICS,
             "it stops rather than spinning on a tick that cannot succeed"
         );
+    }
+
+    /// H7: two of رفّ's writes before one poll. The pasteboard holds only the
+    /// second, the slot names only the second, and the poll skips it; the
+    /// first was never there to be captured. A copy made after is captured.
+    #[test]
+    fn two_own_writes_before_one_poll_are_skipped_and_the_next_copy_is_not() {
+        let skip = AtomicI64::new(-1);
+        skip.store(41, Ordering::SeqCst); // first write
+        skip.store(42, Ordering::SeqCst); // second write, before any poll
+        assert!(
+            is_own_write(&skip, 42),
+            "the poll sees count 42, and it is ours"
+        );
+        assert!(!is_own_write(&skip, 43), "the user's next copy is theirs");
+        assert!(!is_own_write(&skip, 42), "the record is spent once read");
     }
 
     fn reading(before: isize, after: isize, text: &str) -> ClipReading {
@@ -494,7 +518,11 @@ mod tests {
         assert!(capture_reading(&store, image_reading(png)));
 
         let guard = store.lock().unwrap();
-        assert_eq!(guard.history.len(), 1, "it is still one row, not a duplicate");
+        assert_eq!(
+            guard.history.len(),
+            1,
+            "it is still one row, not a duplicate"
+        );
         let healed = guard.history[0].image_file.clone().unwrap();
         assert!(
             images.join(&healed).exists(),

@@ -1,0 +1,85 @@
+127 |       let delegate = panel_delegate!(RaffPanelDelegate {
+128 | |         window_did_resign_key,
+129 | |         window_did_move
+130 | |     });
+127 |       let delegate = panel_delegate!(RaffPanelDelegate {
+128 | |         window_did_resign_key,
+129 | |         window_did_move
+130 | |     });
+127 |       let delegate = panel_delegate!(RaffPanelDelegate {
+128 | |         window_did_resign_key,
+129 | |         window_did_move
+130 | |     });
+10 | use tauri_nspanel::cocoa::appkit::NSWindowCollectionBehavior;
+121 |         NSWindowCollectionBehavior::NSWindowCollectionBehaviorCanJoinAllSpaces
+122 |             | NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary
+123 |             | NSWindowCollectionBehavior::NSWindowCollectionBehaviorStationary,
+127 |       let delegate = panel_delegate!(RaffPanelDelegate {
+128 | |         window_did_resign_key,
+129 | |         window_did_move
+130 | |     });
+127 |       let delegate = panel_delegate!(RaffPanelDelegate {
+128 | |         window_did_resign_key,
+129 | |         window_did_move
+130 | |     });
+442 |         app.activateWithOptions(NSApplicationActivationOptions::ActivateIgnoringOtherApps);
+121 |         NSWindowCollectionBehavior::NSWindowCollectionBehaviorCanJoinAllSpaces
+122 |             | NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary
+123 |             | NSWindowCollectionBehavior::NSWindowCollectionBehaviorStationary,
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.70s
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+     Running unittests src/main.rs (target/debug/deps/raff-5742317ce0a60c87)
+running 10 tests
+thread 'report::audit_tests::aud009_retry_after_zero_is_short' (1639117) panicked at src/report.rs:860:9:
+assertion failed: ra("0") <= 1
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+thread 'startup_trace::audit_tests::aud006_trace_is_debug_only' (1639118) panicked at src/startup_trace.rs:118:9:
+assertion failed: enabled_fn_source().contains("debug_assertions")
+thread 'storage::audit_tests::aud007_normalize_parity_for_divergent_vectors' (1639122) panicked at src/storage.rs:2957:17:
+assertion `left == right` failed: "ΟΔΟΣ"
+  left: "οδοσ"
+ right: "οδος"
+thread 'storage::audit_tests::aud008_trim_parity_with_js' (1639123) panicked at src/storage.rs:2968:13:
+assertion `left == right` failed: "\u{feff}x"
+  left: "\u{feff}x"
+ right: "x"
+thread 'commands::audit_tests::aud004_no_raw_unwrap_lock' (1639116) panicked at src/commands.rs:964:9:
+assertion `left == right` failed
+  left: 1
+ right: 0
+test report::audit_tests::aud009_retry_after_zero_is_short ... FAILED
+test startup_trace::audit_tests::aud006_trace_is_debug_only ... FAILED
+test commands::audit_tests::aud004_no_raw_unwrap_lock ... FAILED
+test storage::audit_tests::aud007_normalize_parity_for_divergent_vectors ... FAILED
+test storage::audit_tests::aud008_trim_parity_with_js ... FAILED
+raff: unreadable /var/folders/39/08324w6s5t99bsl4pmvbkgqw0000gn/T/raff-audit-aud002-8ebf0867-2c99-4455-b004-5a3270f7e0c9/settings.json (key must be a string at line 1 column 2); copied to /var/folders/39/08324w6s5t99bsl4pmvbkgqw0000gn/T/raff-audit-aud002-8ebf0867-2c99-4455-b004-5a3270f7e0c9/settings.json.corrupt
+thread 'storage::audit_tests::aud002_corrupt_settings_is_surfaced' (1639120) panicked at src/storage.rs:2728:9:
+فساد الإعدادات يجب أن يصل إلى الواجهة كما في الطبقتين الأخريين
+test storage::audit_tests::aud002_corrupt_settings_is_surfaced ... FAILED
+raff: unreadable /var/folders/39/08324w6s5t99bsl4pmvbkgqw0000gn/T/raff-audit-aud003-f6f796f2-c549-490c-aaff-daf18703c61a/history.json (expected value at line 1 column 1); copied to /var/folders/39/08324w6s5t99bsl4pmvbkgqw0000gn/T/raff-audit-aud003-f6f796f2-c549-490c-aaff-daf18703c61a/history.json.corrupt
+raff: unreadable /var/folders/39/08324w6s5t99bsl4pmvbkgqw0000gn/T/raff-audit-aud003-f6f796f2-c549-490c-aaff-daf18703c61a/history.json (expected value at line 1 column 1); copied to /var/folders/39/08324w6s5t99bsl4pmvbkgqw0000gn/T/raff-audit-aud003-f6f796f2-c549-490c-aaff-daf18703c61a/history.json.corrupt
+thread 'storage::audit_tests::aud003_every_recovery_copy_is_kept' (1639121) panicked at src/storage.rs:2760:9:
+نسخة الفساد الأول يجب أن تبقى في مكان ما
+test storage::audit_tests::aud003_every_recovery_copy_is_kept ... FAILED
+thread 'storage::audit_tests::aud001_unpin_at_cap_keeps_item_or_refuses_without_side_effects' (1639119) panicked at src/storage.rs:2663:23:
+assertion `left == right` failed: الرفض يجب أن يعيد الطبقتين كما كانتا
+  left: (["744cccbb-2958-4350-ac20-7933284c2494", "e3cd4b3b-eb2c-4b7f-a776-4a2aa02c92a0"], [])
+ right: (["744cccbb-2958-4350-ac20-7933284c2494", "e3cd4b3b-eb2c-4b7f-a776-4a2aa02c92a0"], ["e37c1cff-b37d-48f4-8b6d-e7dff1d5ceaf"])
+test storage::audit_tests::aud001_unpin_at_cap_keeps_item_or_refuses_without_side_effects ... FAILED
+perf: normalize 1720000 bytes -> 1080000 bytes in 85.331917ms
+test storage::audit_tests::perf_probe_normalize_large_text ... ok
+perf: fill1000=11.88853925s worst_capture_at_limit=2.465700375s history_bytes=32993011 load=219.112667ms rows=1000
+test storage::audit_tests::perf_probe_capture_at_limit_with_heavy_rows ... ok
+failures:
+failures:
+    commands::audit_tests::aud004_no_raw_unwrap_lock
+    report::audit_tests::aud009_retry_after_zero_is_short
+    startup_trace::audit_tests::aud006_trace_is_debug_only
+    storage::audit_tests::aud001_unpin_at_cap_keeps_item_or_refuses_without_side_effects
+    storage::audit_tests::aud002_corrupt_settings_is_surfaced
+    storage::audit_tests::aud003_every_recovery_copy_is_kept
+    storage::audit_tests::aud007_normalize_parity_for_divergent_vectors
+    storage::audit_tests::aud008_trim_parity_with_js
+test result: FAILED. 2 passed; 8 failed; 0 ignored; 0 measured; 139 filtered out; finished in 35.48s
+error: test failed, to rerun pass `--bin raff`
+exit=101

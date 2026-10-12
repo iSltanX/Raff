@@ -600,6 +600,18 @@ function captureStatus() {
       blocking: true,
     };
   }
+  if (state.unreadableSettings) {
+    // The defaults stand in for settings.json, the exclusions list among them,
+    // so capture waits for the user to look before it comes back. Review comes
+    // first: «تفعيل» here would skip past the very list that was lost.
+    return {
+      tone: 'danger',
+      icon: ALERT,
+      text: 'تعذّرت قراءة الإعدادات — الالتقاط معطّل حتى تراجعها',
+      action: { label: 'مراجعة', run: () => api.openSettings() },
+      blocking: true,
+    };
+  }
   if (state.settings && state.settings.captureEnabled === false) {
     return {
       tone: 'info',
@@ -633,7 +645,7 @@ function captureStatus() {
 function enableCapture() {
   if (!state.settings) return Promise.resolve();
   return api
-    .updateSettings({ ...state.settings, captureEnabled: true })
+    .updateSettings({ captureEnabled: true })
     .then(() => refresh())
     .catch((err) => showToast(errorMessage(err), PIN_TOAST_MS, 'error'));
 }

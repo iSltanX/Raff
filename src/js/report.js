@@ -45,6 +45,8 @@ let attaching = false;
 let hasImage = false;
 let lastMeta = null; // what is attached, to show again when a pick is cancelled
 let retryTimer = null;
+/** Until when a rate limit keeps the retry button off; 0 once it has passed. */
+let retryBlockedUntil = 0;
 let copiedTimer = null;
 
 el('preview-info-icon').replaceChildren(createIcon(ABOUT));
@@ -376,10 +378,12 @@ const LIMIT_TAIL = ' البلاغ محفوظ في هذه النافذة حتى �
 function startRateLimitCountdown(seconds) {
   clearInterval(retryTimer);
   const until = Date.now() + seconds * 1000;
+  retryBlockedUntil = until;
   const text = el('result-problem-text');
   const tick = () => {
     if (Date.now() >= until) {
       clearInterval(retryTimer);
+      retryBlockedUntil = 0;
       buttons.retry.disabled = false;
       text.textContent = 'يمكنك الإرسال الآن.';
       return;
@@ -450,8 +454,15 @@ async function send() {
     focusResult();
   } finally {
     setBusy(false);
-    if (!buttons.retry.hidden && el('result-problem').dataset.tone === 'warning') {
-      buttons.retry.disabled = true; // the countdown owns it
+    // The countdown owns the button while it runs. One that has already ended
+    // — `Retry-After: 0` ends on its first tick — has nothing left to hand it
+    // back, so it must not be taken.
+    if (
+      !buttons.retry.hidden &&
+      el('result-problem').dataset.tone === 'warning' &&
+      Date.now() < retryBlockedUntil
+    ) {
+      buttons.retry.disabled = true;
     }
   }
 }

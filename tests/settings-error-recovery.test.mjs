@@ -62,7 +62,7 @@ function fakeBackend() {
         }
         if (command === 'update_settings') {
           if (saveFail) return Promise.reject(new Error('save refused'));
-          settings = structuredClone(args.settings);
+          settings = { ...settings, ...structuredClone(args.settings) };
           return Promise.resolve(null);
         }
         if (command === 'clear_history') {

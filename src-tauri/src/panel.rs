@@ -196,7 +196,7 @@ pub fn show(app: &AppHandle) {
         let front = macos::frontmost_app();
         {
             let state = handle.state::<AppState>();
-            *state.previous_app.lock().unwrap() = Some(front.pid);
+            *crate::lock_previous_app(&state.previous_app) = Some(front.pid);
         }
 
         if let Some(window) = handle.get_webview_window(PANEL_LABEL) {
@@ -219,7 +219,7 @@ pub fn remember_position(app: &AppHandle) {
         return;
     }
     let slot = PLACEMENT_DEBOUNCE.get_or_init(|| Mutex::new(None));
-    let mut slot = slot.lock().unwrap();
+    let mut slot = slot.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     if slot.is_none() {
         let (tx, rx) = std::sync::mpsc::channel();
         *slot = Some(tx);

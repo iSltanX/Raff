@@ -1,0 +1,6 @@
+
+> raff@6.0.0 build:frontend
+> node scripts/build-frontend.mjs
+
+raff: built 69 allowlisted frontend files
+exit=0 dur=0s cmd: npm run build:frontend

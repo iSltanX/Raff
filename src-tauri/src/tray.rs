@@ -249,12 +249,24 @@ fn set_pause(next: Pause) {
     }
 }
 
+/// How often a waiting pause looks at the clock again. `thread::sleep` does
+/// not count time the Mac spends asleep any more than `Instant` does, so one
+/// long sleep would end the pause only after its whole length *awake*; short
+/// steps bring the icon back at most this long after the lid opens.
+const PAUSE_RECHECK: std::time::Duration = std::time::Duration::from_secs(30);
+
 /// A timed pause ends on its own: without this the icon and the panel would
 /// keep saying «موقوف» until the next copy happened to clear it. Only that
 /// exact pause is ended — a newer one, or a resume, leaves nothing to do.
-fn end_when_elapsed(until: std::time::Instant) {
+fn end_when_elapsed(until: std::time::SystemTime) {
     std::thread::spawn(move || {
-        std::thread::sleep(until.saturating_duration_since(std::time::Instant::now()));
+        loop {
+            let left = crate::pause_left(until);
+            if left.is_zero() {
+                break;
+            }
+            std::thread::sleep(left.min(PAUSE_RECHECK));
+        }
         let Some(app) = APP.get() else { return };
         let state = app.state::<crate::AppState>();
         let ended = {
@@ -338,7 +350,11 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
     let skip_next = new_item("تجاهل النسخة التالية", Some(sel!(skipNextCopy:)), "");
     let fifteen = new_item("إيقاف ١٥ دقيقة", Some(sel!(pauseFifteen:)), "");
     let hour = new_item("إيقاف ساعة", Some(sel!(pauseHour:)), "");
-    let until_restart = new_item("إيقاف حتى إعادة التشغيل", Some(sel!(pauseUntilRestart:)), "");
+    let until_restart = new_item(
+        "إيقاف حتى إعادة التشغيل",
+        Some(sel!(pauseUntilRestart:)),
+        "",
+    );
     let resume = new_item("استئناف الالتقاط", Some(sel!(resumeCapture:)), "");
     for entry in [&skip_next, &fifteen, &hour, &until_restart] {
         capture_menu.addItem(entry);
@@ -367,7 +383,11 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
     menu.addItem(&capture);
     menu.addItem(&NSMenuItem::separatorItem(mtm));
     menu.addItem(&new_item("الإعدادات…", Some(sel!(openSettings:)), ","));
-    menu.addItem(&new_item("التحقق من التحديثات…", Some(sel!(checkUpdates:)), ""));
+    menu.addItem(&new_item(
+        "التحقق من التحديثات…",
+        Some(sel!(checkUpdates:)),
+        "",
+    ));
     menu.addItem(&new_item("أبلغ عن مشكلة…", Some(sel!(openReport:)), ""));
     menu.addItem(&new_item("عن رفّ", Some(sel!(openAbout:)), ""));
     menu.addItem(&NSMenuItem::separatorItem(mtm));
@@ -457,7 +477,10 @@ fn apply_quiet_state() {
     let glyph = current_glyph();
     // The tooltip is written on state changes only, so it carries no count
     // that would go stale; the menu header is rebuilt on every open.
-    let pause = crate::PauseView { minutes_left: None, ..current_pause() };
+    let pause = crate::PauseView {
+        minutes_left: None,
+        ..current_pause()
+    };
     let mut tooltip = format!("رفّ — {}", status_text(glyph, &pause));
     if PERMISSION_MISSING.load(Ordering::SeqCst) {
         tooltip.push_str(" · اللصق التلقائي معطّل");
@@ -505,7 +528,11 @@ fn refresh_menu(items: &MenuItems) {
     ] {
         entry.setEnabled(can_pause);
         let on = !kind.is_empty() && pause.kind == kind;
-        entry.setState(if on { NSControlStateValueOn } else { NSControlStateValueOff });
+        entry.setState(if on {
+            NSControlStateValueOn
+        } else {
+            NSControlStateValueOff
+        });
     }
     items.resume.setEnabled(glyph == Glyph::Paused);
 }
@@ -513,7 +540,9 @@ fn refresh_menu(items: &MenuItems) {
 fn show_menu(mtm: MainThreadMarker) {
     NATIVE.with(|cell| {
         let Some(native) = cell.get() else { return };
-        let Some(button) = native.item.button(mtm) else { return };
+        let Some(button) = native.item.button(mtm) else {
+            return;
+        };
         // Close the panel first so the menu never stacks over it.
         if let Some(app) = APP.get() {
             panel::hide(app);
@@ -522,11 +551,17 @@ fn show_menu(mtm: MainThreadMarker) {
         }
         refresh_menu(&native.items);
         let height = button.bounds().size.height;
-        let below = if button.isFlipped() { height + 6.0 } else { -6.0 };
+        let below = if button.isFlipped() {
+            height + 6.0
+        } else {
+            -6.0
+        };
         button.highlight(true);
-        native
-            .menu
-            .popUpMenuPositioningItem_atLocation_inView(None, NSPoint::new(0.0, below), Some(&button));
+        native.menu.popUpMenuPositioningItem_atLocation_inView(
+            None,
+            NSPoint::new(0.0, below),
+            Some(&button),
+        );
         button.highlight(false);
     });
 }
@@ -559,8 +594,15 @@ mod tests {
         assert_eq!(status_text(Glyph::Capturing, &none), "رفّ يحفظ ما تنسخه");
         assert_eq!(status_text(Glyph::Off, &none), "الالتقاط معطّل من الإعدادات");
         assert!(status_text(Glyph::Fault, &none).contains("أعد تشغيل رفّ"));
-        let timed = crate::PauseView { kind: "timed", minutes_left: Some(12), ..Default::default() };
-        assert_eq!(status_text(Glyph::Paused, &timed), "الالتقاط موقوف — يُستأنف بعد ١٢ د");
+        let timed = crate::PauseView {
+            kind: "timed",
+            minutes_left: Some(12),
+            ..Default::default()
+        };
+        assert_eq!(
+            status_text(Glyph::Paused, &timed),
+            "الالتقاط موقوف — يُستأنف بعد ١٢ د"
+        );
         for glyph in [Glyph::Capturing, Glyph::Paused, Glyph::Off, Glyph::Fault] {
             assert!(!status_text(glyph, &timed).contains("اللصق"), "{glyph:?}");
         }

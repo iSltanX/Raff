@@ -1,0 +1,998 @@
+[
+  {
+    "file": "index.html",
+    "scheme": "light",
+    "width": 460,
+    "height": 540,
+    "axe": [
+      {
+        "id": "page-has-heading-one",
+        "impact": "moderate",
+        "nodes": 1,
+        "targets": [
+          "html"
+        ]
+      }
+    ],
+    "doc": {
+      "dir": "rtl",
+      "lang": "ar",
+      "docOverflowX": false,
+      "docOverflowY": false,
+      "overflow": []
+    },
+    "tabs": [
+      {
+        "tag": "input#search",
+        "label": "ابحث في رفّك",
+        "visible": false
+      },
+      {
+        "tag": "button",
+        "label": "الكل",
+        "visible": true
+      },
+      null
+    ],
+    "altTabs": [
+      {
+        "tag": "input#search",
+        "label": "ابحث في رفّك",
+        "visible": false
+      },
+      {
+        "tag": "button#settings-btn",
+        "label": "فتح إعدادات رفّ",
+        "visible": true
+      },
+      {
+        "tag": "button",
+        "label": "الكل",
+        "visible": true
+      },
+      {
+        "tag": "button",
+        "label": "تثبيت العنصر",
+        "visible": true
+      },
+      {
+        "tag": "button",
+        "label": "حذف العنصر",
+        "visible": true
+      },
+      {
+        "tag": "button",
+        "label": "تثبيت العنصر",
+        "visible": true
+      },
+      {
+        "tag": "button",
+        "label": "حذف العنصر",
+        "visible": true
+      },
+      {
+        "tag": "button",
+        "label": "تثبيت العنصر",
+        "visible": true
+      },
+      {
+        "tag": "button",
+        "label": "حذف العنصر",
+        "visible": true
+      },
+      {
+        "tag": "button",
+        "label": "تثبيت العنصر",
+        "visible": true
+      },
+      {
+        "tag": "button",
+        "label": "حذف العنصر",
+        "visible": true
+      },
+      {
+        "tag": "button",
+        "label": "تثبيت العنصر",
+        "visible": true
+      },
+      {
+        "tag": "button",
+        "label": "حذف العنصر",
+        "visible": true
+      },
+      {
+        "tag": "button",
+        "label": "تثبيت العنصر",
+        "visible": true
+      },
+      {
+        "tag": "button",
+        "label": "حذف العنصر",
+        "visible": true
+      },
+      {
+        "tag": "button",
+        "label": "تثبيت العنصر",
+        "visible": true
+      },
+      {
+        "tag": "button",
+        "label": "حذف العنصر",
+        "visible": true
+      },
+      {
+        "tag": "button",
+        "label": "إلغاء تثبيت العنصر",
+        "visible": true
+      },
+      {
+        "tag": "button",
+        "label": "حذف العنصر",
+        "visible": true
+      },
+      null
+    ],
+    "afterEsc": "input",
+    "consoleErrors": [],
+    "external": []
+  },
+  {
+    "file": "index.html",
+    "scheme": "dark",
+    "width": 460,
+    "height": 540,
+    "axe": [
+      {
+        "id": "color-contrast",
+        "impact": "serious",
+        "nodes": 9,
+        "targets": [
+          "#raff-option-2 > .row-preview[role=\"gridcell\"] > .is-link.preview-title",
+          "#raff-option-6 > .row-preview[role=\"gridcell\"] > .row-time",
+          "#raff-option-7 > .row-preview[role=\"gridcell\"] > .is-link.preview-title"
+        ]
+      },
+      {
+        "id": "page-has-heading-one",
+        "impact": "moderate",
+        "nodes": 1,
+        "targets": [
+          "html"
+        ]
+      }
+    ],
+    "doc": {
+      "dir": "rtl",
+      "lang": "ar",
+      "docOverflowX": false,
+      "docOverflowY": false,
+      "overflow": []
+    },
+    "tabs": [
+      {
+        "tag": "input#search",
+        "label": "ابحث في رفّك",
+        "visible": false
+      },
+      {
+        "tag": "button",
+        "label": "الكل",
+        "visible": true
+      },
+      null
+    ],
+    "altTabs": [
+      {
+        "tag": "input#search",
+        "label": "ابحث في رفّك",
+        "visible": false
+      },
+      {
+        "tag": "button#settings-btn",
+        "label": "فتح إعدادات رفّ",
+        "visible": true
+      },
+      {
+        "tag": "button",
+        "label": "الكل",
+        "visible": true
+      },
+      {
+        "tag": "button",
+        "label": "تثبيت العنصر",
+        "visible": true
+      },
+      {
+        "tag": "button",
+        "label": "حذف العنصر",
+        "visible": true
+      },
+      {
+        "tag": "button",
+        "label": "تثبيت العنصر",
+        "visible": true
+      },
+      {
+        "tag": "button",
+        "label": "حذف العنصر",
+        "visible": true
+      },
+      {
+        "tag": "button",
+        "label": "تثبيت العنصر",
+        "visible": true
+      },
+      {
+        "tag": "button",
+        "label": "حذف العنصر",
+        "visible": true
+      },
+      {
+        "tag": "button",
+        "label": "تثبيت العنصر",
+        "visible": true
+      },
+      {
+        "tag": "button",
+        "label": "حذف العنصر",
+        "visible": true
+      },
+      {
+        "tag": "button",
+        "label": "تثبيت العنصر",
+        "visible": true
+      },
+      {
+        "tag": "button",
+        "label": "حذف العنصر",
+        "visible": true
+      },
+      {
+        "tag": "button",
+        "label": "تثبيت العنصر",
+        "visible": true
+      },
+      {
+        "tag": "button",
+        "label": "حذف العنصر",
+        "visible": true
+      },
+      {
+        "tag": "button",
+        "label": "تثبيت العنصر",
+        "visible": true
+      },
+      {
+        "tag": "button",
+        "label": "حذف العنصر",
+        "visible": true
+      },
+      {
+        "tag": "button",
+        "label": "إلغاء تثبيت العنصر",
+        "visible": true
+      },
+      {
+        "tag": "button",
+        "label": "حذف العنصر",
+        "visible": true
+      },
+      null
+    ],
+    "afterEsc": "input",
+    "consoleErrors": [],
+    "external": []
+  },
+  {
+    "file": "settings.html",
+    "scheme": "light",
+    "width": 560,
+    "height": 440,
+    "axe": [
+      {
+        "id": "heading-order",
+        "impact": "moderate",
+        "nodes": 1,
+        "targets": [
+          "#settings-panel-general > .settings-groups > .settings-group:nth-child(1) > h3"
+        ]
+      },
+      {
+        "id": "label-content-name-mismatch",
+        "impact": "serious",
+        "nodes": 1,
+        "targets": [
+          "#hotkey-chip"
+        ]
+      }
+    ],
+    "doc": {
+      "dir": "rtl",
+      "lang": "ar",
+      "docOverflowX": false,
+      "docOverflowY": false,
+      "overflow": []
+    },
+    "tabs": [
+      {
+        "tag": "button#settings-tab-general",
+        "label": "عام",
+        "visible": true
+      },
+      {
+        "tag": "section#settings-panel-general",
+        "label": "عام\n          بدء التشغي",
+        "visible": false
+      },
+      {
+        "tag": "button",
+        "label": "تلقائي",
+        "visible": true
+      },
+      null
+    ],
+    "altTabs": [
+      {
+        "tag": "button#settings-tab-general",
+        "label": "عام",
+        "visible": true
+      },
+      {
+        "tag": "section#settings-panel-general",
+        "label": "عام\n          بدء التشغي",
+        "visible": false
+      },
+      {
+        "tag": "button#launch-toggle",
+        "label": "",
+        "visible": true
+      },
+      {
+        "tag": "button#hotkey-chip",
+        "label": "⇧⌘V",
+        "visible": true
+      },
+      {
+        "tag": "button",
+        "label": "تلقائي",
+        "visible": true
+      },
+      {
+        "tag": "button#done-btn",
+        "label": "تم",
+        "visible": true
+      },
+      null
+    ],
+    "afterEsc": "button",
+    "consoleErrors": [],
+    "external": []
+  },
+  {
+    "file": "settings.html",
+    "scheme": "dark",
+    "width": 560,
+    "height": 440,
+    "axe": [
+      {
+        "id": "heading-order",
+        "impact": "moderate",
+        "nodes": 1,
+        "targets": [
+          "#settings-panel-general > .settings-groups > .settings-group:nth-child(1) > h3"
+        ]
+      },
+      {
+        "id": "label-content-name-mismatch",
+        "impact": "serious",
+        "nodes": 1,
+        "targets": [
+          "#hotkey-chip"
+        ]
+      }
+    ],
+    "doc": {
+      "dir": "rtl",
+      "lang": "ar",
+      "docOverflowX": false,
+      "docOverflowY": false,
+      "overflow": []
+    },
+    "tabs": [
+      {
+        "tag": "button#settings-tab-general",
+        "label": "عام",
+        "visible": true
+      },
+      {
+        "tag": "section#settings-panel-general",
+        "label": "عام\n          بدء التشغي",
+        "visible": false
+      },
+      {
+        "tag": "button",
+        "label": "تلقائي",
+        "visible": true
+      },
+      null
+    ],
+    "altTabs": [
+      {
+        "tag": "button#settings-tab-general",
+        "label": "عام",
+        "visible": true
+      },
+      {
+        "tag": "section#settings-panel-general",
+        "label": "عام\n          بدء التشغي",
+        "visible": false
+      },
+      {
+        "tag": "button#launch-toggle",
+        "label": "",
+        "visible": true
+      },
+      {
+        "tag": "button#hotkey-chip",
+        "label": "⇧⌘V",
+        "visible": true
+      },
+      {
+        "tag": "button",
+        "label": "تلقائي",
+        "visible": true
+      },
+      {
+        "tag": "button#done-btn",
+        "label": "تم",
+        "visible": true
+      },
+      null
+    ],
+    "afterEsc": "button",
+    "consoleErrors": [],
+    "external": []
+  },
+  {
+    "file": "about.html",
+    "scheme": "light",
+    "width": 320,
+    "height": 420,
+    "axe": [],
+    "doc": {
+      "dir": "rtl",
+      "lang": "ar",
+      "docOverflowX": false,
+      "docOverflowY": false,
+      "overflow": []
+    },
+    "tabs": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ],
+    "altTabs": [
+      {
+        "tag": "button#update-btn",
+        "label": "التحقق من التحديثات",
+        "visible": true
+      },
+      {
+        "tag": "button#report-btn",
+        "label": "أبلغ عن مشكلة…",
+        "visible": true
+      },
+      {
+        "tag": "button#repo-link",
+        "label": "github.com/iSltanX/Raff",
+        "visible": true
+      },
+      {
+        "tag": "button#privacy-link",
+        "label": "سياسة الخصوصية",
+        "visible": true
+      },
+      null
+    ],
+    "afterEsc": "button",
+    "consoleErrors": [],
+    "external": []
+  },
+  {
+    "file": "about.html",
+    "scheme": "dark",
+    "width": 320,
+    "height": 420,
+    "axe": [],
+    "doc": {
+      "dir": "rtl",
+      "lang": "ar",
+      "docOverflowX": false,
+      "docOverflowY": false,
+      "overflow": []
+    },
+    "tabs": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ],
+    "altTabs": [
+      {
+        "tag": "button#update-btn",
+        "label": "التحقق من التحديثات",
+        "visible": true
+      },
+      {
+        "tag": "button#report-btn",
+        "label": "أبلغ عن مشكلة…",
+        "visible": true
+      },
+      {
+        "tag": "button#repo-link",
+        "label": "github.com/iSltanX/Raff",
+        "visible": true
+      },
+      {
+        "tag": "button#privacy-link",
+        "label": "سياسة الخصوصية",
+        "visible": true
+      },
+      null
+    ],
+    "afterEsc": "button",
+    "consoleErrors": [],
+    "external": []
+  },
+  {
+    "file": "report.html",
+    "scheme": "light",
+    "width": 460,
+    "height": 600,
+    "axe": [
+      {
+        "id": "page-has-heading-one",
+        "impact": "moderate",
+        "nodes": 1,
+        "targets": [
+          "html"
+        ]
+      }
+    ],
+    "doc": {
+      "dir": "rtl",
+      "lang": "ar",
+      "docOverflowX": false,
+      "docOverflowY": false,
+      "overflow": []
+    },
+    "tabs": [
+      {
+        "tag": "button",
+        "label": "خلل",
+        "visible": true
+      },
+      {
+        "tag": "select#category",
+        "label": "غير محدد\n            الل",
+        "visible": true
+      },
+      {
+        "tag": "textarea#description",
+        "label": "صف ما حدث وما توقّعت أن يحدث. لا تكتب محتوى خاصًّا.",
+        "visible": true
+      },
+      null
+    ],
+    "altTabs": [
+      {
+        "tag": "button",
+        "label": "خلل",
+        "visible": true
+      },
+      {
+        "tag": "select#category",
+        "label": "غير محدد\n            الل",
+        "visible": true
+      },
+      {
+        "tag": "textarea#description",
+        "label": "صف ما حدث وما توقّعت أن يحدث. لا تكتب محتوى خاصًّا.",
+        "visible": true
+      },
+      {
+        "tag": "button#attach-choose",
+        "label": "اختر صورة…",
+        "visible": true
+      },
+      {
+        "tag": "button#cancel",
+        "label": "إلغاء",
+        "visible": true
+      },
+      null
+    ],
+    "afterEsc": "button",
+    "consoleErrors": [],
+    "external": []
+  },
+  {
+    "file": "report.html",
+    "scheme": "dark",
+    "width": 460,
+    "height": 600,
+    "axe": [
+      {
+        "id": "page-has-heading-one",
+        "impact": "moderate",
+        "nodes": 1,
+        "targets": [
+          "html"
+        ]
+      }
+    ],
+    "doc": {
+      "dir": "rtl",
+      "lang": "ar",
+      "docOverflowX": false,
+      "docOverflowY": false,
+      "overflow": []
+    },
+    "tabs": [
+      {
+        "tag": "button",
+        "label": "خلل",
+        "visible": true
+      },
+      {
+        "tag": "select#category",
+        "label": "غير محدد\n            الل",
+        "visible": true
+      },
+      {
+        "tag": "textarea#description",
+        "label": "صف ما حدث وما توقّعت أن يحدث. لا تكتب محتوى خاصًّا.",
+        "visible": true
+      },
+      null
+    ],
+    "altTabs": [
+      {
+        "tag": "button",
+        "label": "خلل",
+        "visible": true
+      },
+      {
+        "tag": "select#category",
+        "label": "غير محدد\n            الل",
+        "visible": true
+      },
+      {
+        "tag": "textarea#description",
+        "label": "صف ما حدث وما توقّعت أن يحدث. لا تكتب محتوى خاصًّا.",
+        "visible": true
+      },
+      {
+        "tag": "button#attach-choose",
+        "label": "اختر صورة…",
+        "visible": true
+      },
+      {
+        "tag": "button#cancel",
+        "label": "إلغاء",
+        "visible": true
+      },
+      null
+    ],
+    "afterEsc": "button",
+    "consoleErrors": [],
+    "external": []
+  },
+  {
+    "file": "firstrun.html",
+    "scheme": "light",
+    "width": 460,
+    "height": 520,
+    "axe": [],
+    "doc": {
+      "dir": "rtl",
+      "lang": "ar",
+      "docOverflowX": false,
+      "docOverflowY": false,
+      "overflow": []
+    },
+    "tabs": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ],
+    "altTabs": [
+      {
+        "tag": "button#next",
+        "label": "التالي",
+        "visible": true
+      },
+      null
+    ],
+    "afterEsc": "button",
+    "consoleErrors": [],
+    "external": []
+  },
+  {
+    "file": "firstrun.html",
+    "scheme": "dark",
+    "width": 460,
+    "height": 520,
+    "axe": [],
+    "doc": {
+      "dir": "rtl",
+      "lang": "ar",
+      "docOverflowX": false,
+      "docOverflowY": false,
+      "overflow": []
+    },
+    "tabs": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ],
+    "altTabs": [
+      {
+        "tag": "button#next",
+        "label": "التالي",
+        "visible": true
+      },
+      null
+    ],
+    "afterEsc": "button",
+    "consoleErrors": [],
+    "external": []
+  },
+  {
+    "file": "update.html",
+    "scheme": "light",
+    "width": 360,
+    "height": 280,
+    "axe": [
+      {
+        "id": "page-has-heading-one",
+        "impact": "moderate",
+        "nodes": 1,
+        "targets": [
+          "html"
+        ]
+      }
+    ],
+    "doc": {
+      "dir": "rtl",
+      "lang": "ar",
+      "docOverflowX": false,
+      "docOverflowY": false,
+      "overflow": []
+    },
+    "tabs": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ],
+    "altTabs": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ],
+    "afterEsc": "body",
+    "consoleErrors": [],
+    "external": []
+  },
+  {
+    "file": "update.html",
+    "scheme": "dark",
+    "width": 360,
+    "height": 280,
+    "axe": [
+      {
+        "id": "page-has-heading-one",
+        "impact": "moderate",
+        "nodes": 1,
+        "targets": [
+          "html"
+        ]
+      }
+    ],
+    "doc": {
+      "dir": "rtl",
+      "lang": "ar",
+      "docOverflowX": false,
+      "docOverflowY": false,
+      "overflow": []
+    },
+    "tabs": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ],
+    "altTabs": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ],
+    "afterEsc": "body",
+    "consoleErrors": [],
+    "external": []
+  }
+]
