@@ -19,7 +19,7 @@ mod updater;
 
 use std::sync::atomic::{AtomicBool, AtomicI64};
 use std::sync::{Mutex, MutexGuard};
-use std::time::{Duration, Instant};
+use std::time::{Duration, SystemTime};
 
 use tauri::Manager;
 use tauri_plugin_autostart::MacosLauncher;
@@ -51,14 +51,27 @@ pub enum Pause {
     Off,
     /// Skip the next clipboard change, then clear.
     SkipNext,
-    /// Skip everything until this instant; `None` means until Raff restarts.
-    Until(Option<Instant>),
+    /// Skip everything until this time of day; `None` means until Raff
+    /// restarts.
+    ///
+    /// Wall-clock time, not `Instant`: on macOS `Instant` is
+    /// `CLOCK_UPTIME_RAW`, which stops while the Mac sleeps, so «١٥ دقيقة»
+    /// followed by a closed lid used to come back still paused for whatever
+    /// was left. The price is that moving the clock by hand moves the end too.
+    Until(Option<SystemTime>),
+}
+
+/// What is left of a pause that ends at `until`, or zero once it has passed.
+pub fn pause_left(until: SystemTime) -> Duration {
+    until
+        .duration_since(SystemTime::now())
+        .unwrap_or(Duration::ZERO)
 }
 
 impl Pause {
     /// Starts a pause of `minutes`, or until restart when `None`.
     pub fn for_minutes(minutes: Option<u64>) -> Self {
-        Pause::Until(minutes.map(|m| Instant::now() + Duration::from_secs(m * 60)))
+        Pause::Until(minutes.map(|m| SystemTime::now() + Duration::from_secs(m * 60)))
     }
 
     /// Whether the change being looked at must be skipped, advancing the
@@ -72,7 +85,7 @@ impl Pause {
             }
             Pause::Until(None) => true,
             Pause::Until(Some(until)) => {
-                if Instant::now() < until {
+                if !pause_left(until).is_zero() {
                     true
                 } else {
                     *self = Pause::Off;
@@ -95,7 +108,7 @@ impl Pause {
             Pause::SkipNext => PauseView { kind: "skipNext", ..PauseView::default() },
             Pause::Until(None) => PauseView { kind: "untilRestart", ..PauseView::default() },
             Pause::Until(Some(until)) => {
-                let left = until.saturating_duration_since(Instant::now());
+                let left = pause_left(until);
                 if left.is_zero() {
                     return PauseView::default();
                 }
@@ -387,9 +400,7 @@ mod tests {
         let mut pause = Pause::for_minutes(Some(15));
         assert!(pause.consume());
 
-        let mut elapsed = Pause::Until(Some(
-            Instant::now().checked_sub(Duration::from_secs(1)).unwrap(),
-        ));
+        let mut elapsed = Pause::Until(Some(SystemTime::now() - Duration::from_secs(1)));
         assert!(!elapsed.consume(), "an elapsed pause stops skipping");
         assert!(!elapsed.is_active(), "and stops calling itself a pause");
     }
@@ -416,10 +427,29 @@ mod tests {
 
     #[test]
     fn a_timed_pause_that_ran_out_reads_as_off_before_anything_clears_it() {
-        let elapsed = Pause::Until(Some(
-            Instant::now().checked_sub(Duration::from_secs(1)).unwrap(),
-        ));
+        let elapsed = Pause::Until(Some(SystemTime::now() - Duration::from_secs(1)));
         assert_eq!(elapsed.view(), PauseView::default());
+    }
+
+    /// H10: the end of a timed pause is a time of day, so hours the Mac spent
+    /// asleep count towards it. `Instant` (`CLOCK_UPTIME_RAW` on macOS) would
+    /// not have moved through them. The sleep itself cannot happen in a unit
+    /// test; scenario 10 of the manual checklist covers it on a real Mac.
+    #[test]
+    fn a_timed_pause_ends_at_a_time_of_day() {
+        let before = SystemTime::now();
+        let Pause::Until(Some(until)) = Pause::for_minutes(Some(15)) else {
+            panic!("a timed pause has an end");
+        };
+        let after = SystemTime::now();
+        assert!(until >= before + Duration::from_secs(15 * 60));
+        assert!(until <= after + Duration::from_secs(15 * 60));
+
+        // A Mac that slept through the end finds it over, on the first look.
+        let mut slept_through = Pause::Until(Some(before - Duration::from_secs(2 * 60 * 60)));
+        assert_eq!(slept_through.view(), PauseView::default());
+        assert!(!slept_through.consume());
+        assert_eq!(slept_through, Pause::Off);
     }
 
     #[test]

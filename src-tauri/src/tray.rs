@@ -249,12 +249,24 @@ fn set_pause(next: Pause) {
     }
 }
 
+/// How often a waiting pause looks at the clock again. `thread::sleep` does
+/// not count time the Mac spends asleep any more than `Instant` does, so one
+/// long sleep would end the pause only after its whole length *awake*; short
+/// steps bring the icon back at most this long after the lid opens.
+const PAUSE_RECHECK: std::time::Duration = std::time::Duration::from_secs(30);
+
 /// A timed pause ends on its own: without this the icon and the panel would
 /// keep saying «موقوف» until the next copy happened to clear it. Only that
 /// exact pause is ended — a newer one, or a resume, leaves nothing to do.
-fn end_when_elapsed(until: std::time::Instant) {
+fn end_when_elapsed(until: std::time::SystemTime) {
     std::thread::spawn(move || {
-        std::thread::sleep(until.saturating_duration_since(std::time::Instant::now()));
+        loop {
+            let left = crate::pause_left(until);
+            if left.is_zero() {
+                break;
+            }
+            std::thread::sleep(left.min(PAUSE_RECHECK));
+        }
         let Some(app) = APP.get() else { return };
         let state = app.state::<crate::AppState>();
         let ended = {
