@@ -1586,6 +1586,82 @@
   {
    "input": "x",
    "jsTrim": "x"
+  },
+  {
+   "input": "\u000bx\u000b",
+   "jsTrim": "x"
+  },
+  {
+   "input": "\fx\f",
+   "jsTrim": "x"
+  },
+  {
+   "input": "\rx\r",
+   "jsTrim": "x"
+  },
+  {
+   "input": " x ",
+   "jsTrim": "x"
+  },
+  {
+   "input": " x ",
+   "jsTrim": "x"
+  },
+  {
+   "input": " x ",
+   "jsTrim": "x"
+  },
+  {
+   "input": " x ",
+   "jsTrim": "x"
+  },
+  {
+   "input": " x ",
+   "jsTrim": "x"
+  },
+  {
+   "input": " x ",
+   "jsTrim": "x"
+  },
+  {
+   "input": " x ",
+   "jsTrim": "x"
+  },
+  {
+   "input": " x ",
+   "jsTrim": "x"
+  },
+  {
+   "input": " x ",
+   "jsTrim": "x"
+  },
+  {
+   "input": " x ",
+   "jsTrim": "x"
+  },
+  {
+   "input": " x ",
+   "jsTrim": "x"
+  },
+  {
+   "input": " x ",
+   "jsTrim": "x"
+  },
+  {
+   "input": " x ",
+   "jsTrim": "x"
+  },
+  {
+   "input": " x ",
+   "jsTrim": "x"
+  },
+  {
+   "input": " x ",
+   "jsTrim": "x"
+  },
+  {
+   "input": "᠎x",
+   "jsTrim": "᠎x"
   }
  ]
 }

@@ -27,6 +27,7 @@ test('التطابق مع نموذج Rust (طيّ حرفًا حرفًا ثم خ�
 
 const divergent = fixture.vectors.filter((v) => v.divergence);
 test('عدد المتجهات المختلفة ثابت ومعروف', () => {
+  assert.equal(divergent.length, 5, 'المتجهات الخمسة التي اختلف فيها الطرفان قبل RAFF-AUD-007');
   assert.ok(divergent.every((v) => v.divergence === 'RAFF-AUD-007'));
   assert.ok(divergent.every((v) => /[Σ]/u.test(v.input)), 'كل الاختلافات سببها السيغما');
 });

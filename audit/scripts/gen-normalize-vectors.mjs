@@ -94,6 +94,12 @@ const trimVectors = [
   ' أ ', '\tx\n', '\u00A0x\u00A0', '\u3000x', '\uFEFFx', 'x\uFEFF', '\u200Bx', '\u2028x',
   // U+0085: White_Space في Rust وليس مسافة في JS، فلا يُقصّ في الجهتين.
   '\u0085x',
+  // بقية قائمة ECMAScript، كل محرف على الطرفين: VT وFF وCR، وكل Zs، وU+2029.
+  ...['\u000B', '\u000C', '\r', '\u1680', '\u202F', '\u205F', '\u2029']
+    .concat(Array.from({ length: 11 }, (_, i) => String.fromCodePoint(0x2000 + i)))
+    .map((ch) => `${ch}x${ch}`),
+  // U+180E: كان Zs قديمًا، وليس مسافة في JS اليوم ولا في Rust.
+  '\u180Ex',
 ].map((input) => ({
   input,
   jsTrim: input.trim(),

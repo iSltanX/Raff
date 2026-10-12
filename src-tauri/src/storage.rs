@@ -3692,11 +3692,12 @@ mod audit_tests {
                     "تباين غير متوقع للمدخل {input:?}"
                 );
             } else {
-                // نموذج JS لخفض الحالة حرفًا حرفًا يجب أن يطابق Rust تمامًا.
+                // نموذج JS لـRust (طيّ حرفًا حرفًا ثم خفض النص كاملًا) يطابق Rust تمامًا،
+                // وهو هنا مساوٍ لـexpected منذ RAFF-AUD-007.
                 assert_eq!(
                     got,
                     vec["perCharModel"].as_str().unwrap(),
-                    "نموذج per-char لا يطابق Rust: {input:?}"
+                    "نموذج Rust في المولِّد لا يطابق Rust: {input:?}"
                 );
             }
             checked += 1;

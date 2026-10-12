@@ -1071,6 +1071,26 @@ mod audit_tests {
         );
     }
 
+    /// RAFF-AUD-009 edges, exactly: delay-seconds is 1*DIGIT, so a leading
+    /// zero is still seconds, a sign is not (a `+5` that used to mean 5 now
+    /// means "not a number", the hour), and anything wider than u64 is the cap.
+    #[test]
+    fn retry_after_edges_are_exact() {
+        assert_eq!(ra("0"), 0);
+        assert_eq!(ra("007"), 7);
+        assert_eq!(ra(""), DEFAULT_RETRY_AFTER_S);
+        assert_eq!(ra("   "), DEFAULT_RETRY_AFTER_S);
+        assert_eq!(ra("+5"), DEFAULT_RETRY_AFTER_S);
+        assert_eq!(ra("5 s"), DEFAULT_RETRY_AFTER_S);
+        assert_eq!(ra("86399"), 86_399);
+        assert_eq!(ra("18446744073709551615"), MAX_RETRY_AFTER_S, "u64::MAX");
+        assert_eq!(
+            ra("18446744073709551616"),
+            MAX_RETRY_AFTER_S,
+            "u64::MAX + 1"
+        );
+    }
+
     #[test]
     fn aud009_retry_after_zero_is_short() {
         assert!(ra("0") <= 1);
