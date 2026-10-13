@@ -109,7 +109,7 @@ export function mockInvoke(cmd, args = {}) {
         history: RECENT,
         settings: SETTINGS,
         axTrusted: true,
-        version: '6.0.0',
+        version: '6.0.1',
         captureAlive: true,
         capturePause: { kind: MOCK_PAUSE, minutesLeft: MOCK_PAUSE === 'timed' ? 12 : null },
         unreadableLayer: false,
@@ -119,7 +119,7 @@ export function mockInvoke(cmd, args = {}) {
       return Promise.resolve(structuredClone({
         settings: SETTINGS,
         axTrusted: false,
-        version: '6.0.0',
+        version: '6.0.1',
         unreadableSettings: MOCK_UNREADABLE_SETTINGS,
         captureAlive: true,
         capturePause: { kind: MOCK_PAUSE, minutesLeft: MOCK_PAUSE === 'timed' ? 12 : null },
@@ -200,8 +200,8 @@ export function mockInvoke(cmd, args = {}) {
     case 'check_for_update':
       return Promise.resolve({
         status: 'available',
-        currentVersion: '6.0.0',
-        version: '6.0.1',
+        currentVersion: '6.0.1',
+        version: '6.0.2',
         date: '2026-10-01',
         notes: 'تحسينات في الأداء وإصلاحات متفرّقة.\nدعم إعادة التشغيل بعد التحديث.',
       });
@@ -217,7 +217,7 @@ export function mockInvoke(cmd, args = {}) {
         kind: args.kind,
         category: args.category,
         description: args.description.trim(),
-        appVersion: '6.0.0',
+        appVersion: '6.0.1',
         os: 'macos',
         osVersion: '15.4',
         arch: 'arm64',
