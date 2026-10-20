@@ -182,6 +182,29 @@ pub fn lock_previous_app(previous_app: &Mutex<Option<i32>>) -> MutexGuard<'_, Op
         .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
+/// Starts رفّ again — the one path every restart takes: the update window,
+/// «إعادة تشغيل رفّ» in the panel and Settings, and the menu item.
+///
+/// Not `AppHandle::restart`: that spawns the new process *before* this one
+/// exits, so the new process meets the still-held single-instance socket,
+/// forwards its argv and exits — and then this one exits too, leaving nothing
+/// running. The detached relauncher (`macos::spawn_relauncher`) waits for this
+/// pid to be gone first. `reopen_settings` brings Settings back in the new
+/// process.
+pub fn relaunch(app: &tauri::AppHandle, reopen_settings: bool) -> Result<(), String> {
+    let handle = app.clone();
+    let Some(bundle) = macos::app_bundle_path() else {
+        // Dev mode has no packaged bundle for LaunchServices.
+        return app
+            .run_on_main_thread(move || handle.restart())
+            .map_err(|err| format!("تعذّر جدولة إعادة تشغيل Raff: {err}"));
+    };
+    // Do not exit unless the detached relauncher really exists.
+    macos::spawn_relauncher(&bundle, std::process::id(), reopen_settings)?;
+    app.run_on_main_thread(move || handle.exit(0))
+        .map_err(|err| format!("تعذّر جدولة إعادة تشغيل Raff: {err}"))
+}
+
 /// Debug builds only: `RAFF_DATA_DIR` points the store somewhere else, so a
 /// development run never reads or writes the installed رفّ's history.
 fn dev_data_dir() -> Option<std::path::PathBuf> {

@@ -421,10 +421,12 @@ pub fn resume_capture() {
     crate::tray::resume_capture();
 }
 
-/// «إعادة تشغيل رفّ» — the remedy when the capture loop has stopped.
+/// «إعادة تشغيل رفّ» — the remedy when the capture loop has stopped. Asked
+/// from Settings, the new process brings Settings back; from the panel, رفّ
+/// simply returns to the menu bar.
 #[tauri::command]
-pub fn restart_app(app: AppHandle) {
-    app.restart();
+pub fn restart_app(app: AppHandle, window: tauri::WebviewWindow) -> Result<(), String> {
+    crate::relaunch(&app, window.label() == "settings")
 }
 
 fn validate_settings(settings: &Settings) -> Result<(), String> {

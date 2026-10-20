@@ -479,14 +479,24 @@ pub fn app_bundle_path() -> Option<std::path::PathBuf> {
 /// still holds the instance socket would make the new one forward its argv
 /// and exit (i.e. no relaunch at all). `open` without `-n` never creates a
 /// second process: if the cap is ever hit with the old instance alive, it
-/// merely activates it — no duplicate tray, no relaunch loop. `--settings`
-/// is forwarded so the fresh instance reopens the settings surface.
-pub fn spawn_relauncher(bundle: &std::path::Path, pid: u32) -> Result<(), String> {
+/// merely activates it — no duplicate tray, no relaunch loop. With
+/// `reopen_settings`, `--settings` is forwarded so the fresh instance reopens
+/// the settings surface.
+pub fn spawn_relauncher(
+    bundle: &std::path::Path,
+    pid: u32,
+    reopen_settings: bool,
+) -> Result<(), String> {
     use std::process::{Command, Stdio};
+    let open = if reopen_settings {
+        "exec /usr/bin/open \"$0\" --args --settings"
+    } else {
+        "exec /usr/bin/open \"$0\""
+    };
     // The bundle path travels as "$0" (never interpolated into the script).
     let script = format!(
         "i=0; while kill -0 {pid} 2>/dev/null && [ $i -lt 200 ]; do sleep 0.1; i=$((i+1)); done; \
-         exec /usr/bin/open \"$0\" --args --settings"
+         {open}"
     );
     Command::new("/bin/sh")
         .arg("-c")
@@ -497,7 +507,7 @@ pub fn spawn_relauncher(bundle: &std::path::Path, pid: u32) -> Result<(), String
         .stderr(Stdio::null())
         .spawn()
         .map(|_| ())
-        .map_err(|err| format!("تعذّر تشغيل Raff بعد التحديث: {err}"))
+        .map_err(|err| format!("تعذّر جدولة إعادة تشغيل Raff: {err}"))
 }
 
 /// The official Raff repository. Hardcoded on purpose: the About window's link

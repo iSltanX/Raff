@@ -374,12 +374,9 @@ pub async fn download_and_install_update(app: AppHandle) -> Result<(), String> {
 /// Step 3: relaunch to run the freshly installed version. Only valid after a
 /// successful install; user data in `app_data_dir` is untouched.
 ///
-/// Not `app.restart()`: that spawns the new process *before* this one exits, so
-/// the new process meets the still-held single-instance socket, forwards its
-/// argv and exits — leaving nothing running (the exact hazard documented on
-/// `macos::spawn_relauncher`). We reuse the app's proven pid-waiting relauncher:
-/// it `open`s the updater-replaced bundle
-/// only after this process has fully exited and released the socket.
+/// Through `crate::relaunch`, which `open`s the updater-replaced bundle only
+/// after this process has fully exited and released the single-instance
+/// socket, and brings the user back to Settings.
 #[tauri::command]
 pub async fn restart_to_update(app: AppHandle) -> Result<(), String> {
     {
@@ -389,19 +386,7 @@ pub async fn restart_to_update(app: AppHandle) -> Result<(), String> {
             return Err("لا يوجد تحديث مثبَّت لإعادة التشغيل.".into());
         }
     }
-    let bundle = crate::macos::app_bundle_path();
-    if let Some(bundle) = bundle {
-        // Do not exit unless the detached relauncher really exists.
-        crate::macos::spawn_relauncher(&bundle, std::process::id())?;
-        let handle = app.clone();
-        app.run_on_main_thread(move || handle.exit(0))
-            .map_err(|err| format!("تعذّر جدولة إعادة تشغيل Raff: {err}"))
-    } else {
-        // Dev mode has no packaged bundle for LaunchServices.
-        let handle = app.clone();
-        app.run_on_main_thread(move || handle.restart())
-            .map_err(|err| format!("تعذّر جدولة إعادة تشغيل Raff: {err}"))
-    }
+    crate::relaunch(&app, true)
 }
 
 // ─── Menu entry point ─────────────────────────────────────────────────────────
