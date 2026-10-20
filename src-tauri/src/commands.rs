@@ -40,7 +40,11 @@ pub struct ItemDto {
     pub text: String,
     pub source_app: String,
     pub source_app_bundle_id: String,
+    /// The place in the timeline; the panel orders by it.
     pub created_at: u64,
+    /// The date to show, when it is not `created_at` (a row unpinned back on top).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub captured_at: Option<u64>,
     pub is_pinned: bool,
     pub pinned_order: Option<u32>,
     pub copy_count: u32,
@@ -62,6 +66,7 @@ impl ItemDto {
             source_app: item.source_app.clone(),
             source_app_bundle_id: item.source_app_bundle_id.clone(),
             created_at: item.created_at,
+            captured_at: item.captured_at,
             is_pinned: item.is_pinned,
             pinned_order: item.pinned_order,
             copy_count: item.copy_count,
@@ -852,6 +857,39 @@ mod tests {
             "the preview did not grow: 1000 characters plus the ellipsis"
         );
         assert!(dto.text.ends_with('\u{2026}'));
+    }
+
+    #[test]
+    fn the_panel_gets_the_capture_date_of_a_returned_row_and_nothing_extra_otherwise() {
+        let mut store = Store::load(
+            std::env::temp_dir().join(format!("raff-dto-test-{}", uuid::Uuid::new_v4())),
+        );
+        store.capture(
+            ItemKind::Text,
+            "\u{0631}\u{062f}\u{0651}".into(), // ردّ
+            None,
+            None,
+            None,
+            None,
+            None,
+            ("Notes".into(), "com.apple.Notes".into()),
+        );
+        let id = store.history[0].id.clone();
+        let plain = serde_json::to_value(ItemDto::from(&store.history[0])).unwrap();
+        assert!(
+            plain.get("capturedAt").is_none(),
+            "an ordinary row: createdAt says it all"
+        );
+
+        store.set_pin_persisted(&id, true).unwrap();
+        store.find_mut(&id).unwrap().created_at = 7;
+        store.set_pin_persisted(&id, false).unwrap();
+        let returned = serde_json::to_value(ItemDto::from(&store.history[0])).unwrap();
+        assert_eq!(returned["capturedAt"], 7, "the date the panel shows");
+        assert!(
+            returned["createdAt"].as_u64().unwrap() > 7,
+            "the place it orders by"
+        );
     }
 
     #[test]

@@ -310,7 +310,8 @@ function buildRow(item, index) {
   }
   const time = document.createElement('span');
   time.className = 'row-time';
-  time.textContent = relativeTimeAr(item.createdAt);
+  // A row unpinned back to the top keeps showing when it was captured.
+  time.textContent = relativeTimeAr(item.capturedAt ?? item.createdAt);
   preview.append(time);
 
   // ── content type: one synchronous local Figma asset. Source application

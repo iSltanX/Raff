@@ -136,8 +136,13 @@ export function mockInvoke(cmd, args = {}) {
       if (pinnedIndex >= 0 && args.isPinned === false) {
         const [entry] = PINNED.splice(pinnedIndex, 1);
         entry.isPinned = false;
-        RECENT.push(entry);
-        RECENT.sort((a, b) => b.createdAt - a.createdAt);
+        // As the backend does: back on top, still dated by its capture.
+        entry.capturedAt ??= entry.createdAt;
+        entry.createdAt = [...PINNED, ...RECENT].reduce(
+          (latest, other) => Math.max(latest, other.createdAt + 1),
+          Date.now()
+        );
+        RECENT.unshift(entry);
         return Promise.resolve(false);
       }
       const recentIndex = RECENT.findIndex((entry) => entry.id === args.id);

@@ -111,8 +111,15 @@ export function createFakeTauri(initialState, { failTimes = 0 } = {}) {
           if (pinnedIndex >= 0 && desired === false) {
             const [item] = state.pinned.splice(pinnedIndex, 1);
             item.isPinned = false;
-            state.history.push(item);
-            state.history.sort((a, b) => b.createdAt - a.createdAt);
+            // As the backend does: back on top as a new copy would arrive,
+            // still showing the date it was first captured.
+            const newest = [...state.pinned, ...state.history].reduce(
+              (latest, other) => Math.max(latest, other.createdAt + 1),
+              Date.now()
+            );
+            item.capturedAt ??= item.createdAt;
+            item.createdAt = newest;
+            state.history.unshift(item);
             isPinned = false;
           } else if (pinnedIndex < 0 && desired === true) {
             const historyIndex = state.history.findIndex((item) => item.id === id);
