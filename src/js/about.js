@@ -44,8 +44,9 @@ window.addEventListener('keydown', (e) => {
 
 async function loadVersion() {
   try {
-    const state = await api.getState();
-    const version = state?.version;
+    // The settings payload carries the version; the state would bring every
+    // clip along with it.
+    const { version } = (await api.getSettings()) ?? {};
     if (!version) return; // no version, no line — never a fake number
     versionEl.textContent = `الإصدار \u2066${version}\u2069`;
   } catch {
