@@ -9,7 +9,7 @@ use base64::Engine;
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_nspanel::ManagerExt;
 
-use crate::storage::{now_ms, ItemKind};
+use crate::storage::{ItemKind, Usage};
 use crate::{macos, panel, AppState};
 
 /// How long we give macOS to move focus back before synthesizing ⌘V.
@@ -187,7 +187,7 @@ fn paste_confirmed(
 }
 
 fn bump_paste_signals(app: &AppHandle, id: &str) {
-    bump_signals(app, id, |item| item.paste_count += 1);
+    bump_signals(app, id, Usage::Paste);
 }
 
 /// Copying through رفّ (panel ⌘C, tray item click) is a usage signal exactly
@@ -201,33 +201,21 @@ fn paste_failed(detail: impl std::fmt::Display) -> String {
 }
 
 pub fn bump_copy_signals(app: &AppHandle, id: &str) {
-    bump_signals(app, id, |item| item.copy_count += 1);
+    bump_signals(app, id, Usage::Copy);
 }
 
-fn bump_signals(app: &AppHandle, id: &str, bump: impl Fn(&mut crate::storage::ClipItem)) {
+fn bump_signals(app: &AppHandle, id: &str, usage: Usage) {
     let state = app.state::<AppState>();
     let mut store = crate::lock_store(&state.store);
     if let Err(err) = store.finish_pending_pin() {
         eprintln!("raff: usage signal deferred: {err}");
         return;
     }
-    if !store.settings.learning_enabled {
-        return;
-    }
-    let mut pinned_touched = false;
-    let mut found = false;
-    if let Some(item) = store.find_mut(id) {
-        bump(item);
-        item.last_used_at = now_ms();
-        pinned_touched = item.is_pinned;
-        found = true;
-    }
-    if !found {
-        return;
-    }
     // Not written here: a counter bump is not worth rewriting a layer. The
     // flusher in `monitor` writes it once the user pauses.
-    store.mark_signals_dirty(pinned_touched);
+    if !store.count_use(id, usage) {
+        return;
+    }
     drop(store);
     let _ = app.emit("raff://changed", ());
 }
