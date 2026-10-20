@@ -225,29 +225,40 @@ pub(crate) struct CaptureResult {
     undo: CaptureUndo,
 }
 
+impl CaptureResult {
+    /// Nothing was captured: nothing to write, nothing to take back.
+    pub(crate) fn failed() -> Self {
+        Self {
+            outcome: CaptureOutcome::Failed,
+            dropped: Vec::new(),
+            layer: None,
+            undo: CaptureUndo::Nothing,
+        }
+    }
+}
+
 /// Exactly what it takes to put `capture` back, and nothing more.
 ///
 /// This replaces the copy of both layers that used to be taken before every
 /// capture "just in case the write fails" — two full clones on every copy the
 /// user made, paid at the allowed limit of 1000 rows, to guard a path that
 /// almost never runs.
+///
+/// Rows are named by id, never by position: the layers can change between the
+/// capture and its undo (an unpin lands on top, a row is deleted or moved),
+/// and a position would then name somebody else's row.
 #[derive(Debug)]
 pub(crate) enum CaptureUndo {
     /// Nothing was touched.
     Nothing,
-    /// A new row went to the head of history; `CaptureResult::dropped` holds
-    /// whatever fell off the end.
-    Added,
-    /// The pinned row at `index` was overwritten; here it is as it was.
-    PinnedBumped {
-        index: usize,
-        previous: Box<ClipItem>,
-    },
-    /// The history row at `index` was moved to the head and overwritten.
-    HistoryBumped {
-        index: usize,
-        previous: Box<ClipItem>,
-    },
+    /// The row `id` went to the head of history; `CaptureResult::dropped`
+    /// holds whatever fell off the end.
+    Added { id: String },
+    /// A pinned row was overwritten; here it is as it was.
+    PinnedBumped { previous: Box<ClipItem> },
+    /// A history row was moved to the head and overwritten; here it is as it
+    /// was.
+    HistoryBumped { previous: Box<ClipItem> },
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
@@ -732,11 +743,35 @@ fn try_save_json<T: Serialize>(path: &Path, value: &T) -> Result<(), String> {
 fn stage_json<T: Serialize>(path: &Path, value: &T) -> Result<LayerWrite, String> {
     let bytes = serde_json::to_vec(value)
         .map_err(|err| format!("تعذّر تجهيز {} للحفظ: {err}", path.display()))?;
+    let ticket = next_write_ticket();
+    staged_tickets()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .entry(path.to_path_buf())
+        .and_modify(|latest| *latest = (*latest).max(ticket))
+        .or_insert(ticket);
     Ok(LayerWrite {
         path: path.to_path_buf(),
         bytes,
-        ticket: next_write_ticket(),
+        ticket,
     })
+}
+
+/// The newest ticket handed out for each layer, whether or not its write has
+/// landed (`write_gate` knows the ones that have).
+fn staged_tickets() -> &'static std::sync::Mutex<std::collections::HashMap<PathBuf, u64>> {
+    static STAGED: std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<PathBuf, u64>>> =
+        std::sync::OnceLock::new();
+    STAGED.get_or_init(Default::default)
+}
+
+/// Whether a write of `path` newer than `ticket` has been staged since.
+fn staged_since(path: &Path, ticket: u64) -> bool {
+    staged_tickets()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .get(path)
+        .is_some_and(|latest| *latest > ticket)
 }
 
 fn next_write_ticket() -> u64 {
@@ -837,6 +872,15 @@ impl LayerWrite {
     }
 }
 
+/// Whether a write of `path` newer than `ticket` has reached the disk.
+fn written_since(path: &Path, ticket: u64) -> bool {
+    write_gate()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .get(path)
+        .is_some_and(|latest| *latest > ticket)
+}
+
 fn save_json<T: Serialize>(path: &Path, value: &T) {
     if let Err(err) = try_save_json(path, value) {
         eprintln!("raff: {err}");
@@ -845,34 +889,76 @@ fn save_json<T: Serialize>(path: &Path, value: &T) {
 
 /// Applies a capture and persists its layer with the store lock released.
 ///
-/// The model is mutated and the bytes prepared under the lock; the write, the
-/// expensive part, happens with the lock free, and a failure is undone from
-/// the capture's own undo record rather than from a copy of the whole layer.
+/// `apply` changes the model and its layer is serialized under one hold of
+/// the lock, so no other change can slip in between and the write's ticket
+/// orders exactly the state it carries. The write, the expensive part,
+/// happens with the lock free, and the outcome is settled under the lock
+/// again (`Store::settle_capture`).
+pub(crate) fn capture_and_persist(
+    store: &std::sync::Mutex<Store>,
+    apply: impl FnOnce(&mut Store) -> CaptureResult,
+) -> Result<CaptureOutcome, String> {
+    let staged = {
+        let mut store = crate::lock_store(store);
+        let result = apply(&mut store);
+        store.stage_capture(result)?
+    };
+    let written = staged.write();
+    crate::lock_store(store).settle_capture(written)
+}
+
+/// `capture_and_persist` for a capture already applied to the model.
+#[cfg(test)]
 pub(crate) fn persist_capture(
     store: &std::sync::Mutex<Store>,
     result: CaptureResult,
 ) -> Result<CaptureOutcome, String> {
-    let write = match crate::lock_store(store).stage_capture(&result) {
-        Ok(write) => write,
-        Err(err) => return Err(err),
-    };
-    let CaptureResult {
-        outcome,
-        dropped,
-        undo,
-        ..
-    } = result;
+    capture_and_persist(store, |_| result)
+}
 
-    if let Err(err) = write.commit() {
-        crate::lock_store(store).rollback_capture(undo, dropped);
-        return Err(err);
+/// A capture applied to the model, its layer serialized and waiting to be
+/// written with the store lock released.
+pub(crate) struct StagedCapture {
+    layer: DeletedLayer,
+    write: LayerWrite,
+    outcome: CaptureOutcome,
+    dropped: Vec<ClipItem>,
+    undo: CaptureUndo,
+}
+
+/// A staged capture after its write was tried, waiting to be settled under
+/// the lock: which layer, under which ticket, and how it went.
+pub(crate) struct WrittenCapture {
+    layer: DeletedLayer,
+    path: PathBuf,
+    ticket: u64,
+    result: Result<(), String>,
+    outcome: CaptureOutcome,
+    dropped: Vec<ClipItem>,
+    undo: CaptureUndo,
+}
+
+impl StagedCapture {
+    /// The write itself — the expensive part, with the store lock released.
+    pub(crate) fn write(self) -> WrittenCapture {
+        let StagedCapture {
+            layer,
+            write,
+            outcome,
+            dropped,
+            undo,
+        } = self;
+        let (path, ticket) = (write.path.clone(), write.ticket);
+        WrittenCapture {
+            result: write.commit(),
+            layer,
+            path,
+            ticket,
+            outcome,
+            dropped,
+            undo,
+        }
     }
-    // Only now are these rows certainly gone from the layer on disk.
-    let guard = crate::lock_store(store);
-    for item in &dropped {
-        guard.delete_files(item);
-    }
-    Ok(outcome)
 }
 
 impl Store {
@@ -1095,21 +1181,15 @@ impl Store {
     ) -> CaptureResult {
         if let Err(err) = self.try_finish_pending_pin() {
             eprintln!("raff: capture deferred until pin transaction completes: {err}");
-            return CaptureResult {
-                outcome: CaptureOutcome::Failed,
-                dropped: Vec::new(),
-                layer: None,
-                undo: CaptureUndo::Nothing,
-            };
+            return CaptureResult::failed();
         }
         let now = self.next_stamp();
         let learning = self.settings.learning_enabled;
 
-        if let Some((index, p)) = self
+        if let Some(p) = self
             .pinned
             .iter_mut()
-            .enumerate()
-            .find(|(_, i)| Self::same_content(i, kind, &text, hash.as_deref()))
+            .find(|i| Self::same_content(i, kind, &text, hash.as_deref()))
         {
             let previous = Box::new(p.clone());
             p.text = text;
@@ -1134,7 +1214,7 @@ impl Store {
                 outcome: CaptureOutcome::Deduped,
                 dropped: Vec::new(),
                 layer: Some(DeletedLayer::Pinned),
-                undo: CaptureUndo::PinnedBumped { index, previous },
+                undo: CaptureUndo::PinnedBumped { previous },
             };
         }
 
@@ -1168,10 +1248,7 @@ impl Store {
                 outcome: CaptureOutcome::Deduped,
                 dropped: Vec::new(),
                 layer: Some(DeletedLayer::History),
-                undo: CaptureUndo::HistoryBumped {
-                    index: pos,
-                    previous,
-                },
+                undo: CaptureUndo::HistoryBumped { previous },
             };
         }
 
@@ -1194,12 +1271,13 @@ impl Store {
             paste_count: 0,
             last_used_at: now,
         };
+        let id = item.id.clone();
         self.history.insert(0, item);
         CaptureResult {
             outcome: CaptureOutcome::Added,
             dropped: self.prune_history(),
             layer: Some(DeletedLayer::History),
-            undo: CaptureUndo::Added,
+            undo: CaptureUndo::Added { id },
         }
     }
 
@@ -1259,19 +1337,75 @@ impl Store {
     /// store lock is released — the write is tens of megabytes at the allowed
     /// limit, and the main thread takes this same lock every time the panel is
     /// opened or dragged.
-    fn stage_capture(&mut self, result: &CaptureResult) -> Result<LayerWrite, String> {
+    pub(crate) fn stage_capture(&mut self, result: CaptureResult) -> Result<StagedCapture, String> {
         if result.outcome == CaptureOutcome::Failed {
-            return Err("تعذّر إكمال معاملة التثبيت السابقة".into());
+            return Err("لم يُلتقط شيء".into());
         }
-        let path = match result.layer {
-            Some(DeletedLayer::History) => self.dir.join(HISTORY_FILE),
-            Some(DeletedLayer::Pinned) => self.dir.join(PINNED_FILE),
-            None => return Err("تعذّر تحديد طبقة الالتقاط".into()),
-        };
-        match result.layer {
-            Some(DeletedLayer::Pinned) => stage_json(&path, &self.pinned),
-            _ => stage_json(&path, &self.history),
+        let layer = result
+            .layer
+            .ok_or_else(|| "تعذّر تحديد طبقة الالتقاط".to_string())?;
+        let write = match layer {
+            DeletedLayer::Pinned => stage_json(&self.dir.join(PINNED_FILE), &self.pinned),
+            DeletedLayer::History => stage_json(&self.dir.join(HISTORY_FILE), &self.history),
+        }?;
+        Ok(StagedCapture {
+            layer,
+            write,
+            outcome: result.outcome,
+            dropped: result.dropped,
+            undo: result.undo,
+        })
+    }
+
+    /// Settles a capture once its write has been tried, under the lock again.
+    ///
+    /// A write that failed is not the end of it. The lock was free while it
+    /// ran, so something else may have changed the layers meanwhile — an
+    /// unpin, a delete — and written them:
+    /// - If a later write of the same layer has landed, it was serialized from
+    ///   a model that already held this capture (`capture_and_persist` applies
+    ///   and stages under one hold of the lock), so the capture is on disk and
+    ///   stands, exactly as if its own write had worked.
+    /// - Otherwise it is taken back by identity (`rollback_capture`), touching
+    ///   no other row. A later write that was staged but has not landed may
+    ///   still carry it, so the layer is then written again from the model to
+    ///   outrank that write — best effort: on a disk still failing, this write
+    ///   fails as well, and the next good write of the layer settles it.
+    /// - A capture whose row moved to the other layer meanwhile (pinned while
+    ///   its write was in flight, the pin's own layer writes deferred to its
+    ///   journal) stays where the user put it, and so do its files: `Ok`.
+    pub(crate) fn settle_capture(
+        &mut self,
+        written: WrittenCapture,
+    ) -> Result<CaptureOutcome, String> {
+        let WrittenCapture {
+            layer,
+            path,
+            ticket,
+            result,
+            outcome,
+            dropped,
+            undo,
+        } = written;
+        if let Err(err) = result {
+            if !written_since(&path, ticket) {
+                let stands_elsewhere = self.rollback_capture(undo, dropped);
+                if staged_since(&path, ticket) {
+                    self.rewrite_layer(layer);
+                }
+                return if stands_elsewhere {
+                    Ok(outcome)
+                } else {
+                    Err(err)
+                };
+            }
+            eprintln!("raff: a capture write failed ({err}); a later write already holds it");
         }
+        // Only now are these rows certainly gone from the layer on disk.
+        for item in &dropped {
+            self.delete_files(item);
+        }
+        Ok(outcome)
     }
 
     /// Records that a learning counter moved, without writing the layer.
@@ -1308,28 +1442,69 @@ impl Store {
         writes
     }
 
-    /// Puts back exactly what `capture` changed, from its undo record.
-    fn rollback_capture(&mut self, undo: CaptureUndo, dropped: Vec<ClipItem>) {
-        match undo {
-            CaptureUndo::Nothing => {}
-            CaptureUndo::Added => {
-                if !self.history.is_empty() {
-                    self.history.remove(0);
-                }
-                self.history.extend(dropped);
+    /// Puts back what `capture` changed, from its undo record, finding its own
+    /// row by id and touching no other. The rows it pushed off come back if
+    /// they are still missing (its write never landed, so they are on disk).
+    ///
+    /// Returns whether the capture's row stands in the other layer instead:
+    /// moved there meanwhile (pinned or unpinned while the write was in
+    /// flight), it is left where the user put it.
+    fn rollback_capture(&mut self, undo: CaptureUndo, dropped: Vec<ClipItem>) -> bool {
+        let stands_elsewhere = match undo {
+            CaptureUndo::Nothing => false,
+            CaptureUndo::Added { id } => {
+                self.history.retain(|item| item.id != id);
+                self.pinned.iter().any(|item| item.id == id)
             }
-            CaptureUndo::PinnedBumped { index, previous } => {
-                if let Some(slot) = self.pinned.get_mut(index) {
-                    *slot = *previous;
+            CaptureUndo::PinnedBumped { previous } => {
+                match self.pinned.iter_mut().find(|item| item.id == previous.id) {
+                    Some(row) => {
+                        // A reorder made meanwhile stands.
+                        let pinned_order = row.pinned_order;
+                        *row = *previous;
+                        row.pinned_order = pinned_order;
+                        false
+                    }
+                    None => self.history.iter().any(|item| item.id == previous.id),
                 }
             }
-            CaptureUndo::HistoryBumped { index, previous } => {
-                if !self.history.is_empty() {
-                    self.history.remove(0);
+            CaptureUndo::HistoryBumped { previous } => {
+                match self.history.iter().position(|item| item.id == previous.id) {
+                    Some(at) => {
+                        self.history.remove(at);
+                        self.insert_by_recency(*previous);
+                        false
+                    }
+                    None => self.pinned.iter().any(|item| item.id == previous.id),
                 }
-                let index = index.min(self.history.len());
-                self.history.insert(index, *previous);
             }
+        };
+        for item in dropped {
+            if self.find(&item.id).is_none() {
+                self.insert_by_recency(item);
+            }
+        }
+        stands_elsewhere
+    }
+
+    /// Puts a history row where its timestamp says it belongs.
+    fn insert_by_recency(&mut self, item: ClipItem) {
+        let at = self
+            .history
+            .iter()
+            .position(|other| other.created_at < item.created_at)
+            .unwrap_or(self.history.len());
+        self.history.insert(at, item);
+    }
+
+    /// Writes a layer again from the model, best effort.
+    fn rewrite_layer(&self, layer: DeletedLayer) {
+        let result = match layer {
+            DeletedLayer::Pinned => try_save_json(&self.dir.join(PINNED_FILE), &self.pinned),
+            DeletedLayer::History => try_save_json(&self.dir.join(HISTORY_FILE), &self.history),
+        };
+        if let Err(err) = result {
+            eprintln!("raff: {err}");
         }
     }
 
@@ -3157,6 +3332,314 @@ mod tests {
             before_tail,
             "and the tail is the one that was there"
         );
+    }
+
+    /// A full history (limit 2, written down), and a pinned picture captured
+    /// before all of it, with its two files on disk.
+    fn full_history_and_an_old_pinned_picture(dir: &Path) -> (Store, String) {
+        let mut s = Store::load(dir.to_path_buf());
+        let mut settings = s.settings.clone();
+        settings.history_limit = 2;
+        s.update_settings_persisted(settings).unwrap();
+        let images = dir.join(IMAGES_DIR);
+        fs::write(images.join("p.png"), b"the pinned picture").unwrap();
+        fs::write(images.join("p.thumb.png"), b"its thumbnail").unwrap();
+        let result = s.capture(
+            ItemKind::Image,
+            "صورة 2×2".into(),
+            None,
+            None,
+            Some("p.png".into()),
+            Some("p.thumb.png".into()),
+            Some(content_hash(b"the pinned picture")),
+            ("Preview".into(), "com.apple.Preview".into()),
+        );
+        let store = std::sync::Mutex::new(s);
+        persist_capture(&store, result).unwrap();
+        let mut s = store.into_inner().unwrap();
+        let id = s.history[0].id.clone();
+        s.set_pin_persisted(&id, true).unwrap();
+        s.find_mut(&id).unwrap().created_at = 1;
+        s.save_pinned();
+        capture_text(&mut s, "h1");
+        capture_text(&mut s, "h2");
+        s.save_history();
+        (s, id)
+    }
+
+    fn assert_picture_intact(dir: &Path) {
+        let images = dir.join(IMAGES_DIR);
+        assert_eq!(
+            fs::read(images.join("p.png")).unwrap(),
+            b"the pinned picture"
+        );
+        assert_eq!(
+            fs::read(images.join("p.thumb.png")).unwrap(),
+            b"its thumbnail"
+        );
+    }
+
+    #[test]
+    fn a_failed_capture_keeps_an_unpin_that_landed_meanwhile_and_its_picture() {
+        let dir = std::env::temp_dir().join(format!("raff-test-{}", uuid::Uuid::new_v4()));
+        let (mut s, pinned) = full_history_and_an_old_pinned_picture(&dir);
+        let blocker = dir.join("history.json.tmp");
+
+        // The capture is applied and staged under the lock...
+        let result = s.capture(
+            ItemKind::Text,
+            "نسخة جديدة".into(),
+            None,
+            None,
+            None,
+            None,
+            None,
+            ("Notes".into(), "com.apple.Notes".into()),
+        );
+        let captured = s.history[0].id.clone();
+        let staged = s.stage_capture(result).unwrap();
+        // ...its write fails: the disk refuses the temporary file for a moment...
+        fs::create_dir(&blocker).unwrap();
+        let written = staged.write();
+        fs::remove_dir(&blocker).unwrap();
+        // ...and before it is settled, the old picture is unpinned. That unpin
+        // is written from a model that already holds the capture.
+        assert_eq!(s.set_pin_persisted(&pinned, false), Ok(false));
+
+        assert!(
+            s.settle_capture(written).is_ok(),
+            "what is on disk already holds the capture"
+        );
+        assert_eq!(history_ids(&s), [pinned.clone(), captured.clone()]);
+
+        // Life goes on, then رفّ restarts.
+        let next = s.capture(
+            ItemKind::Text,
+            "بعدها".into(),
+            None,
+            None,
+            None,
+            None,
+            None,
+            ("Notes".into(), "com.apple.Notes".into()),
+        );
+        let store = std::sync::Mutex::new(s);
+        persist_capture(&store, next).unwrap();
+        drop(store);
+        let reloaded = Store::load(dir.clone());
+        let back = reloaded
+            .find(&pinned)
+            .expect("the unpinned picture survives the restart");
+        assert!(!back.is_pinned);
+        assert_eq!(back.captured_at, Some(1));
+        assert_picture_intact(&dir);
+    }
+
+    #[test]
+    fn a_failed_capture_is_taken_back_by_its_own_row_not_by_position() {
+        let dir = std::env::temp_dir().join(format!("raff-test-{}", uuid::Uuid::new_v4()));
+        let (mut s, pinned) = full_history_and_an_old_pinned_picture(&dir);
+        let blocker = dir.join("history.json.tmp");
+        let pushed_off = s.history[1].id.clone();
+
+        let result = s.capture(
+            ItemKind::Text,
+            "نسخة جديدة".into(),
+            None,
+            None,
+            None,
+            None,
+            None,
+            ("Notes".into(), "com.apple.Notes".into()),
+        );
+        let captured = s.history[0].id.clone();
+        let staged = s.stage_capture(result).unwrap();
+        // The disk refuses history writes for a while: the capture's own, and
+        // the unpin's that follows (its journal lands; its layers wait).
+        fs::create_dir(&blocker).unwrap();
+        let written = staged.write();
+        assert_eq!(s.set_pin_persisted(&pinned, false), Ok(false));
+        assert_eq!(s.history[0].id, pinned);
+
+        assert!(s.settle_capture(written).is_err());
+        assert!(s.find(&captured).is_none(), "the capture is taken back");
+        assert_eq!(s.history[0].id, pinned, "the unpinned picture stays on top");
+        assert_eq!(s.history[0].captured_at, Some(1));
+        assert!(
+            s.find(&pushed_off).is_some(),
+            "the row the capture pushed off is back"
+        );
+
+        // The disk recovers, and رفّ restarts.
+        fs::remove_dir(&blocker).unwrap();
+        drop(s);
+        let reloaded = Store::load(dir.clone());
+        assert_eq!(reloaded.history[0].id, pinned);
+        assert_eq!(reloaded.history[0].captured_at, Some(1));
+        assert!(reloaded.pinned.is_empty());
+        assert!(reloaded.find(&captured).is_none());
+        assert!(reloaded.find(&pushed_off).is_some());
+        assert_picture_intact(&dir);
+    }
+
+    #[test]
+    fn a_failed_recopy_puts_its_row_back_by_identity_around_an_unpin() {
+        let dir = std::env::temp_dir().join(format!("raff-test-{}", uuid::Uuid::new_v4()));
+        let (mut s, pinned) = full_history_and_an_old_pinned_picture(&dir);
+        let blocker = dir.join("history.json.tmp");
+        let recopied = s.history[1].id.clone();
+        let before = s.find(&recopied).unwrap().clone();
+
+        let result = s.capture(
+            detect_kind("h1"),
+            "h1".into(),
+            None,
+            None,
+            None,
+            None,
+            None,
+            ("Test".into(), "com.test".into()),
+        );
+        assert_eq!(result.outcome, CaptureOutcome::Deduped);
+        let staged = s.stage_capture(result).unwrap();
+        fs::create_dir(&blocker).unwrap();
+        let written = staged.write();
+        assert_eq!(s.set_pin_persisted(&pinned, false), Ok(false));
+
+        assert!(s.settle_capture(written).is_err());
+        let row = s.find(&recopied).expect("the re-copied row is still there");
+        assert_eq!(row.created_at, before.created_at, "at the place it had");
+        assert_eq!(row.copy_count, before.copy_count, "with the counts it had");
+        assert_eq!(s.history[0].id, pinned, "the unpinned picture stays on top");
+
+        fs::remove_dir(&blocker).unwrap();
+        drop(s);
+        let reloaded = Store::load(dir.clone());
+        assert_eq!(reloaded.history[0].id, pinned);
+        assert_eq!(
+            reloaded.find(&recopied).map(|row| row.created_at),
+            Some(before.created_at)
+        );
+        assert_picture_intact(&dir);
+    }
+
+    #[test]
+    fn a_taken_back_capture_is_not_laid_back_on_disk_by_a_write_staged_meanwhile() {
+        let dir = std::env::temp_dir().join(format!("raff-test-{}", uuid::Uuid::new_v4()));
+        let mut s = Store::load(dir.clone());
+        capture_text(&mut s, "قبلها");
+        s.save_history();
+        let blocker = dir.join("history.json.tmp");
+
+        let result = s.capture(
+            ItemKind::Text,
+            "نسخة لن تُحفظ".into(),
+            None,
+            None,
+            None,
+            None,
+            None,
+            ("Notes".into(), "com.apple.Notes".into()),
+        );
+        let captured = s.history[0].id.clone();
+        let staged = s.stage_capture(result).unwrap();
+        fs::create_dir(&blocker).unwrap();
+        let written = staged.write();
+        // Meanwhile a paste moves a counter, and its coalesced write is staged
+        // — from a model still holding the capture — but not written yet.
+        s.mark_signals_dirty(false);
+        let late = s.stage_signal_flush();
+        assert_eq!(late.len(), 1);
+        fs::remove_dir(&blocker).unwrap();
+
+        assert!(s.settle_capture(written).is_err());
+        assert!(s.find(&captured).is_none());
+        for write in late {
+            write.commit().unwrap();
+        }
+
+        let reloaded = Store::load(dir.clone());
+        assert!(
+            reloaded.find(&captured).is_none(),
+            "the late write did not bring it back"
+        );
+        assert_eq!(reloaded.history.len(), 1);
+    }
+
+    #[test]
+    fn a_capture_pinned_while_its_write_failed_stays_pinned_with_its_picture() {
+        let dir = std::env::temp_dir().join(format!("raff-test-{}", uuid::Uuid::new_v4()));
+        let mut s = Store::load(dir.clone());
+        let images = dir.join(IMAGES_DIR);
+        fs::write(images.join("c.png"), b"captured picture").unwrap();
+        let result = s.capture(
+            ItemKind::Image,
+            "صورة 3×3".into(),
+            None,
+            None,
+            Some("c.png".into()),
+            None,
+            Some(content_hash(b"captured picture")),
+            ("Preview".into(), "com.apple.Preview".into()),
+        );
+        let captured = s.history[0].id.clone();
+        let staged = s.stage_capture(result).unwrap();
+        let blocker = dir.join("history.json.tmp");
+        fs::create_dir(&blocker).unwrap();
+        let written = staged.write();
+        // Pinned from the panel while the disk still refuses history writes:
+        // the journal and the pinned layer land, the history write waits.
+        assert_eq!(s.set_pin_persisted(&captured, true), Ok(true));
+
+        assert!(
+            s.settle_capture(written).is_ok(),
+            "it stands on the pinned shelf, and its picture with it"
+        );
+        assert!(s.find(&captured).unwrap().is_pinned);
+
+        fs::remove_dir(&blocker).unwrap();
+        drop(s);
+        let reloaded = Store::load(dir.clone());
+        assert!(
+            reloaded
+                .find(&captured)
+                .expect("still there after a restart")
+                .is_pinned
+        );
+        assert_eq!(fs::read(images.join("c.png")).unwrap(), b"captured picture");
+    }
+
+    #[test]
+    fn a_failed_recopy_of_a_pinned_row_restores_its_content_and_keeps_a_new_order() {
+        let mut s = store();
+        capture_text(&mut s, "first");
+        let first = s.history[0].id.clone();
+        s.set_pin_persisted(&first, true).unwrap();
+        capture_text(&mut s, "second");
+        let second = s.history[0].id.clone();
+        s.set_pin_persisted(&second, true).unwrap();
+        let before = s.find(&second).unwrap().clone();
+
+        let result = s.capture(
+            detect_kind("second"),
+            "second".into(),
+            None,
+            None,
+            None,
+            None,
+            None,
+            ("Other".into(), "com.other".into()),
+        );
+        assert_eq!(result.outcome, CaptureOutcome::Deduped);
+        // The shelf is reordered meanwhile.
+        s.find_mut(&first).unwrap().pinned_order = Some(1);
+        s.find_mut(&second).unwrap().pinned_order = Some(0);
+
+        assert!(!s.rollback_capture(result.undo, result.dropped));
+        let row = s.find(&second).unwrap();
+        assert_eq!(row.source_app, before.source_app, "its content is put back");
+        assert_eq!(row.created_at, before.created_at);
+        assert_eq!(row.pinned_order, Some(0), "and the reorder stands");
     }
 
     #[test]

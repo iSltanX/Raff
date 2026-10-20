@@ -9,7 +9,9 @@ use std::time::{Duration, Instant};
 use base64::Engine;
 use tauri::{AppHandle, Emitter, Manager};
 
-use crate::storage::{content_hash, detect_kind, persist_capture, ItemKind, Store};
+use crate::storage::{
+    capture_and_persist, content_hash, detect_kind, CaptureResult, ItemKind, Store,
+};
 use crate::{macos, tray, AppState};
 
 const POLL_MS: u64 = 350;
@@ -245,19 +247,22 @@ fn capture_reading(store_lock: &Mutex<Store>, reading: ClipReading) -> bool {
         let rtf_b64 = raw
             .rtf
             .map(|r| base64::engine::general_purpose::STANDARD.encode(r));
-        let capture = crate::lock_store(store_lock).capture(
-            detect_kind(&text),
-            text,
-            raw.html,
-            rtf_b64,
-            None,
-            None,
-            None,
-            (front.name, front.bundle_id),
-        );
-        // The guard is gone by now: `persist_capture` writes the layer with the
-        // store lock free, so opening the panel does not wait on this write.
-        return persist_capture(store_lock, capture).is_ok();
+        let kind = detect_kind(&text);
+        // Applied and staged under one hold of the lock; the layer is then
+        // written with the lock free, so opening the panel does not wait on it.
+        return capture_and_persist(store_lock, |store| {
+            store.capture(
+                kind,
+                text,
+                raw.html,
+                rtf_b64,
+                None,
+                None,
+                None,
+                (front.name, front.bundle_id),
+            )
+        })
+        .is_ok();
     }
 
     let Some((png, decoded)) = decode_capture(raw.png, raw.tiff) else {
@@ -268,8 +273,9 @@ fn capture_reading(store_lock: &Mutex<Store>, reading: ClipReading) -> bool {
     let (w, h) = (decoded.width(), decoded.height());
     let label = format!("صورة {w}×{h}");
 
-    let (images_dir, image_file, thumb_file, capture) = {
-        let mut store = crate::lock_store(store_lock);
+    // Files written for this capture, to take back if it does not persist.
+    let mut created: Vec<std::path::PathBuf> = Vec::new();
+    let persisted = capture_and_persist(store_lock, |store| {
         let dir = store.images_dir();
         // Identical image already stored, *and* its file is still there? Then
         // bump it without touching the disk. Asking the metadata alone let a
@@ -291,30 +297,32 @@ fn capture_reading(store_lock: &Mutex<Store>, reading: ClipReading) -> bool {
             let image_file = format!("{id_base}.png");
             let thumb_name = format!("{id_base}.thumb.png");
             if std::fs::write(dir.join(&image_file), &png).is_err() {
-                return false;
+                return CaptureResult::failed();
             }
+            created.push(dir.join(&image_file));
             let thumb_file = write_thumbnail(&dir, thumb_name, &decoded);
+            created.extend(thumb_file.iter().map(|name| dir.join(name)));
             (Some(image_file), thumb_file)
         };
 
-        let capture = store.capture(
+        store.capture(
             ItemKind::Image,
             label,
             None,
             None,
-            image_file.clone(),
-            thumb_file.clone(),
+            image_file,
+            thumb_file,
             Some(hash),
             (front.name, front.bundle_id),
-        );
-        (dir, image_file, thumb_file, capture)
-    };
+        )
+    });
 
-    if persist_capture(store_lock, capture).is_err() {
-        // These files were created for this failed capture and nothing in the
-        // restored model refers to them.
-        for file in [image_file, thumb_file].into_iter().flatten() {
-            let _ = std::fs::remove_file(images_dir.join(file));
+    if persisted.is_err() {
+        // The capture was taken back or never made it, so nothing in the model
+        // refers to these files. (One that moved to the other layer while its
+        // write was in flight is settled as `Ok`, and keeps them.)
+        for file in created {
+            let _ = std::fs::remove_file(file);
         }
         return false;
     }
