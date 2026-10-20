@@ -2681,7 +2681,7 @@ mod tests {
 
     #[test]
     fn a_recovery_copy_cut_inside_an_arabic_letter_still_keeps_its_images() {
-        // A write cut short by a power loss most often stops inside a two-byte
+        // A write cut short by a power loss can stop inside a two-byte
         // Arabic letter, so the copy set aside is not valid UTF-8 at all. The
         // image names in it are plain ASCII and must still count.
         for layer in [HISTORY_FILE, PINNED_FILE] {
@@ -3022,7 +3022,7 @@ mod tests {
 
         assert_eq!(
             store.history[0].hash, None,
-            "an unverifiable fingerprint is worse than none: it would match nothing and block everything"
+            "an unverifiable fingerprint is dropped, not kept: it describes no file any more"
         );
     }
 

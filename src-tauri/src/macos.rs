@@ -488,19 +488,9 @@ pub fn spawn_relauncher(
     reopen_settings: bool,
 ) -> Result<(), String> {
     use std::process::{Command, Stdio};
-    let open = if reopen_settings {
-        "exec /usr/bin/open \"$0\" --args --settings"
-    } else {
-        "exec /usr/bin/open \"$0\""
-    };
-    // The bundle path travels as "$0" (never interpolated into the script).
-    let script = format!(
-        "i=0; while kill -0 {pid} 2>/dev/null && [ $i -lt 200 ]; do sleep 0.1; i=$((i+1)); done; \
-         {open}"
-    );
     Command::new("/bin/sh")
         .arg("-c")
-        .arg(script)
+        .arg(relauncher_script(pid, reopen_settings))
         .arg(bundle)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
@@ -508,6 +498,20 @@ pub fn spawn_relauncher(
         .spawn()
         .map(|_| ())
         .map_err(|err| format!("تعذّر جدولة إعادة تشغيل Raff: {err}"))
+}
+
+/// The relauncher's shell script. The bundle path travels as "$0", never
+/// interpolated into the script; only the pid and fixed text are.
+fn relauncher_script(pid: u32, reopen_settings: bool) -> String {
+    let open = if reopen_settings {
+        "exec /usr/bin/open \"$0\" --args --settings"
+    } else {
+        "exec /usr/bin/open \"$0\""
+    };
+    format!(
+        "i=0; while kill -0 {pid} 2>/dev/null && [ $i -lt 200 ]; do sleep 0.1; i=$((i+1)); done; \
+         {open}"
+    )
 }
 
 /// The official Raff repository. Hardcoded on purpose: the About window's link
@@ -665,6 +669,21 @@ mod tests {
                 CONCEALED_TYPES.contains(&marker),
                 "{marker} must be skipped"
             );
+        }
+    }
+
+    #[test]
+    fn the_relauncher_waits_for_this_pid_and_reopens_settings_only_when_asked() {
+        for (reopen, tail) in [
+            (true, "exec /usr/bin/open \"$0\" --args --settings"),
+            (false, "exec /usr/bin/open \"$0\""),
+        ] {
+            let script = relauncher_script(4242, reopen);
+            assert!(
+                script.starts_with("i=0; while kill -0 4242 2>/dev/null"),
+                "it waits for this very process to be gone first: {script}"
+            );
+            assert!(script.ends_with(tail), "reopen_settings={reopen}: {script}");
         }
     }
 }
