@@ -197,7 +197,7 @@ test('Settings exposes recoverable, announced IPC failures', async (t) => {
     await flush();
 
     const status = byId('data-status');
-    assert.equal(status.hidden, false);
+    assert.equal(status.hidden, false, 'rendered: a live region');
     assert.equal(status.getAttribute('role'), 'alert');
     assert.equal(status.getAttribute('aria-live'), 'assertive');
     assert.match(status.textContent, /تعذّر حفظ التغيير/u);
@@ -213,7 +213,7 @@ test('Settings exposes recoverable, announced IPC failures', async (t) => {
     await flush();
 
     const status = byId('data-status');
-    assert.equal(status.hidden, false);
+    assert.equal(status.hidden, false, 'rendered: a live region');
     assert.equal(status.getAttribute('role'), 'alert');
     assert.equal(status.getAttribute('aria-live'), 'assertive');
     assert.equal(status.textContent, 'تعذّر مسح سجل الحافظة. لم يُحذف أي عنصر.');
@@ -231,7 +231,7 @@ test('Settings exposes recoverable, announced IPC failures', async (t) => {
     await flush();
 
     const status = byId('data-status');
-    assert.equal(status.hidden, false);
+    assert.equal(status.hidden, false, 'rendered: a live region');
     assert.equal(status.getAttribute('role'), 'alert');
     assert.equal(status.getAttribute('aria-live'), 'assertive');
     assert.equal(status.textContent, 'تعذّر مسح بيانات التعلّم. لم تُحذف البيانات.');

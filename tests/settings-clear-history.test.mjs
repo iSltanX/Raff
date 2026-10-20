@@ -146,7 +146,8 @@ async function mountSettings() {
 
 const $ = (dom, id) => dom.window.document.getElementById(id);
 const overlayOpen = (dom) => $(dom, 'confirm-overlay').hidden === false;
-const statusVisible = (dom) => $(dom, 'data-status').hidden === false;
+// The line stays rendered (a live region); it shows a message or nothing.
+const statusVisible = (dom) => $(dom, 'data-status').textContent !== '';
 
 test('«مسح سجل الحافظة» confirmation flow', async (t) => {
   const { dom, fake } = await mountSettings();

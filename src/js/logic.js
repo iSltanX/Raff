@@ -122,3 +122,20 @@ export function hotkeyFromEvent(e) {
 
   return [...mods, key].join('+');
 }
+
+/**
+ * Why an accelerator cannot be رفّ's global shortcut, or null when it can.
+ *
+ * A global shortcut is taken from every app while رفّ runs. With no modifier
+ * but ⇧ it would take a capital letter from all typing; ⌘ with C, V, X, A, Z,
+ * Q or W, the edit and window commands every app relies on. The backend
+ * refuses the same ones (`hotkey_refusal` in commands.rs).
+ */
+const SHARED_HOTKEYS = new Set(['c', 'v', 'x', 'a', 'z', 'q', 'w'].map((key) => `super+${key}`));
+
+export function hotkeyRefusal(accel) {
+  const mods = String(accel).split('+').slice(0, -1);
+  if (!mods.some((mod) => mod !== 'shift')) return 'needs-modifier';
+  if (SHARED_HOTKEYS.has(accel)) return 'shared';
+  return null;
+}

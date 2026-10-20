@@ -22,6 +22,12 @@ pub mod err {
     pub const NOT_FOUND: &str = "raff/not-found";
     pub const SAVE_FAILED: &str = "raff/save-failed";
     pub const PASTE_FAILED: &str = "raff/paste-failed";
+    /// A shortcut with no modifier but ⇧.
+    pub const HOTKEY_NEEDS_MODIFIER: &str = "raff/hotkey-needs-modifier";
+    /// ⌘C, ⌘V, ⌘X, ⌘A, ⌘Z, ⌘Q or ⌘W.
+    pub const HOTKEY_SHARED: &str = "raff/hotkey-shared";
+    /// macOS would not register it.
+    pub const HOTKEY_UNAVAILABLE: &str = "raff/hotkey-unavailable";
 }
 
 /// Keeps the detail where it is useful — the process log — and hands the
@@ -295,7 +301,7 @@ pub fn commit_delete(state: State<AppState>, token: String) -> Result<(), String
 pub fn clear_history(app: AppHandle, state: State<AppState>) -> Result<(), String> {
     {
         let mut store = crate::lock_store(&state.store);
-        store.clear_history_persisted()?;
+        store.clear_history_persisted().map_err(save_failed)?;
     }
     notify(&app);
     Ok(())
@@ -305,7 +311,7 @@ pub fn clear_history(app: AppHandle, state: State<AppState>) -> Result<(), Strin
 pub fn clear_learning(app: AppHandle, state: State<AppState>) -> Result<(), String> {
     {
         let mut store = crate::lock_store(&state.store);
-        store.clear_learning_persisted()?;
+        store.clear_learning_persisted().map_err(save_failed)?;
     }
     notify(&app);
     Ok(())
@@ -368,10 +374,16 @@ pub fn update_settings(
     // Hotkey first: if the new accelerator cannot be registered, fail without
     // persisting anything — and re-register the old one, because registration
     // starts with unregister_all (the app must never lose its entry point).
+    // Only a shortcut being changed is weighed: one saved before these rules
+    // must not stand in the way of every other setting.
     if settings.hotkey != old.hotkey {
+        if let Some(refusal) = hotkey_refusal(&settings.hotkey) {
+            return Err(refusal.into());
+        }
         if let Err(err) = register_hotkey(&app, &settings.hotkey) {
+            eprintln!("raff: could not register {}: {err}", settings.hotkey);
             let _ = register_hotkey(&app, &old.hotkey);
-            return Err(err);
+            return Err(err::HOTKEY_UNAVAILABLE.into());
         }
     }
 
@@ -395,7 +407,9 @@ pub fn update_settings(
     // Persist only after fallible system integration succeeds. If storage
     // fails, restore both external side effects so Settings cannot claim a
     // configuration macOS or the next launch will not actually honor.
-    let persisted = crate::lock_store(&state.store).update_settings_persisted(settings.clone());
+    let persisted = crate::lock_store(&state.store)
+        .update_settings_persisted(settings.clone())
+        .map_err(save_failed);
     if let Err(err) = persisted {
         if autostart_changed {
             let autolaunch = app.autolaunch();
@@ -442,6 +456,45 @@ pub fn resume_capture() {
 #[tauri::command]
 pub fn restart_app(app: AppHandle, window: tauri::WebviewWindow) -> Result<(), String> {
     crate::relaunch(&app, window.label() == "settings")
+}
+
+/// Why `accel` cannot be رفّ's global shortcut, or `None` when it can.
+///
+/// A global shortcut is taken from every app on the Mac while رفّ runs. With
+/// no modifier but ⇧ it would take a capital letter from all typing; ⌘ with C,
+/// V, X, A, Z, Q or W, the edit and window commands every app relies on. The
+/// recorder's own ⌘V — pressed to paste into a field — became the shortcut
+/// that way (live UI audit, issue 1). The panel refuses the same ones
+/// (`hotkeyRefusal` in logic.js).
+fn hotkey_refusal(accel: &str) -> Option<&'static str> {
+    let parts: Vec<String> = accel
+        .split('+')
+        .map(|part| part.trim().to_ascii_lowercase())
+        .collect();
+    let (key, mods) = parts.split_last()?;
+    let key = key
+        .strip_prefix("key")
+        .filter(|letter| letter.len() == 1)
+        .unwrap_or(key);
+    let has = |names: &[&str]| mods.iter().any(|m| names.contains(&m.as_str()));
+    let command = has(&[
+        "super",
+        "cmd",
+        "command",
+        "meta",
+        "cmdorctrl",
+        "cmdorcontrol",
+        "commandorctrl",
+        "commandorcontrol",
+    ]);
+    let other = has(&["ctrl", "control", "alt", "option"]);
+    if !command && !other {
+        return Some(err::HOTKEY_NEEDS_MODIFIER);
+    }
+    if command && !other && !has(&["shift"]) && ["c", "v", "x", "a", "z", "q", "w"].contains(&key) {
+        return Some(err::HOTKEY_SHARED);
+    }
+    None
 }
 
 fn validate_settings(settings: &Settings) -> Result<(), String> {
@@ -535,7 +588,9 @@ pub fn open_accessibility_settings() {
 pub fn firstrun_done(app: AppHandle, state: State<AppState>) -> Result<(), String> {
     {
         let mut store = crate::lock_store(&state.store);
-        store.mark_first_run_shown_persisted()?;
+        store
+            .mark_first_run_shown_persisted()
+            .map_err(save_failed)?;
     }
     if let Some(w) = app.get_webview_window("firstrun") {
         w.close().map_err(|err| err.to_string())?;
@@ -1001,6 +1056,44 @@ mod audit_tests {
 
     fn valid() -> Settings {
         Settings::default()
+    }
+
+    #[test]
+    fn a_global_shortcut_needs_more_than_shift_and_leaves_every_app_its_edits() {
+        for accel in ["shift+a", "shift+space", "shift+5", "Shift+F6", "a"] {
+            assert_eq!(
+                hotkey_refusal(accel),
+                Some(err::HOTKEY_NEEDS_MODIFIER),
+                "{accel}"
+            );
+        }
+        for accel in [
+            "super+c",
+            "super+v",
+            "super+x",
+            "super+a",
+            "super+z",
+            "super+q",
+            "super+w",
+            "Cmd+V",
+            "command+KeyV",
+            "CmdOrCtrl+Q",
+            "CommandOrCtrl+V",
+            "CmdOrControl+X",
+        ] {
+            assert_eq!(hotkey_refusal(accel), Some(err::HOTKEY_SHARED), "{accel}");
+        }
+        for accel in [
+            "shift+super+v",
+            "alt+super+v",
+            "ctrl+v",
+            "alt+5",
+            "super+k",
+            "super+F6",
+            "ctrl+shift+a",
+        ] {
+            assert_eq!(hotkey_refusal(accel), None, "{accel}");
+        }
     }
 
     #[test]
