@@ -310,8 +310,7 @@ function buildRow(item, index) {
   }
   const time = document.createElement('span');
   time.className = 'row-time';
-  // A row unpinned back to the top keeps showing when it was captured.
-  time.textContent = relativeTimeAr(item.capturedAt ?? item.createdAt);
+  time.textContent = relativeTimeAr(item.createdAt);
   preview.append(time);
 
   // ── content type: one synchronous local Figma asset. Source application
@@ -1070,24 +1069,82 @@ function focusRowAction(id, selector) {
     ?.focus({ preventScroll: true });
 }
 
+/**
+ * After a pin change redraws the list, focus and selection stay with the row.
+ * When the row has left the list — unpinned inside «مثبّت», or not taken back
+ * by history — they move as for a delete: the selection to the row beside
+ * it, focus to search, never to the page.
+ */
+function followPinnedRow(id, { neighbour, wasSelected, restoreFocus }) {
+  if (visible.some((item) => item.id === id)) {
+    if (restoreFocus) focusRowAction(id, '.pin-btn');
+    return false;
+  }
+  if (wasSelected && selectedId !== neighbour && visible.some((item) => item.id === neighbour)) {
+    selectedId = neighbour;
+    render();
+  }
+  if (restoreFocus) searchEl.focus({ preventScroll: true });
+  return restoreFocus;
+}
+
+/** Focus went with a row that is no longer drawn. */
+function focusIsLost() {
+  const active = document.activeElement;
+  return !active || active === document.body || !active.isConnected;
+}
+
 function togglePinItem(id, { restoreFocus = false } = {}) {
   const location = locateStateItem(id);
   if (!location) return;
   const previous = location.item.isPinned;
   const next = !previous;
   const generation = ++pinMutationGeneration;
+  const at = visible.findIndex((item) => item.id === id);
+  const follow = {
+    neighbour: visible[at + 1]?.id ?? visible[at - 1]?.id ?? null,
+    wasSelected: selectedId === id,
+    restoreFocus,
+  };
   optimisticPins.set(id, { generation, value: next });
   location.item.isPinned = next;
+  // Leaving «مثبّت»: the selection moves before the one redraw, not after.
+  const selectionLeaves = follow.wasSelected && filter === 'pinned' && !next;
+  if (selectionLeaves && follow.neighbour) selectedId = follow.neighbour;
   render();
-  if (restoreFocus) focusRowAction(id, '.pin-btn');
+  // Whether focus went to search because of this change, not the user.
+  let movedFocus = followPinnedRow(id, follow);
 
   enqueueMutation(async () => {
+    if (!locateStateItem(id) && !optimisticDeletedIds.has(id)) {
+      // An earlier change in the queue took the row away (an unpin history
+      // did not take back): there is nothing left to pin. A row only on its
+      // way out by a delete is still the backend's, and still gets the pin.
+      if (optimisticPins.get(id)?.generation === generation) optimisticPins.delete(id);
+      return;
+    }
     try {
       const result = await api.togglePin(id, next);
-      const isPinned = typeof result === 'boolean' ? result : next;
+      const isPinned = typeof result?.isPinned === 'boolean' ? result.isPinned : next;
       if (optimisticPins.get(id)?.generation === generation) optimisticPins.delete(id);
+      const selectedBefore = selectedId;
       await refresh();
-      if (restoreFocus) focusRowAction(id, '.pin-btn');
+      // Only what the user has not moved on from meanwhile: the selection
+      // the refresh cleared because the row went, and focus that went with it.
+      movedFocus =
+        followPinnedRow(id, {
+          neighbour: follow.neighbour,
+          wasSelected: selectedBefore === id && selectedId === null,
+          restoreFocus: follow.restoreFocus && focusIsLost(),
+        }) || movedFocus;
+      if (result?.removed === true) {
+        // History did not take it back: it was older than every row there.
+        deliverFeedback('أُلغي التثبيت، وحُذف العنصر لأنه أقدم من سجلّك', {
+          duration: DELETE_TOAST_MS,
+          kind: 'delete',
+        });
+        return;
+      }
       deliverFeedback(isPinned ? 'تم تثبيت العنصر' : 'تم إلغاء تثبيت العنصر', {
         duration: PIN_TOAST_MS,
         kind: isPinned ? 'pin' : 'unpin',
@@ -1096,8 +1153,11 @@ function togglePinItem(id, { restoreFocus = false } = {}) {
       if (optimisticPins.get(id)?.generation === generation) optimisticPins.delete(id);
       const current = locateStateItem(id);
       if (current) current.item.isPinned = previous;
+      // Back to the row only from where this change put things.
+      if (selectionLeaves && (selectedId === null || selectedId === follow.neighbour)) selectedId = id;
       render();
-      if (restoreFocus) focusRowAction(id, '.pin-btn');
+      const focusUntouched = movedFocus && document.activeElement === searchEl && !query;
+      if (restoreFocus && (focusIsLost() || focusUntouched)) focusRowAction(id, '.pin-btn');
       deliverFeedback(errorMessage(err), { duration: PIN_TOAST_MS, kind: 'error' });
     }
   });

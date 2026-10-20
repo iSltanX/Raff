@@ -40,11 +40,7 @@ pub struct ItemDto {
     pub text: String,
     pub source_app: String,
     pub source_app_bundle_id: String,
-    /// The place in the timeline; the panel orders by it.
     pub created_at: u64,
-    /// The date to show, when it is not `created_at` (a row unpinned back on top).
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub captured_at: Option<u64>,
     pub is_pinned: bool,
     pub pinned_order: Option<u32>,
     pub copy_count: u32,
@@ -66,7 +62,6 @@ impl ItemDto {
             source_app: item.source_app.clone(),
             source_app_bundle_id: item.source_app_bundle_id.clone(),
             created_at: item.created_at,
-            captured_at: item.captured_at,
             is_pinned: item.is_pinned,
             pinned_order: item.pinned_order,
             copy_count: item.copy_count,
@@ -228,21 +223,36 @@ pub fn reorder_pinned(
     Ok(())
 }
 
+/// Where a pin change left the row. `removed` is an unpin that history did
+/// not take back — the row was older than all of it — so the panel can say
+/// why the row is gone.
+#[derive(Serialize, Debug, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PinDto {
+    pub is_pinned: bool,
+    pub removed: bool,
+}
+
+fn set_pin(store: &mut Store, id: &str, is_pinned: bool) -> Result<PinDto, String> {
+    let is_pinned = store
+        .set_pin_persisted(id, is_pinned)
+        .map_err(save_failed)?;
+    Ok(PinDto {
+        is_pinned,
+        removed: store.find(id).is_none(),
+    })
+}
+
 #[tauri::command]
 pub fn toggle_pin(
     app: AppHandle,
     state: State<AppState>,
     id: String,
     is_pinned: bool,
-) -> Result<bool, String> {
-    let is_pinned = {
-        let mut store = crate::lock_store(&state.store);
-        store
-            .set_pin_persisted(&id, is_pinned)
-            .map_err(save_failed)?
-    };
+) -> Result<PinDto, String> {
+    let outcome = set_pin(&mut crate::lock_store(&state.store), &id, is_pinned)?;
     notify(&app);
-    Ok(is_pinned)
+    Ok(outcome)
 }
 
 #[derive(Serialize)]
@@ -860,35 +870,61 @@ mod tests {
     }
 
     #[test]
-    fn the_panel_gets_the_capture_date_of_a_returned_row_and_nothing_extra_otherwise() {
-        let mut store = Store::load(
-            std::env::temp_dir().join(format!("raff-dto-test-{}", uuid::Uuid::new_v4())),
+    fn an_unpin_says_whether_history_took_the_row_back() {
+        let dir = std::env::temp_dir().join(format!("raff-pin-dto-{}", uuid::Uuid::new_v4()));
+        let mut store = Store::load(dir);
+        for text in [
+            "\u{0623}\u{0642}\u{062f}\u{0645}",
+            "\u{0623}\u{062d}\u{062f}\u{062b}",
+        ] {
+            store.capture(
+                ItemKind::Text,
+                text.into(),
+                None,
+                None,
+                None,
+                None,
+                None,
+                ("Notes".into(), "com.apple.Notes".into()),
+            );
+        }
+        let (newer, older) = (store.history[0].id.clone(), store.history[1].id.clone());
+
+        let pinned = set_pin(&mut store, &newer, true).unwrap();
+        assert_eq!(
+            pinned,
+            PinDto {
+                is_pinned: true,
+                removed: false
+            }
         );
-        store.capture(
-            ItemKind::Text,
-            "\u{0631}\u{062f}\u{0651}".into(), // ردّ
-            None,
-            None,
-            None,
-            None,
-            None,
-            ("Notes".into(), "com.apple.Notes".into()),
-        );
-        let id = store.history[0].id.clone();
-        let plain = serde_json::to_value(ItemDto::from(&store.history[0])).unwrap();
-        assert!(
-            plain.get("capturedAt").is_none(),
-            "an ordinary row: createdAt says it all"
+        assert_eq!(
+            set_pin(&mut store, &newer, false).unwrap(),
+            PinDto {
+                is_pinned: false,
+                removed: false
+            },
+            "newer than the history it returns to: taken back"
         );
 
-        store.set_pin_persisted(&id, true).unwrap();
-        store.find_mut(&id).unwrap().created_at = 7;
-        store.set_pin_persisted(&id, false).unwrap();
-        let returned = serde_json::to_value(ItemDto::from(&store.history[0])).unwrap();
-        assert_eq!(returned["capturedAt"], 7, "the date the panel shows");
-        assert!(
-            returned["createdAt"].as_u64().unwrap() > 7,
-            "the place it orders by"
+        set_pin(&mut store, &older, true).unwrap();
+        store.find_mut(&older).unwrap().created_at = 1;
+        assert_eq!(
+            set_pin(&mut store, &older, false).unwrap(),
+            PinDto {
+                is_pinned: false,
+                removed: true
+            },
+            "older than all of it: gone"
+        );
+        let wire = serde_json::to_value(PinDto {
+            is_pinned: false,
+            removed: true,
+        })
+        .unwrap();
+        assert_eq!(
+            wire,
+            serde_json::json!({ "isPinned": false, "removed": true })
         );
     }
 

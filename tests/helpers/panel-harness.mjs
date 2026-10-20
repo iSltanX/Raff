@@ -108,18 +108,23 @@ export function createFakeTauri(initialState, { failTimes = 0 } = {}) {
           const desired = args?.isPinned;
           const pinnedIndex = state.pinned.findIndex((item) => item.id === id);
           let isPinned;
+          let removed = false;
           if (pinnedIndex >= 0 && desired === false) {
             const [item] = state.pinned.splice(pinnedIndex, 1);
             item.isPinned = false;
-            // As the backend does: back on top as a new copy would arrive,
-            // still showing the date it was first captured.
-            const newest = [...state.pinned, ...state.history].reduce(
-              (latest, other) => Math.max(latest, other.createdAt + 1),
-              Date.now()
-            );
-            item.capturedAt ??= item.createdAt;
-            item.createdAt = newest;
-            state.history.unshift(item);
+            delete item.pinnedOrder;
+            // As the backend does: back to its place in time with its date.
+            // Older than every row in history, it is not taken back; into an
+            // empty history, it is.
+            const older =
+              state.history.length > 0 &&
+              state.history.every((other) => item.createdAt < other.createdAt);
+            if (older) {
+              removed = true;
+            } else {
+              state.history.push(item);
+              state.history.sort((a, b) => b.createdAt - a.createdAt);
+            }
             isPinned = false;
           } else if (pinnedIndex < 0 && desired === true) {
             const historyIndex = state.history.findIndex((item) => item.id === id);
@@ -131,7 +136,7 @@ export function createFakeTauri(initialState, { failTimes = 0 } = {}) {
           } else {
             isPinned = pinnedIndex >= 0;
           }
-          return Promise.resolve(isPinned).then((result) => {
+          return Promise.resolve({ isPinned, removed }).then((result) => {
             notify('raff://changed');
             return result;
           });

@@ -136,24 +136,25 @@ export function mockInvoke(cmd, args = {}) {
       if (pinnedIndex >= 0 && args.isPinned === false) {
         const [entry] = PINNED.splice(pinnedIndex, 1);
         entry.isPinned = false;
-        // As the backend does: back on top, still dated by its capture.
-        entry.capturedAt ??= entry.createdAt;
-        entry.createdAt = [...PINNED, ...RECENT].reduce(
-          (latest, other) => Math.max(latest, other.createdAt + 1),
-          Date.now()
-        );
-        RECENT.unshift(entry);
-        return Promise.resolve(false);
+        // As the backend does: back to its place in time with its date.
+        // Older than every row in history, it is not taken back; into an
+        // empty history, it is.
+        const older =
+          RECENT.length > 0 && RECENT.every((other) => entry.createdAt < other.createdAt);
+        if (older) return Promise.resolve({ isPinned: false, removed: true });
+        RECENT.push(entry);
+        RECENT.sort((a, b) => b.createdAt - a.createdAt);
+        return Promise.resolve({ isPinned: false, removed: false });
       }
       const recentIndex = RECENT.findIndex((entry) => entry.id === args.id);
       if (recentIndex >= 0 && args.isPinned === true) {
         const [entry] = RECENT.splice(recentIndex, 1);
         entry.isPinned = true;
         PINNED.push(entry);
-        return Promise.resolve(true);
+        return Promise.resolve({ isPinned: true, removed: false });
       }
-      if (pinnedIndex >= 0) return Promise.resolve(true);
-      if (recentIndex >= 0) return Promise.resolve(false);
+      if (pinnedIndex >= 0) return Promise.resolve({ isPinned: true, removed: false });
+      if (recentIndex >= 0) return Promise.resolve({ isPinned: false, removed: false });
       return Promise.reject(new Error('العنصر غير موجود'));
     }
     case 'delete_item': {

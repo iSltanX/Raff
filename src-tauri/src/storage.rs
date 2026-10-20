@@ -51,15 +51,10 @@ pub struct ClipItem {
     pub hash: Option<String>,
     pub source_app_bundle_id: String,
     pub source_app: String,
-    /// Milliseconds since epoch: when the row took its place in the timeline.
-    /// History is ordered by it, and the age limit counts from it.
+    /// Milliseconds since epoch: when the content was last copied. History is
+    /// ordered by it and the age limit counts from it; pinning and unpinning
+    /// never change it.
     pub created_at: u64,
-    /// When the content was captured, if that is not `created_at`: a row
-    /// unpinned back to the top of history keeps the date it was copied on.
-    /// Absent from older files and from every row never unpinned; a new copy
-    /// of the same content clears it.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub captured_at: Option<u64>,
     pub is_pinned: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pinned_order: Option<u32>,
@@ -1245,7 +1240,6 @@ impl Store {
             p.source_app = source.0;
             p.source_app_bundle_id = source.1;
             p.created_at = now;
-            p.captured_at = None;
             if learning {
                 p.copy_count += 1;
                 p.last_used_at = now;
@@ -1285,7 +1279,6 @@ impl Store {
             item.source_app = source.0;
             item.source_app_bundle_id = source.1;
             item.created_at = now;
-            item.captured_at = None;
             item.last_used_at = now;
             self.history.insert(0, item);
             return CaptureResult {
@@ -1312,7 +1305,6 @@ impl Store {
             source_app: source.0,
             source_app_bundle_id: source.1,
             created_at: now,
-            captured_at: None,
             is_pinned: false,
             pinned_order: None,
             copy_count: 1,
@@ -1415,10 +1407,10 @@ impl Store {
     ///   and stages under one hold of the lock), so the capture is on disk and
     ///   stands, exactly as if its own write had worked.
     /// - Otherwise it is taken back by identity (`rollback_capture`), without
-    ///   touching any row but its own. A pin journaled meanwhile chose what to
-    ///   push off with the capture still holding a place; that choice is made
-    ///   again without it (`reweigh_pending_pin`), so the rows that go are the
-    ///   ones the policy picks. A later write that was staged but has not
+    ///   touching any row but its own. A pin journaled meanwhile was decided
+    ///   with the capture still holding a place; it is decided again without
+    ///   it (`reweigh_pending_pin`), so the rows that go are the ones the
+    ///   policy picks. A later write that was staged but has not
     ///   landed may still carry the capture, so the layer is then written
     ///   again from the model to outrank that write — best effort: on a disk
     ///   still failing, this write fails as well, and the next good write
@@ -1565,43 +1557,45 @@ impl Store {
         stands_elsewhere
     }
 
-    /// A pin journaled while a capture's write was in flight chose the rows it
-    /// pushed off with that capture still holding a place. Once the capture is
-    /// taken back, the same policy is applied again without it — the rows to
-    /// go are the ones it would have chosen — and the journal says so before
-    /// any file is deleted: its rows' files only go when it completes.
+    /// A pin journaled while a capture's write was in flight was decided on a
+    /// model that held the capture: it held a place, and it may have pushed
+    /// off the oldest row an unpinned one is weighed against. Once the capture
+    /// is taken back, the rows the journal let go come back if still missing —
+    /// all but an unpinned row history did not take back — and the journal is
+    /// carried out again on history as it now stands (`carry_out_pin`): that
+    /// row is weighed again, one taken back stays, and the policy picks what
+    /// goes. Its rows' files only go when it completes.
     ///
-    /// If the policy picks the same rows, nothing is written. If the corrected
-    /// journal cannot be written, nothing changes either: the one on disk is
-    /// the one a restart would carry out, and memory must agree.
+    /// If that changes nothing, nothing is written. The corrected journal is
+    /// written best effort: if it cannot be, memory stays corrected all the
+    /// same, because a restart decides again on the layers it reads
+    /// (`try_finish_pending_pin`) and reaches this result, not the stale one.
     fn reweigh_pending_pin(&mut self) {
-        let Some(pending) = self.pending_pin.as_ref() else {
+        let Some(mut pending) = self.pending_pin.clone() else {
             return;
         };
-        let pushed_off = pending.dropped.clone();
-        let (history, journal) = (self.history.clone(), self.pending_pin.clone());
-        for item in pushed_off.iter().cloned() {
-            if self.find(&item.id).is_none() {
-                self.insert_by_recency(item);
+        let history = self.history.clone();
+        for item in &pending.dropped {
+            if item.id != pending.item.id && self.find(&item.id).is_none() {
+                self.insert_by_recency(item.clone());
             }
         }
-        let dropped = self.prune_history();
+        let dropped = self.carry_out_pin(&pending);
         let ids = |rows: &[ClipItem]| {
             rows.iter()
                 .map(|item| item.id.clone())
                 .collect::<std::collections::BTreeSet<_>>()
         };
-        if ids(&dropped) == ids(&pushed_off) {
+        if ids(&dropped) == ids(&pending.dropped) {
             self.history = history;
             return;
         }
-        if let Some(pending) = self.pending_pin.as_mut() {
-            pending.dropped = dropped;
-        }
+        pending.dropped = dropped;
+        self.pending_pin = Some(pending);
         if let Err(err) = self.try_save_pending_pin() {
-            eprintln!("raff: could not correct the pin journal: {err}");
-            self.history = history;
-            self.pending_pin = journal;
+            eprintln!(
+                "raff: could not correct the pin journal ({err}); a restart decides it again"
+            );
         }
     }
 
@@ -1662,52 +1656,82 @@ impl Store {
         }
     }
 
-    fn apply_pending_pin_in_memory(&mut self, pending: &PendingPin) {
-        self.history.retain(|item| item.id != pending.item.id);
-        self.pinned.retain(|item| item.id != pending.item.id);
-        let mut item = pending.item.clone();
-        item.is_pinned = pending.desired;
+    /// Puts the journal's row where its move takes it on the layers as they
+    /// now stand, and returns what history lets go because of it.
+    ///
+    /// A row already where the move takes it stays as it is, with whatever it
+    /// went through since. An unpinned row already back in history is not
+    /// weighed again: its return was decided, and the history it would now be
+    /// weighed against is the one its return already trimmed.
+    fn carry_out_pin(&mut self, pending: &PendingPin) -> Vec<ClipItem> {
+        let id = pending.item.id.as_str();
         if pending.desired {
-            let order = item.pinned_order.unwrap_or(u32::MAX);
-            let at = self
-                .pinned
-                .iter()
-                .position(|candidate| candidate.pinned_order.unwrap_or(u32::MAX) > order)
-                .unwrap_or(self.pinned.len());
-            self.pinned.insert(at, item);
-        } else {
-            item.pinned_order = None;
-            let at = self
-                .history
-                .iter()
-                .position(|candidate| candidate.created_at < item.created_at)
-                .unwrap_or(self.history.len());
-            self.history.insert(at, item);
+            self.history.retain(|item| item.id != id);
+            if !self.pinned.iter().any(|item| item.id == id) {
+                let mut item = pending.item.clone();
+                item.is_pinned = true;
+                let order = item.pinned_order.unwrap_or(u32::MAX);
+                let at = self
+                    .pinned
+                    .iter()
+                    .position(|candidate| candidate.pinned_order.unwrap_or(u32::MAX) > order)
+                    .unwrap_or(self.pinned.len());
+                self.pinned.insert(at, item);
+            }
+            return self.prune_history();
         }
+        self.pinned.retain(|item| item.id != id);
+        if self.history.iter().any(|item| item.id == id) {
+            return self.prune_history();
+        }
+        let mut item = pending.item.clone();
+        item.is_pinned = false;
+        item.pinned_order = None;
+        self.return_to_history(item)
     }
 
+    /// Completes the pin journal on the layers as they now stand: the ones
+    /// read at launch, or the ones in memory after a deferred write.
+    ///
+    /// The journal says which row moved and which way. Where it lands and
+    /// what history lets go are decided again here (`carry_out_pin`), not read
+    /// from the journal, whose choice was made on the model of its moment —
+    /// one that may have held a copy that never reached the disk: its write
+    /// failed, or the process stopped first. Carried out as written, such a
+    /// choice deleted a newer row and its picture in place of the oldest
+    /// (006). The journal's rows are kept for their files: those of the rows
+    /// that are gone are deleted once both layers are written, and only those.
     fn try_finish_pending_pin(&mut self) -> Result<(), String> {
-        let Some(pending) = self.pending_pin.clone() else {
+        let Some(mut pending) = self.pending_pin.clone() else {
             return Ok(());
         };
-        self.apply_pending_pin_in_memory(&pending);
-        // An interrupted unpin must reapply the same history cap. The full
-        // dropped receipts keep cleanup deterministic without deleting their
-        // image files until both layer JSON writes have committed.
-        for dropped in &pending.dropped {
-            self.history.retain(|item| item.id != dropped.id);
+        for item in self.carry_out_pin(&pending) {
+            if !pending.dropped.iter().any(|known| known.id == item.id) {
+                pending.dropped.push(item);
+            }
         }
-        try_save_json(&self.dir.join(HISTORY_FILE), &self.history)?;
-        try_save_json(&self.dir.join(PINNED_FILE), &self.pinned)?;
+        let written = try_save_json(&self.dir.join(HISTORY_FILE), &self.history)
+            .and_then(|_| try_save_json(&self.dir.join(PINNED_FILE), &self.pinned));
+        if let Err(err) = written {
+            self.pending_pin = Some(pending);
+            return Err(err);
+        }
         self.pending_pin = None;
         if let Err(err) = self.try_save_pending_pin() {
             self.pending_pin = Some(pending);
             return Err(err);
         }
-        for dropped in &pending.dropped {
-            self.delete_files(dropped);
-        }
+        self.delete_files_of_rows_gone(&pending.dropped);
         Ok(())
+    }
+
+    /// Deletes the files of those `rows` neither layer holds any more.
+    fn delete_files_of_rows_gone(&self, rows: &[ClipItem]) {
+        for item in rows {
+            if self.find(&item.id).is_none() {
+                self.delete_files(item);
+            }
+        }
     }
 
     pub fn finish_pending_pin(&mut self) -> Result<(), String> {
@@ -1808,10 +1832,13 @@ impl Store {
         Ok(())
     }
 
-    /// Pin moves the item from the recent layer to the pinned shelf (the
-    /// two layers). Unpin returns it to the top of history, as a new copy
-    /// would arrive, while it keeps showing the date it was captured.
-    pub fn toggle_pin(&mut self, id: &str) -> bool {
+    /// Moves `id` to the other layer in memory, and returns the move as the
+    /// pin journal records it: the row, which way, and what history let go.
+    ///
+    /// Pin puts the row at the end of the pinned shelf. Unpin returns it to
+    /// history by its date (`return_to_history`) — or not at all, and then it
+    /// is among the rows let go.
+    fn move_pin(&mut self, id: &str) -> Option<PendingPin> {
         if let Some(pos) = self.history.iter().position(|i| i.id == id) {
             let mut item = self.history.remove(pos);
             item.is_pinned = true;
@@ -1822,21 +1849,72 @@ impl Store {
                     .max()
                     .map_or(0, |m| m + 1),
             );
-            self.pinned.push(item);
-            return true;
+            self.pinned.push(item.clone());
+            return Some(PendingPin {
+                item,
+                desired: true,
+                dropped: self.prune_history(),
+            });
         }
-        if let Some(pos) = self.pinned.iter().position(|i| i.id == id) {
-            let stamp = self.next_stamp();
-            let mut item = self.pinned.remove(pos);
-            item.is_pinned = false;
-            item.pinned_order = None;
-            // The first capture date survives any number of pin/unpin rounds.
-            item.captured_at.get_or_insert(item.created_at);
-            item.created_at = stamp;
-            self.history.insert(0, item);
-            return true;
+        let pos = self.pinned.iter().position(|i| i.id == id)?;
+        let mut item = self.pinned.remove(pos);
+        item.is_pinned = false;
+        item.pinned_order = None;
+        let dropped = self.return_to_history(item.clone());
+        Some(PendingPin {
+            item,
+            desired: false,
+            dropped,
+        })
+    }
+
+    /// `move_pin` without the record, for tests that set up a layer by hand.
+    #[cfg(test)]
+    pub fn toggle_pin(&mut self, id: &str) -> bool {
+        self.move_pin(id).is_some()
+    }
+
+    /// Where an unpinned row goes (Sultan, 2026-10-21): back to the place
+    /// its date gives it in history, with that date unchanged. A row older
+    /// than the oldest one history holds is not taken back, even with room to
+    /// spare; into an empty history it is. Then the whole retention policy
+    /// applies, as to any row: a full history lets its oldest row go, and the
+    /// age limit counts from the copy.
+    ///
+    /// A history row waiting in its delete's undo window still counts: the
+    /// delete may yet be taken back, and a row removed for being older than
+    /// what remained would then be lost for nothing. It only lowers the bar,
+    /// though — it does not stand in for an empty history, which takes the
+    /// row back.
+    ///
+    /// Returns what history lets go: the row itself when it is not taken
+    /// back, and whatever `prune_history` drops.
+    fn return_to_history(&mut self, item: ClipItem) -> Vec<ClipItem> {
+        let waiting = self
+            .pending_delete
+            .as_ref()
+            .filter(|pending| pending.layer == DeletedLayer::History)
+            .map(|pending| pending.item.created_at);
+        let oldest = self
+            .history
+            .iter()
+            .map(|other| other.created_at)
+            .min()
+            .map(|oldest| waiting.map_or(oldest, |waiting| oldest.min(waiting)));
+        if oldest.is_some_and(|oldest| item.created_at < oldest) {
+            let mut dropped = self.prune_history();
+            dropped.push(item);
+            return dropped;
         }
-        false
+        // Ahead of a row with the same date: that row is not newer, and a
+        // full history lets the last one go.
+        let at = self
+            .history
+            .iter()
+            .position(|other| other.created_at <= item.created_at)
+            .unwrap_or(self.history.len());
+        self.history.insert(at, item);
+        self.prune_history()
     }
 
     /// Moves an item between the two persisted layers without ever reporting
@@ -1844,9 +1922,9 @@ impl Store {
     /// (a crash can at worst leave a recoverable duplicate, never lose the
     /// item); any write failure restores both vectors and best-effort rewrites
     /// their previous durable snapshots before returning an error to the UI.
-    /// History is trimmed by the whole retention policy (`prune_history`); an
-    /// unpinned row is on top with a fresh place in the timeline, so it is
-    /// never the one that goes — the oldest row makes room, as for a copy.
+    /// An unpinned row goes where `return_to_history` says; when that is
+    /// nowhere, the unpin still succeeds, and the row and its files are gone
+    /// once both layers are written.
     pub fn set_pin_persisted(&mut self, id: &str, desired: bool) -> Result<bool, String> {
         self.try_finish_pending_pin()?;
         let was_pinned = self
@@ -1858,23 +1936,12 @@ impl Store {
         }
         let old_history = self.history.clone();
         let old_pinned = self.pinned.clone();
-        if !self.toggle_pin(id) {
+        let Some(pending) = self.move_pin(id) else {
             return Err("تعذّر تغيير حالة التثبيت".into());
-        }
-
-        let dropped = self.prune_history();
+        };
 
         // From here on every early return puts both layers back first.
-        let Some(moved) = self.find(id).cloned() else {
-            self.history = old_history;
-            self.pinned = old_pinned;
-            return Err("العنصر غير موجود".into());
-        };
-        self.pending_pin = Some(PendingPin {
-            item: moved,
-            desired,
-            dropped,
-        });
+        self.pending_pin = Some(pending);
         if let Err(err) = self.try_save_pending_pin() {
             self.pending_pin = None;
             self.history = old_history;
@@ -1904,9 +1971,7 @@ impl Store {
             self.pending_pin = Some(pending);
             eprintln!("raff: deferred pin journal cleanup: {err}");
         } else {
-            for dropped in &pending.dropped {
-                self.delete_files(dropped);
-            }
+            self.delete_files_of_rows_gone(&pending.dropped);
         }
         Ok(desired)
     }
@@ -2126,7 +2191,7 @@ impl Store {
         for item in self.pinned.iter_mut().chain(self.history.iter_mut()) {
             item.copy_count = 0;
             item.paste_count = 0;
-            item.last_used_at = item.captured_at.unwrap_or(item.created_at);
+            item.last_used_at = item.created_at;
         }
     }
 
@@ -2556,344 +2621,229 @@ mod tests {
 
     #[test]
     fn interrupted_unpin_reapplies_history_cap_before_file_cleanup() {
-        let dir = std::env::temp_dir().join(format!("raff-test-{}", uuid::Uuid::new_v4()));
-        let mut s = Store::load(dir.clone());
-        s.settings.history_limit = 1;
-        capture_text(&mut s, "pinned item");
-        let pinned_id = s.history[0].id.clone();
-        assert!(s.toggle_pin(&pinned_id));
-        capture_text(&mut s, "old history");
-        let old_id = s.history[0].id.clone();
-        // Cap is now satisfied by one historical item + one pinned item. The
-        // unpin below puts the pinned item on top, so the old row is the one
-        // the full history evicts.
-        s.save_history();
-        s.save_pinned();
+        let dir = test_dir();
+        let t = now_ms() - 30 * MINUTE;
+        let mut s = shelf_on_disk(&dir, 1, 0, &[("old", t)], &[("p", t + MINUTE)]);
 
-        assert!(s.toggle_pin(&pinned_id));
-        let dropped = s.history.split_off(1);
-        assert_eq!(dropped[0].id, old_id);
-        s.pending_pin = Some(PendingPin {
-            item: s.find(&pinned_id).unwrap().clone(),
-            desired: false,
-            dropped,
-        });
+        // What set_pin_persisted does up to the crash: the move in memory,
+        // the journal, and only the destination layer on disk.
+        let pending = s.move_pin("p").unwrap();
+        assert_eq!(ids_of(&pending.dropped), ["old"]);
+        s.pending_pin = Some(pending);
         s.try_save_pending_pin().unwrap();
-        // Only the destination landed before the simulated crash.
         s.save_history();
         drop(s);
 
         let recovered = Store::load(dir.clone());
-        assert_eq!(recovered.history.len(), 1);
-        assert_eq!(recovered.history[0].id, pinned_id);
+        assert_eq!(history_ids(&recovered), ["p"]);
         assert!(recovered.pinned.is_empty());
-        assert!(recovered.find(&old_id).is_none());
+        assert_eq!(picture_files_exist(&dir, "old"), (false, false));
+        assert_eq!(picture_files_exist(&dir, "p"), (true, true));
         assert!(!dir.join(PENDING_PIN_FILE).exists());
-    }
-
-    /// A full history (limit 2, in memory only), and a pinned row captured
-    /// before everything in it (`created_at` 1).
-    fn full_history_and_an_older_pinned_row() -> (Store, String) {
-        let mut s = store();
-        s.settings.history_limit = 2;
-        capture_text(&mut s, "pinned long ago");
-        let id = s.history[0].id.clone();
-        s.set_pin_persisted(&id, true).unwrap();
-        s.find_mut(&id).unwrap().created_at = 1;
-        s.save_pinned();
-        capture_text(&mut s, "recent a");
-        capture_text(&mut s, "recent b");
-        s.save_history();
-        (s, id)
     }
 
     fn layer_on_disk(s: &Store, file: &str) -> Vec<ClipItem> {
         serde_json::from_slice(&fs::read(s.dir.join(file)).unwrap()).unwrap()
     }
 
-    /// Two pinned rows older than everything in a full history, with the
-    /// limit (3) written to disk so a reload keeps it.
-    fn full_history_and_two_older_pinned_rows() -> (Store, String, String) {
-        let mut s = store();
-        let mut settings = s.settings.clone();
-        settings.history_limit = 3;
-        s.update_settings_persisted(settings).unwrap();
-        let mut pinned = Vec::new();
-        for (text, at) in [("first pinned long ago", 1), ("second pinned long ago", 2)] {
-            capture_text(&mut s, text);
-            let id = s.history[0].id.clone();
-            s.set_pin_persisted(&id, true).unwrap();
-            s.find_mut(&id).unwrap().created_at = at;
-            pinned.push(id);
-        }
-        s.save_pinned();
-        for text in ["recent a", "recent b", "recent c"] {
-            capture_text(&mut s, text);
-        }
-        s.save_history();
-        assert_eq!(s.history.len(), 3);
-        (s, pinned[0].clone(), pinned[1].clone())
-    }
-
     fn history_ids(s: &Store) -> Vec<String> {
         s.history.iter().map(|item| item.id.clone()).collect()
     }
 
-    #[test]
-    fn unpinning_returns_the_row_to_the_top_and_the_oldest_row_makes_room() {
-        let (mut s, id) = full_history_and_an_older_pinned_row();
-        let newest_before = s.history[0].created_at;
-        let kept = s.history[0].id.clone();
-        let oldest = s.history[1].id.clone();
-
-        assert_eq!(s.set_pin_persisted(&id, false), Ok(false));
-
-        assert_eq!(s.history.len(), 2, "the limit holds");
-        assert_eq!(s.history[0].id, id, "back at the top");
-        assert!(!s.history[0].is_pinned);
-        assert_eq!(
-            s.history[0].captured_at,
-            Some(1),
-            "its capture date is kept"
-        );
-        assert!(
-            s.history[0].created_at > newest_before,
-            "its place in the timeline is now"
-        );
-        assert!(s.find(&kept).is_some());
-        assert!(
-            s.find(&oldest).is_none(),
-            "the oldest row makes room, as for any new copy"
-        );
-        let on_disk = layer_on_disk(&s, HISTORY_FILE);
-        assert_eq!(on_disk[0].id, id, "written down, not only kept in memory");
-        assert_eq!(on_disk[0].captured_at, Some(1));
-        assert!(layer_on_disk(&s, PINNED_FILE).is_empty());
-        assert!(!s.dir.join(PENDING_PIN_FILE).exists());
+    fn ids_of(rows: &[ClipItem]) -> Vec<String> {
+        rows.iter().map(|item| item.id.clone()).collect()
     }
 
+    /// A row back in history is weighed by its date like any other from then
+    /// on: no later settings change or sweep singles it out, and it goes
+    /// when it is the oldest of a full history.
     #[test]
-    fn returned_rows_survive_the_next_unpin_a_settings_change_the_sweep_a_capture_and_a_reload() {
-        let (mut s, first, second) = full_history_and_two_older_pinned_rows();
+    fn an_unpinned_row_is_weighed_like_any_other_afterwards() {
+        let dir = test_dir();
+        let t = now_ms() - 30 * MINUTE;
+        let mut s = shelf_on_disk(
+            &dir,
+            3,
+            0,
+            &[("r3", t + 3 * MINUTE), ("r1", t)],
+            &[("p", t + 2 * MINUTE)],
+        );
 
-        s.set_pin_persisted(&first, false).unwrap();
-        s.set_pin_persisted(&second, false).unwrap();
-        assert_eq!(history_ids(&s)[..2], [second.clone(), first.clone()]);
-        assert_eq!(s.history.len(), 3);
+        s.set_pin_persisted("p", false).unwrap();
+        assert_eq!(history_ids(&s), ["r3", "p", "r1"], "room for all three");
 
         let mut settings = s.settings.clone();
         settings.learning_enabled = !settings.learning_enabled;
         s.update_settings_persisted(settings).unwrap();
         s.trim_history(); // what the hourly sweep runs
-        assert_eq!(history_ids(&s)[..2], [second.clone(), first.clone()]);
+        assert_eq!(history_ids(&s), ["r3", "p", "r1"]);
 
-        let result = s.capture(
-            ItemKind::Text,
-            "recent d".into(),
-            None,
-            None,
-            None,
-            None,
-            None,
-            ("Notes".into(), "com.apple.Notes".into()),
-        );
-        let dir = s.dir.clone();
         let store = std::sync::Mutex::new(s);
-        persist_capture(&store, result).unwrap();
-        let s = store.into_inner().unwrap();
-        assert_eq!(s.history.len(), 3, "the limit holds");
-        assert_eq!(history_ids(&s)[1..], [second.clone(), first.clone()]);
-
-        let reloaded = Store::load(dir);
-        assert_eq!(history_ids(&reloaded)[1..], [second.clone(), first.clone()]);
-        assert_eq!(reloaded.find(&first).unwrap().captured_at, Some(1));
-        assert_eq!(reloaded.find(&second).unwrap().captured_at, Some(2));
-    }
-
-    #[test]
-    fn the_age_limit_counts_from_the_return_not_from_the_capture() {
-        let mut s = store();
-        let mut settings = s.settings.clone();
-        settings.retention_days = 7;
-        s.update_settings_persisted(settings).unwrap();
-        capture_text(&mut s, "a month on the pinned shelf");
-        let id = s.history[0].id.clone();
-        s.set_pin_persisted(&id, true).unwrap();
-        let month_ago = now_ms() - 30 * 24 * 60 * 60 * 1000;
-        s.find_mut(&id).unwrap().created_at = month_ago;
-        s.save_pinned();
-
-        s.set_pin_persisted(&id, false).unwrap();
-        s.trim_history();
-
-        assert_eq!(
-            s.find(&id).and_then(|item| item.captured_at),
-            Some(month_ago)
-        );
-        let reloaded = Store::load(s.dir.clone());
-        let item = reloaded
-            .find(&id)
-            .expect("still there after the sweep and a reload");
-        assert_eq!(item.captured_at, Some(month_ago));
-    }
-
-    #[test]
-    fn pinning_and_unpinning_again_keeps_the_first_capture_date() {
-        let mut s = store();
-        capture_text(&mut s, "back and forth");
-        let id = s.history[0].id.clone();
-        let captured = s.history[0].created_at;
-
-        for round in 0..3 {
-            s.set_pin_persisted(&id, true).unwrap();
-            assert_eq!(
-                s.find(&id).unwrap().captured_at,
-                (round > 0).then_some(captured),
-                "round {round}: pinning does not touch it"
+        for text in ["d", "e"] {
+            let result = crate::lock_store(&store).capture(
+                ItemKind::Text,
+                text.into(),
+                None,
+                None,
+                None,
+                None,
+                None,
+                ("Notes".into(), "com.apple.Notes".into()),
             );
-            capture_text(&mut s, &format!("copied while pinned {round}"));
-            s.set_pin_persisted(&id, false).unwrap();
-            assert_eq!(s.history[0].id, id, "round {round}: back on top");
-            assert_eq!(
-                s.history[0].captured_at,
-                Some(captured),
-                "round {round}: the first capture date, not the last return"
-            );
+            persist_capture(&store, result).unwrap();
+            let s = crate::lock_store(&store);
+            let reloaded = Store::load(dir.clone());
+            assert_eq!(history_ids(&reloaded), history_ids(&s), "after {text}");
         }
-
-        let reloaded = Store::load(s.dir.clone());
-        assert_eq!(reloaded.history[0].id, id);
-        assert_eq!(reloaded.history[0].captured_at, Some(captured));
+        let s = store.into_inner().unwrap();
+        let texts: Vec<&str> = s.history.iter().map(|item| item.text.as_str()).collect();
+        assert_eq!(
+            texts,
+            ["e", "d", "صورة r3"],
+            "r1 went first, then p: each in its turn as the oldest"
+        );
+        assert_eq!(picture_files_exist(&dir, "p"), (false, false));
+        assert_eq!(picture_files_exist(&dir, "r3"), (true, true));
     }
 
     #[test]
-    fn copying_a_returned_row_again_is_a_fresh_capture() {
-        let (mut s, id) = full_history_and_an_older_pinned_row();
-        s.set_pin_persisted(&id, false).unwrap();
-        assert_eq!(s.find(&id).unwrap().captured_at, Some(1));
-        assert_eq!(
-            capture_text(&mut s, "pinned long ago"),
-            CaptureOutcome::Deduped
+    fn a_pinned_row_copied_again_comes_back_as_the_newest() {
+        let dir = test_dir();
+        let t = now_ms() - 30 * MINUTE;
+        let mut s = shelf_on_disk(
+            &dir,
+            2,
+            0,
+            &[("h2", t + 2 * MINUTE), ("h1", t + MINUTE)],
+            &[("p", t)],
         );
-        assert_eq!(
-            s.find(&id).unwrap().captured_at,
+        let result = s.capture(
+            ItemKind::Image,
+            "صورة p".into(),
             None,
-            "in history: a new copy is a new capture date"
+            None,
+            None,
+            None,
+            Some(content_hash(b"p")),
+            ("Preview".into(), "com.apple.Preview".into()),
         );
+        assert_eq!(result.outcome, CaptureOutcome::Deduped);
+        let copied_at = created_at(&s, "p").unwrap();
+        assert!(copied_at > t + 2 * MINUTE, "a copy dates the row");
 
-        let (mut s, id) = full_history_and_an_older_pinned_row();
-        s.set_pin_persisted(&id, false).unwrap();
-        s.set_pin_persisted(&id, true).unwrap();
-        assert_eq!(s.find(&id).unwrap().captured_at, Some(1));
-        assert_eq!(
-            capture_text(&mut s, "pinned long ago"),
-            CaptureOutcome::Deduped
-        );
-        assert_eq!(
-            s.find(&id).unwrap().captured_at,
-            None,
-            "on the pinned shelf as well"
-        );
+        s.set_pin_persisted("p", false).unwrap();
+
+        assert_eq!(history_ids(&s), ["p", "h2"], "newest: on top, and h1 goes");
+        assert_eq!(created_at(&s, "p"), Some(copied_at));
     }
 
     #[test]
-    fn undoing_the_delete_of_a_returned_row_puts_it_back_on_top_with_its_date() {
-        let (mut s, id) = full_history_and_an_older_pinned_row();
-        s.set_pin_persisted(&id, false).unwrap();
-        let before = history_ids(&s);
+    fn undoing_the_delete_of_an_unpinned_row_puts_it_back_in_its_place() {
+        let dir = test_dir();
+        let t = now_ms() - 30 * MINUTE;
+        let mut s = shelf_on_disk(
+            &dir,
+            3,
+            0,
+            &[("h2", t + 2 * MINUTE), ("h1", t)],
+            &[("p", t + MINUTE)],
+        );
+        s.set_pin_persisted("p", false).unwrap();
+        assert_eq!(history_ids(&s), ["h2", "p", "h1"]);
 
-        let token = s.delete_reversible(&id).unwrap();
-        assert!(s.find(&id).is_none());
+        let token = s.delete_reversible("p").unwrap();
+        assert!(s.find("p").is_none());
         s.undo_delete(&token).unwrap();
 
-        assert_eq!(history_ids(&s), before, "exactly where it was");
-        assert_eq!(s.history[0].id, id);
-        assert_eq!(s.history[0].captured_at, Some(1));
-        assert!(s.history.len() <= s.settings.history_limit);
-        let reloaded = Store::load(s.dir.clone());
-        assert_eq!(reloaded.history[0].id, id);
-        assert_eq!(reloaded.history[0].captured_at, Some(1));
+        assert_eq!(history_ids(&s), ["h2", "p", "h1"], "exactly where it was");
+        assert_eq!(created_at(&s, "p"), Some(t + MINUTE));
+        let reloaded = Store::load(dir.clone());
+        assert_eq!(history_ids(&reloaded), ["h2", "p", "h1"]);
+        assert_eq!(picture_files_exist(&dir, "p"), (true, true));
     }
 
     #[test]
-    fn a_refused_unpin_leaves_the_row_pinned_with_its_dates_and_drops_nothing() {
-        let (mut s, id) = full_history_and_an_older_pinned_row();
-        let before = s.find(&id).unwrap().clone();
-        let history_before = history_ids(&s);
-        fs::create_dir(s.dir.join(PENDING_PIN_FILE)).unwrap();
+    fn a_refused_unpin_leaves_the_row_pinned_with_its_date_and_drops_nothing() {
+        // Between the two, it would push h1 off; older than both, it would go
+        // itself. Refused, neither happens.
+        for p in [30, 10] {
+            let dir = test_dir();
+            let t = now_ms() - 60 * MINUTE;
+            let mut s = shelf_on_disk(
+                &dir,
+                2,
+                0,
+                &[("h2", t + 40 * MINUTE), ("h1", t + 20 * MINUTE)],
+                &[("p", t + p * MINUTE)],
+            );
+            let before = s.find("p").unwrap().clone();
+            fs::create_dir(dir.join(PENDING_PIN_FILE)).unwrap();
 
-        assert!(s.set_pin_persisted(&id, false).is_err());
+            assert!(s.set_pin_persisted("p", false).is_err(), "p at {p}");
 
-        let item = s.find(&id).unwrap();
-        assert!(item.is_pinned);
-        assert_eq!(item.created_at, before.created_at, "its place is restored");
-        assert_eq!(item.captured_at, None, "and no capture date was invented");
-        assert_eq!(history_ids(&s), history_before, "nothing made room for it");
+            let item = s.find("p").unwrap();
+            assert!(item.is_pinned);
+            assert_eq!(item.created_at, before.created_at);
+            assert_eq!(history_ids(&s), ["h2", "h1"], "nothing made room for it");
+            for name in ["p", "h1", "h2"] {
+                assert_eq!(picture_files_exist(&dir, name), (true, true), "{name}");
+            }
+        }
     }
 
+    /// The destination layer landed and the source did not: history already
+    /// holds the row where its return put it, and it stays there — weighed
+    /// again against the history it trimmed, it would be older than all of
+    /// it and go.
     #[test]
-    fn clearing_learning_dates_a_returned_row_by_its_capture() {
-        let (mut s, id) = full_history_and_an_older_pinned_row();
-        s.set_pin_persisted(&id, false).unwrap();
+    fn an_interrupted_unpin_keeps_the_place_its_return_was_given() {
+        let dir = test_dir();
+        let t = now_ms() - 30 * MINUTE;
+        let mut s = shelf_on_disk(
+            &dir,
+            2,
+            0,
+            &[("h2", t + 2 * MINUTE), ("h1", t)],
+            &[("p", t + MINUTE)],
+        );
 
-        s.clear_learning();
-
-        assert_eq!(s.find(&id).unwrap().last_used_at, 1);
-    }
-
-    #[test]
-    fn an_interrupted_unpin_comes_back_on_top_with_its_capture_date() {
-        let dir = std::env::temp_dir().join(format!("raff-test-{}", uuid::Uuid::new_v4()));
-        let mut s = Store::load(dir.clone());
-        capture_text(&mut s, "pinned item");
-        let id = s.history[0].id.clone();
-        s.set_pin_persisted(&id, true).unwrap();
-        s.find_mut(&id).unwrap().created_at = 1;
-        s.save_pinned();
-        capture_text(&mut s, "newer");
-        s.save_history();
-
-        // What set_pin_persisted does up to the crash: the move in memory,
-        // the journal, and only the destination layer on disk.
-        assert!(s.toggle_pin(&id));
-        s.pending_pin = Some(PendingPin {
-            item: s.find(&id).unwrap().clone(),
-            desired: false,
-            dropped: Vec::new(),
-        });
+        let pending = s.move_pin("p").unwrap();
+        assert_eq!(history_ids(&s), ["h2", "p"]);
+        s.pending_pin = Some(pending);
         s.try_save_pending_pin().unwrap();
         s.save_history();
         drop(s);
 
         let recovered = Store::load(dir.clone());
-        assert_eq!(recovered.history[0].id, id);
-        assert_eq!(recovered.history[0].captured_at, Some(1));
+        assert_eq!(history_ids(&recovered), ["h2", "p"]);
+        assert_eq!(created_at(&recovered, "p"), Some(t + MINUTE));
         assert!(recovered.pinned.is_empty());
+        assert_eq!(picture_files_exist(&dir, "p"), (true, true));
+        assert_eq!(picture_files_exist(&dir, "h1"), (false, false));
         assert!(!dir.join(PENDING_PIN_FILE).exists());
     }
 
+    /// A build of this branch once wrote a second date (`capturedAt`) on rows
+    /// it unpinned. Such a row still loads, and the field is not written back.
     #[test]
-    fn rows_saved_before_captured_at_still_load_and_ordinary_rows_never_carry_it() {
-        let dir = std::env::temp_dir().join(format!("raff-test-{}", uuid::Uuid::new_v4()));
+    fn a_row_carrying_the_retired_captured_at_field_still_loads() {
+        let dir = test_dir();
         fs::create_dir_all(&dir).unwrap();
         fs::write(
             dir.join(HISTORY_FILE),
-            r#"[{"id":"old","type":"text","text":"من إصدار سابق","sourceAppBundleId":"com.apple.Notes","sourceApp":"Notes","createdAt":5,"isPinned":false,"copyCount":1,"pasteCount":0,"lastUsedAt":5}]"#,
+            r#"[{"id":"old","type":"text","text":"من بناء سابق","sourceAppBundleId":"com.apple.Notes","sourceApp":"Notes","createdAt":5,"capturedAt":3,"isPinned":false,"copyCount":1,"pasteCount":0,"lastUsedAt":5}]"#,
         )
         .unwrap();
 
         let mut s = Store::load(dir.clone());
         assert!(!s.unreadable_shelf);
-        assert_eq!(s.history[0].id, "old");
-        assert_eq!(s.history[0].captured_at, None);
+        assert_eq!(history_ids(&s), ["old"]);
 
         capture_text(&mut s, "نسخة جديدة");
         s.save_history();
-        let written = fs::read_to_string(dir.join(HISTORY_FILE)).unwrap();
-        assert!(
-            !written.contains("capturedAt"),
-            "only a returned row writes the field"
-        );
+        assert!(!fs::read_to_string(dir.join(HISTORY_FILE))
+            .unwrap()
+            .contains("capturedAt"));
     }
 
     #[test]
@@ -3452,55 +3402,18 @@ mod tests {
         );
     }
 
-    /// A full history (limit 2, written down), and a pinned picture captured
-    /// before all of it, with its two files on disk.
-    fn full_history_and_an_old_pinned_picture(dir: &Path) -> (Store, String) {
-        let mut s = Store::load(dir.to_path_buf());
-        let mut settings = s.settings.clone();
-        settings.history_limit = 2;
-        s.update_settings_persisted(settings).unwrap();
-        let images = dir.join(IMAGES_DIR);
-        fs::write(images.join("p.png"), b"the pinned picture").unwrap();
-        fs::write(images.join("p.thumb.png"), b"its thumbnail").unwrap();
-        let result = s.capture(
-            ItemKind::Image,
-            "صورة 2×2".into(),
-            None,
-            None,
-            Some("p.png".into()),
-            Some("p.thumb.png".into()),
-            Some(content_hash(b"the pinned picture")),
-            ("Preview".into(), "com.apple.Preview".into()),
-        );
-        let store = std::sync::Mutex::new(s);
-        persist_capture(&store, result).unwrap();
-        let mut s = store.into_inner().unwrap();
-        let id = s.history[0].id.clone();
-        s.set_pin_persisted(&id, true).unwrap();
-        s.find_mut(&id).unwrap().created_at = 1;
-        s.save_pinned();
-        capture_text(&mut s, "h1");
-        capture_text(&mut s, "h2");
-        s.save_history();
-        (s, id)
-    }
-
-    fn assert_picture_intact(dir: &Path) {
-        let images = dir.join(IMAGES_DIR);
-        assert_eq!(
-            fs::read(images.join("p.png")).unwrap(),
-            b"the pinned picture"
-        );
-        assert_eq!(
-            fs::read(images.join("p.thumb.png")).unwrap(),
-            b"its thumbnail"
-        );
-    }
-
     #[test]
     fn a_failed_capture_keeps_an_unpin_that_landed_meanwhile_and_its_picture() {
-        let dir = std::env::temp_dir().join(format!("raff-test-{}", uuid::Uuid::new_v4()));
-        let (mut s, pinned) = full_history_and_an_old_pinned_picture(&dir);
+        let dir = test_dir();
+        let t = now_ms() - 30 * MINUTE;
+        // Room for one more row, and p newer than both.
+        let mut s = shelf_on_disk(
+            &dir,
+            3,
+            0,
+            &[("h2", t + MINUTE), ("h1", t)],
+            &[("p", t + 2 * MINUTE)],
+        );
         let blocker = dir.join("history.json.tmp");
 
         // The capture is applied and staged under the lock...
@@ -3520,15 +3433,15 @@ mod tests {
         fs::create_dir(&blocker).unwrap();
         let written = staged.write();
         fs::remove_dir(&blocker).unwrap();
-        // ...and before it is settled, the old picture is unpinned. That unpin
-        // is written from a model that already holds the capture.
-        assert_eq!(s.set_pin_persisted(&pinned, false), Ok(false));
+        // ...and before it is settled, p is unpinned. That unpin is written
+        // from a model that already holds the capture.
+        assert_eq!(s.set_pin_persisted("p", false), Ok(false));
 
         assert!(
             s.settle_capture(written).is_ok(),
             "what is on disk already holds the capture"
         );
-        assert_eq!(history_ids(&s), [pinned.clone(), captured.clone()]);
+        assert_eq!(history_ids(&s), [captured.as_str(), "p", "h2"]);
 
         // Life goes on, then رفّ restarts.
         let next = s.capture(
@@ -3546,104 +3459,128 @@ mod tests {
         drop(store);
         let reloaded = Store::load(dir.clone());
         let back = reloaded
-            .find(&pinned)
+            .find("p")
             .expect("the unpinned picture survives the restart");
         assert!(!back.is_pinned);
-        assert_eq!(back.captured_at, Some(1));
-        assert_picture_intact(&dir);
+        assert_eq!(back.created_at, t + 2 * MINUTE);
+        assert_eq!(picture_files_exist(&dir, "p"), (true, true));
     }
 
+    /// The copy and the unpin's layers both fail; the unpin's journal lands.
+    /// Counting the copy, history's oldest row was h2 (the copy pushed h1
+    /// off), and p, older than h2, was not taken back. The copy is taken back
+    /// by its own row, touching no other; h1 is then the oldest again, so p
+    /// comes back and pushes h1 off — not h2, the newer one.
     #[test]
-    fn a_failed_capture_is_taken_back_by_its_own_row_not_by_position() {
-        let dir = std::env::temp_dir().join(format!("raff-test-{}", uuid::Uuid::new_v4()));
-        let (mut s, pinned) = full_history_and_an_old_pinned_picture(&dir);
-        let blocker = dir.join("history.json.tmp");
-        let newer = s.history[0].id.clone();
-        let oldest = s.history[1].id.clone();
-
-        let result = s.capture(
-            ItemKind::Text,
-            "نسخة جديدة".into(),
-            None,
-            None,
-            None,
-            None,
-            None,
-            ("Notes".into(), "com.apple.Notes".into()),
+    fn a_double_failure_evicts_the_row_the_policy_would_not_a_newer_one() {
+        let dir = test_dir();
+        let t = now_ms() - 30 * MINUTE;
+        let mut s = shelf_on_disk(
+            &dir,
+            2,
+            0,
+            &[("h2", t + 2 * MINUTE), ("h1", t)],
+            &[("p", t + MINUTE)],
         );
+        let blocker = dir.join("history.json.tmp");
+        let written = a_copy_that_will_not_land(&mut s, &blocker);
         let captured = s.history[0].id.clone();
-        let staged = s.stage_capture(result).unwrap();
-        // The disk refuses history writes for a while: the capture's own, and
-        // the unpin's that follows (its journal lands; its layers wait).
-        fs::create_dir(&blocker).unwrap();
-        let written = staged.write();
-        assert_eq!(s.set_pin_persisted(&pinned, false), Ok(false));
-        assert_eq!(s.history[0].id, pinned);
+        assert_eq!(s.set_pin_persisted("p", false), Ok(false));
+        assert_eq!(
+            history_ids(&s),
+            [captured.as_str(), "h2"],
+            "with the copy counted, p is older than all of history"
+        );
+        assert_eq!(ids_of(&s.pending_pin.as_ref().unwrap().dropped), ["p"]);
 
         assert!(s.settle_capture(written).is_err());
-        assert!(s.find(&captured).is_none(), "the capture is taken back");
-        assert_eq!(s.history[0].id, pinned, "the unpinned picture stays on top");
-        assert_eq!(s.history[0].captured_at, Some(1));
-        // What is left is what the policy leaves without the capture: the
-        // returning picture makes room by pushing off the oldest row.
-        assert_eq!(history_ids(&s), [pinned.clone(), newer.clone()]);
 
-        // The disk recovers, and رفّ restarts.
+        assert!(s.find(&captured).is_none(), "the capture is taken back");
+        assert_eq!(history_ids(&s), ["h2", "p"], "p is back, and h1 makes room");
+        assert_eq!(
+            ids_of(&s.pending_pin.as_ref().unwrap().dropped),
+            ["h1"],
+            "the journal says so before any file goes"
+        );
+        assert_eq!(picture_files_exist(&dir, "p"), (true, true));
+        assert_eq!(picture_files_exist(&dir, "h1"), (true, true), "not yet");
+
+        // The disk recovers; رفّ restarts and completes the unpin.
         fs::remove_dir(&blocker).unwrap();
         drop(s);
         let reloaded = Store::load(dir.clone());
-        assert_eq!(history_ids(&reloaded), [pinned.clone(), newer.clone()]);
-        assert_eq!(reloaded.history[0].captured_at, Some(1));
-        assert!(reloaded.pinned.is_empty());
+        assert_eq!(history_ids(&reloaded), ["h2", "p"]);
         assert!(reloaded.find(&captured).is_none());
-        assert!(reloaded.find(&oldest).is_none());
-        assert_picture_intact(&dir);
+        assert!(reloaded.pinned.is_empty());
+        assert!(reloaded.pending_pin.is_none());
+        assert_eq!(
+            picture_files_exist(&dir, "h2"),
+            (true, true),
+            "h2 keeps both files"
+        );
+        assert_eq!(picture_files_exist(&dir, "p"), (true, true));
+        assert_eq!(
+            picture_files_exist(&dir, "h1"),
+            (false, false),
+            "h1, the oldest, goes as the policy says"
+        );
     }
 
+    /// A failed re-copy of h1: it went to the top, h2 became the oldest row,
+    /// and p, older than h2, was not taken back. Put back by identity, h1 is
+    /// the oldest again — and p, newer than it, comes back.
     #[test]
     fn a_failed_recopy_puts_its_row_back_by_identity_around_an_unpin() {
-        let dir = std::env::temp_dir().join(format!("raff-test-{}", uuid::Uuid::new_v4()));
-        let (mut s, pinned) = full_history_and_an_old_pinned_picture(&dir);
-        // Room for the returning picture, so the policy pushes nothing off and
-        // only the identity of the row is on trial here.
-        let mut settings = s.settings.clone();
-        settings.history_limit = 3;
-        s.update_settings_persisted(settings).unwrap();
+        let dir = test_dir();
+        let t = now_ms() - 30 * MINUTE;
+        let mut s = shelf_on_disk(
+            &dir,
+            3,
+            0,
+            &[("h2", t + 2 * MINUTE), ("h1", t)],
+            &[("p", t + MINUTE)],
+        );
         let blocker = dir.join("history.json.tmp");
-        let recopied = s.history[1].id.clone();
-        let before = s.find(&recopied).unwrap().clone();
+        let before = s.find("h1").unwrap().clone();
 
         let result = s.capture(
-            detect_kind("h1"),
-            "h1".into(),
+            ItemKind::Image,
+            "صورة h1".into(),
             None,
             None,
             None,
             None,
-            None,
-            ("Test".into(), "com.test".into()),
+            Some(content_hash(b"h1")),
+            ("Preview".into(), "com.apple.Preview".into()),
         );
         assert_eq!(result.outcome, CaptureOutcome::Deduped);
         let staged = s.stage_capture(result).unwrap();
         fs::create_dir(&blocker).unwrap();
         let written = staged.write();
-        assert_eq!(s.set_pin_persisted(&pinned, false), Ok(false));
+        assert_eq!(s.set_pin_persisted("p", false), Ok(false));
+        assert!(s.find("p").is_none(), "older than h2, then the oldest");
 
         assert!(s.settle_capture(written).is_err());
-        let row = s.find(&recopied).expect("the re-copied row is still there");
+        let row = s.find("h1").expect("the re-copied row is still there");
         assert_eq!(row.created_at, before.created_at, "at the place it had");
         assert_eq!(row.copy_count, before.copy_count, "with the counts it had");
-        assert_eq!(s.history[0].id, pinned, "the unpinned picture stays on top");
+        assert_eq!(
+            history_ids(&s),
+            ["h2", "p", "h1"],
+            "and p is back between them"
+        );
 
         fs::remove_dir(&blocker).unwrap();
         drop(s);
         let reloaded = Store::load(dir.clone());
-        assert_eq!(reloaded.history[0].id, pinned);
+        assert_eq!(history_ids(&reloaded), ["h2", "p", "h1"]);
         assert_eq!(
-            reloaded.find(&recopied).map(|row| row.created_at),
+            reloaded.find("h1").map(|row| row.created_at),
             Some(before.created_at)
         );
-        assert_picture_intact(&dir);
+        for name in ["h2", "p", "h1"] {
+            assert_eq!(picture_files_exist(&dir, name), (true, true), "{name}");
+        }
     }
 
     #[test]
@@ -3771,48 +3708,6 @@ mod tests {
         assert_eq!(row.pinned_order, Some(0), "and the reorder stands");
     }
 
-    /// A pinned picture `p`, then the pictures `history` captured in that
-    /// order (each newer than the last), under a history limit of 2 written
-    /// down. Every picture has its file and its thumbnail on disk. Returns the
-    /// ids, `p` first.
-    fn pictures_in_history_and_an_old_pinned_one(dir: &Path, history: &[&str]) -> Vec<String> {
-        let mut s = Store::load(dir.to_path_buf());
-        let mut settings = s.settings.clone();
-        settings.history_limit = 2;
-        s.update_settings_persisted(settings).unwrap();
-        let images = dir.join(IMAGES_DIR);
-        let mut ids = Vec::new();
-        for name in std::iter::once("p").chain(history.iter().copied()) {
-            fs::write(images.join(format!("{name}.png")), name).unwrap();
-            fs::write(images.join(format!("{name}.thumb.png")), name).unwrap();
-            let result = s.capture(
-                ItemKind::Image,
-                format!("صورة {name}"),
-                None,
-                None,
-                Some(format!("{name}.png")),
-                Some(format!("{name}.thumb.png")),
-                Some(content_hash(name.as_bytes())),
-                ("Preview".into(), "com.apple.Preview".into()),
-            );
-            let store = std::sync::Mutex::new(s);
-            persist_capture(&store, result).unwrap();
-            s = store.into_inner().unwrap();
-            ids.push(s.history[0].id.clone());
-            if name == "p" {
-                s.set_pin_persisted(&ids[0], true).unwrap();
-                s.find_mut(&ids[0]).unwrap().created_at = 1;
-                s.save_pinned();
-            }
-        }
-        ids
-    }
-
-    fn two_pictures_in_history_and_an_old_pinned_one(dir: &Path) -> [String; 3] {
-        let ids = pictures_in_history_and_an_old_pinned_one(dir, &["h1", "h2"]);
-        [ids[0].clone(), ids[1].clone(), ids[2].clone()]
-    }
-
     fn picture_files_exist(dir: &Path, name: &str) -> (bool, bool) {
         let images = dir.join(IMAGES_DIR);
         (
@@ -3821,172 +3716,51 @@ mod tests {
         )
     }
 
-    #[test]
-    fn a_double_failure_evicts_the_row_the_policy_would_not_a_newer_one() {
-        let dir = std::env::temp_dir().join(format!("raff-test-{}", uuid::Uuid::new_v4()));
-        let [pinned, h1, h2] = two_pictures_in_history_and_an_old_pinned_one(&dir);
-        let mut s = Store::load(dir.clone());
-        assert_eq!(history_ids(&s), [h2.clone(), h1.clone()], "both saved");
-        let blocker = dir.join("history.json.tmp");
-
-        // A copy pushes off the oldest picture, h1; its write fails...
-        let result = s.capture(
-            ItemKind::Text,
-            "نسخة لن تُحفظ".into(),
-            None,
-            None,
-            None,
-            None,
-            None,
-            ("Notes".into(), "com.apple.Notes".into()),
-        );
-        let captured = s.history[0].id.clone();
-        let staged = s.stage_capture(result).unwrap();
-        fs::create_dir(&blocker).unwrap();
-        let written = staged.write();
-        // ...and so do the layers of an unpin made meanwhile; its journal
-        // lands. It chose what to push off with that copy still counted.
-        assert_eq!(s.set_pin_persisted(&pinned, false), Ok(false));
-        assert!(s.settle_capture(written).is_err());
-
-        // Without the copy, the returning picture pushes off the oldest: h1.
-        assert_eq!(history_ids(&s), [pinned.clone(), h2.clone()]);
-        let pending = s.pending_pin.as_ref().expect("the pin is still journaled");
-        assert_eq!(
-            pending
-                .dropped
-                .iter()
-                .map(|item| item.id.clone())
-                .collect::<Vec<_>>(),
-            std::slice::from_ref(&h1),
-            "the journal deletes h1 when it completes, not h2"
-        );
-
-        // The disk recovers; رفّ restarts and completes the pin.
-        fs::remove_dir(&blocker).unwrap();
-        drop(s);
-        let reloaded = Store::load(dir.clone());
-        assert_eq!(history_ids(&reloaded), [pinned.clone(), h2.clone()]);
-        assert!(reloaded.find(&captured).is_none());
-        assert!(reloaded.pending_pin.is_none());
-        assert_eq!(
-            picture_files_exist(&dir, "h2"),
-            (true, true),
-            "h2 keeps both files"
-        );
-        assert_eq!(picture_files_exist(&dir, "p"), (true, true));
-        assert_eq!(
-            picture_files_exist(&dir, "h1"),
-            (false, false),
-            "h1, the oldest, goes as the policy says"
-        );
-    }
-
-    /// The limit of `reweigh_pending_pin`: when the corrected journal cannot be
-    /// written either — a third failure, on the durable path — the journal
-    /// already on disk is what a restart carries out, so memory follows it
-    /// rather than promise what the disk will not do.
-    #[test]
-    fn a_pin_journal_that_cannot_be_corrected_is_followed_as_written() {
-        let dir = std::env::temp_dir().join(format!("raff-test-{}", uuid::Uuid::new_v4()));
-        let [pinned, h1, h2] = two_pictures_in_history_and_an_old_pinned_one(&dir);
-        let mut s = Store::load(dir.clone());
-        let result = s.capture(
-            ItemKind::Text,
-            "نسخة لن تُحفظ".into(),
-            None,
-            None,
-            None,
-            None,
-            None,
-            ("Notes".into(), "com.apple.Notes".into()),
-        );
-        let staged = s.stage_capture(result).unwrap();
-        fs::create_dir(dir.join("history.json.tmp")).unwrap();
-        let written = staged.write();
-        assert_eq!(s.set_pin_persisted(&pinned, false), Ok(false));
-        fs::create_dir(dir.join("pending-pin.json.tmp")).unwrap();
-
-        assert!(s.settle_capture(written).is_err());
-        let journal: Vec<String> = s
-            .pending_pin
-            .as_ref()
-            .unwrap()
-            .dropped
-            .iter()
-            .map(|item| item.id.clone())
-            .collect();
-        assert_eq!(
-            journal,
-            std::slice::from_ref(&h2),
-            "the journal on disk still says h2"
-        );
-        assert_eq!(
-            history_ids(&s),
-            [pinned.clone(), h1.clone()],
-            "and memory agrees with it"
-        );
-
-        // So the restart carries that journal out: this is the limit left.
-        fs::remove_dir(dir.join("history.json.tmp")).unwrap();
-        fs::remove_dir(dir.join("pending-pin.json.tmp")).unwrap();
-        drop(s);
-        let reloaded = Store::load(dir.clone());
-        assert_eq!(history_ids(&reloaded), [pinned.clone(), h1.clone()]);
-        assert_eq!(picture_files_exist(&dir, "h2"), (false, false));
-    }
-
     /// The failed copy pushed nothing off, but the unpin made meanwhile
     /// counted it and pushed off `h1` — in a history that, without the copy,
     /// has room for both.
     #[test]
     fn a_double_failure_below_the_limit_pushes_nothing_off() {
-        let dir = std::env::temp_dir().join(format!("raff-test-{}", uuid::Uuid::new_v4()));
-        let ids = pictures_in_history_and_an_old_pinned_one(&dir, &["h1"]);
-        let (pinned, h1) = (ids[0].clone(), ids[1].clone());
-        let mut s = Store::load(dir.clone());
+        let dir = test_dir();
+        let t = now_ms() - 30 * MINUTE;
+        let mut s = shelf_on_disk(&dir, 2, 0, &[("h1", t)], &[("p", t + MINUTE)]);
         let blocker = dir.join("history.json.tmp");
 
-        let result = s.capture(
-            ItemKind::Text,
-            "نسخة لن تُحفظ".into(),
-            None,
-            None,
-            None,
-            None,
-            None,
-            ("Notes".into(), "com.apple.Notes".into()),
-        );
-        assert!(result.dropped.is_empty(), "there was room for the copy");
-        let staged = s.stage_capture(result).unwrap();
-        fs::create_dir(&blocker).unwrap();
-        let written = staged.write();
-        assert_eq!(s.set_pin_persisted(&pinned, false), Ok(false));
+        let written = a_copy_that_will_not_land(&mut s, &blocker);
+        assert_eq!(s.history.len(), 2, "there was room for the copy");
+        assert_eq!(s.set_pin_persisted("p", false), Ok(false));
         assert_eq!(
-            s.pending_pin.as_ref().unwrap().dropped.len(),
-            1,
+            ids_of(&s.pending_pin.as_ref().unwrap().dropped),
+            ["h1"],
             "the unpin counted the copy"
         );
 
         assert!(s.settle_capture(written).is_err());
-        assert_eq!(history_ids(&s), [pinned.clone(), h1.clone()]);
+        assert_eq!(history_ids(&s), ["p", "h1"]);
         assert!(s.pending_pin.as_ref().unwrap().dropped.is_empty());
 
         fs::remove_dir(&blocker).unwrap();
         drop(s);
         let reloaded = Store::load(dir.clone());
-        assert_eq!(history_ids(&reloaded), [pinned.clone(), h1.clone()]);
+        assert_eq!(history_ids(&reloaded), ["p", "h1"]);
         assert_eq!(picture_files_exist(&dir, "h1"), (true, true));
+        assert_eq!(picture_files_exist(&dir, "p"), (true, true));
     }
 
     /// The failed copy is a re-copy of the oldest picture, which then sat on
-    /// top; the unpin pushed off `h2` instead. Without the re-copy, the
-    /// returning picture pushes off the oldest: the re-copied one.
+    /// top; with h2 the oldest, p was not taken back. Without the re-copy,
+    /// p comes back and pushes off the oldest: the re-copied one.
     #[test]
     fn a_double_failure_around_a_recopy_evicts_the_row_the_policy_would() {
-        let dir = std::env::temp_dir().join(format!("raff-test-{}", uuid::Uuid::new_v4()));
-        let [pinned, h1, h2] = two_pictures_in_history_and_an_old_pinned_one(&dir);
-        let mut s = Store::load(dir.clone());
+        let dir = test_dir();
+        let t = now_ms() - 30 * MINUTE;
+        let mut s = shelf_on_disk(
+            &dir,
+            2,
+            0,
+            &[("h2", t + 2 * MINUTE), ("h1", t)],
+            &[("p", t + MINUTE)],
+        );
         let blocker = dir.join("history.json.tmp");
 
         let result = s.capture(
@@ -4003,17 +3777,18 @@ mod tests {
         let staged = s.stage_capture(result).unwrap();
         fs::create_dir(&blocker).unwrap();
         let written = staged.write();
-        assert_eq!(s.set_pin_persisted(&pinned, false), Ok(false));
+        assert_eq!(s.set_pin_persisted("p", false), Ok(false));
 
         assert!(s.settle_capture(written).is_err());
-        assert_eq!(history_ids(&s), [pinned.clone(), h2.clone()]);
+        assert_eq!(history_ids(&s), ["h2", "p"]);
 
         fs::remove_dir(&blocker).unwrap();
         drop(s);
         let reloaded = Store::load(dir.clone());
-        assert_eq!(history_ids(&reloaded), [pinned.clone(), h2.clone()]);
-        assert!(reloaded.find(&h1).is_none());
+        assert_eq!(history_ids(&reloaded), ["h2", "p"]);
+        assert!(reloaded.find("h1").is_none());
         assert_eq!(picture_files_exist(&dir, "h2"), (true, true));
+        assert_eq!(picture_files_exist(&dir, "p"), (true, true));
         assert_eq!(picture_files_exist(&dir, "h1"), (false, false));
     }
 
@@ -4592,6 +4367,456 @@ mod tests {
         assert_eq!(s.history[0].copy_count, 0);
         assert_eq!(s.history[0].paste_count, 0);
     }
+
+    // --- Unpinning by its place in time (Sultan, 2026-10-21) ------------------
+    //
+    // A row comes back to where its capture date puts it, with that date.
+    // One older than the oldest row history held before it came back is
+    // removed, even with room to spare; into an empty history it comes back.
+
+    const MINUTE: u64 = 60 * 1000;
+
+    /// A picture row as the layer files hold it: id `name`, its image and
+    /// thumbnail named after it, captured at `created_at`.
+    fn picture_row(name: &str, created_at: u64, pinned_order: Option<u32>) -> serde_json::Value {
+        serde_json::json!({
+            "id": name,
+            "type": "image",
+            "text": format!("صورة {name}"),
+            "imageFile": format!("{name}.png"),
+            "thumbFile": format!("{name}.thumb.png"),
+            "hash": content_hash(name.as_bytes()),
+            "sourceAppBundleId": "com.apple.Preview",
+            "sourceApp": "Preview",
+            "createdAt": created_at,
+            "isPinned": pinned_order.is_some(),
+            "pinnedOrder": pinned_order,
+            "copyCount": 1,
+            "pasteCount": 0,
+            "lastUsedAt": created_at,
+        })
+    }
+
+    /// Writes the three layers and every picture's two files, then loads them
+    /// as a launch would. `history` is newest first.
+    fn shelf_on_disk(
+        dir: &Path,
+        limit: usize,
+        retention_days: u32,
+        history: &[(&str, u64)],
+        pinned: &[(&str, u64)],
+    ) -> Store {
+        let images = dir.join(IMAGES_DIR);
+        fs::create_dir_all(&images).unwrap();
+        for (name, _) in history.iter().chain(pinned) {
+            fs::write(images.join(format!("{name}.png")), name).unwrap();
+            fs::write(images.join(format!("{name}.thumb.png")), name).unwrap();
+        }
+        let rows = |layer: &[(&str, u64)], pinned: bool| {
+            serde_json::Value::Array(
+                layer
+                    .iter()
+                    .enumerate()
+                    .map(|(at, (name, created_at))| {
+                        picture_row(name, *created_at, pinned.then_some(at as u32))
+                    })
+                    .collect(),
+            )
+        };
+        fs::write(dir.join(HISTORY_FILE), rows(history, false).to_string()).unwrap();
+        fs::write(dir.join(PINNED_FILE), rows(pinned, true).to_string()).unwrap();
+        fs::write(
+            dir.join(SETTINGS_FILE),
+            serde_json::json!({
+                "historyLimit": limit,
+                "retentionDays": retention_days,
+                "firstRunShown": true,
+            })
+            .to_string(),
+        )
+        .unwrap();
+        Store::load(dir.to_path_buf())
+    }
+
+    fn test_dir() -> PathBuf {
+        std::env::temp_dir().join(format!("raff-test-{}", uuid::Uuid::new_v4()))
+    }
+
+    fn created_at(s: &Store, id: &str) -> Option<u64> {
+        s.find(id).map(|item| item.created_at)
+    }
+
+    #[test]
+    fn an_unpinned_row_returns_to_its_place_in_time_and_the_oldest_makes_room() {
+        let dir = test_dir();
+        let t = now_ms() - 30 * MINUTE;
+        let (h1, p, h2) = (t, t + MINUTE, t + 2 * MINUTE);
+        let mut s = shelf_on_disk(&dir, 2, 0, &[("h2", h2), ("h1", h1)], &[("p", p)]);
+
+        assert_eq!(s.set_pin_persisted("p", false), Ok(false));
+
+        assert_eq!(history_ids(&s), ["h2", "p"], "between the two, by its date");
+        assert_eq!(created_at(&s, "p"), Some(p), "with the date it had");
+        assert!(s.pinned.is_empty());
+        assert_eq!(picture_files_exist(&dir, "p"), (true, true));
+        assert_eq!(picture_files_exist(&dir, "h2"), (true, true));
+        assert_eq!(
+            picture_files_exist(&dir, "h1"),
+            (false, false),
+            "the full history lets its oldest row go"
+        );
+        let reloaded = Store::load(dir.clone());
+        assert_eq!(history_ids(&reloaded), ["h2", "p"]);
+        assert_eq!(created_at(&reloaded, "p"), Some(p));
+        assert!(reloaded.pinned.is_empty());
+        assert!(
+            !fs::read_to_string(dir.join(HISTORY_FILE))
+                .unwrap()
+                .contains("capturedAt"),
+            "one date per row, and it is the capture's"
+        );
+    }
+
+    #[test]
+    fn an_unpinned_row_older_than_the_whole_history_is_removed_even_with_room() {
+        for limit in [2, 3] {
+            let dir = test_dir();
+            let t = now_ms() - 30 * MINUTE;
+            let (p, h1, h2) = (t, t + MINUTE, t + 2 * MINUTE);
+            let mut s = shelf_on_disk(&dir, limit, 0, &[("h2", h2), ("h1", h1)], &[("p", p)]);
+
+            assert_eq!(s.set_pin_persisted("p", false), Ok(false), "limit {limit}");
+
+            assert_eq!(history_ids(&s), ["h2", "h1"], "limit {limit}: untouched");
+            assert!(s.find("p").is_none(), "limit {limit}: removed");
+            assert_eq!(
+                picture_files_exist(&dir, "p"),
+                (false, false),
+                "limit {limit}: with its files"
+            );
+            assert_eq!(
+                picture_files_exist(&dir, "h1"),
+                (true, true),
+                "limit {limit}"
+            );
+            assert_eq!(
+                picture_files_exist(&dir, "h2"),
+                (true, true),
+                "limit {limit}"
+            );
+            let reloaded = Store::load(dir.clone());
+            assert_eq!(history_ids(&reloaded), ["h2", "h1"], "limit {limit}");
+            assert!(reloaded.find("p").is_none(), "limit {limit}");
+            assert!(!dir.join(PENDING_PIN_FILE).exists(), "limit {limit}");
+        }
+    }
+
+    #[test]
+    fn an_unpinned_row_comes_back_to_an_empty_history_with_its_date() {
+        let dir = test_dir();
+        let p = now_ms() - 30 * MINUTE;
+        let mut s = shelf_on_disk(&dir, 2, 0, &[], &[("p", p)]);
+
+        assert_eq!(s.set_pin_persisted("p", false), Ok(false));
+
+        assert_eq!(history_ids(&s), ["p"]);
+        assert_eq!(created_at(&s, "p"), Some(p));
+        assert_eq!(picture_files_exist(&dir, "p"), (true, true));
+        let reloaded = Store::load(dir.clone());
+        assert_eq!(history_ids(&reloaded), ["p"]);
+        assert_eq!(created_at(&reloaded, "p"), Some(p));
+    }
+
+    #[test]
+    fn the_age_limit_counts_from_the_capture_of_an_unpinned_row() {
+        let dir = test_dir();
+        let month_ago = now_ms() - 30 * 24 * 60 * MINUTE;
+        let mut s = shelf_on_disk(&dir, 2, 7, &[], &[("p", month_ago)]);
+
+        assert_eq!(
+            s.set_pin_persisted("p", false),
+            Ok(false),
+            "the unpin itself succeeds"
+        );
+
+        assert!(
+            s.find("p").is_none(),
+            "a month old, past a week's retention: it goes as any row would"
+        );
+        assert_eq!(picture_files_exist(&dir, "p"), (false, false));
+        assert!(Store::load(dir.clone()).find("p").is_none());
+    }
+
+    #[test]
+    fn an_unpinned_row_dated_like_the_oldest_is_not_older_and_comes_back() {
+        let dir = test_dir();
+        let t = now_ms() - 30 * MINUTE;
+        let mut s = shelf_on_disk(&dir, 2, 0, &[("h2", t + MINUTE), ("h1", t)], &[("p", t)]);
+
+        assert_eq!(s.set_pin_persisted("p", false), Ok(false));
+
+        assert_eq!(
+            history_ids(&s),
+            ["h2", "p"],
+            "the row already there is the one the full history lets go"
+        );
+        assert_eq!(created_at(&s, "p"), Some(t));
+    }
+
+    #[test]
+    fn pinning_and_unpinning_never_changes_the_date() {
+        let dir = test_dir();
+        let t = now_ms() - 30 * MINUTE;
+        let mut s = shelf_on_disk(&dir, 3, 0, &[("h2", t + 2 * MINUTE), ("h1", t)], &[]);
+        for round in 0..3 {
+            s.set_pin_persisted("h2", true).unwrap();
+            s.set_pin_persisted("h2", false).unwrap();
+            assert_eq!(history_ids(&s), ["h2", "h1"], "round {round}");
+            assert_eq!(created_at(&s, "h2"), Some(t + 2 * MINUTE), "round {round}");
+        }
+        assert_eq!(created_at(&Store::load(dir), "h2"), Some(t + 2 * MINUTE));
+    }
+
+    // --- A pin journal finished at a restart (006, the review's two cases) ----
+
+    /// A copy whose history write fails, applied and staged as a capture is;
+    /// returns its settlement-to-be. `blocker` stays in place.
+    fn a_copy_that_will_not_land(s: &mut Store, blocker: &Path) -> WrittenCapture {
+        let result = s.capture(
+            ItemKind::Text,
+            "نسخة لن تُحفظ".into(),
+            None,
+            None,
+            None,
+            None,
+            None,
+            ("Notes".into(), "com.apple.Notes".into()),
+        );
+        let staged = s.stage_capture(result).unwrap();
+        fs::create_dir(blocker).unwrap();
+        staged.write()
+    }
+
+    /// The review's case 1: the copy fails, the unpin made meanwhile is
+    /// journaled but its layers fail, and the corrected journal cannot be
+    /// written either. A restart must leave what the policy leaves on the
+    /// layers as they are on disk: the newer `h2` and its picture stay.
+    #[test]
+    fn a_pin_journal_left_uncorrected_still_spares_the_newer_row_at_a_restart() {
+        let dir = test_dir();
+        let t = now_ms() - 30 * MINUTE;
+        let (h1, p, h2) = (t, t + MINUTE, t + 2 * MINUTE);
+        let mut s = shelf_on_disk(&dir, 2, 0, &[("h2", h2), ("h1", h1)], &[("p", p)]);
+        let blocker = dir.join("history.json.tmp");
+        let written = a_copy_that_will_not_land(&mut s, &blocker);
+        assert_eq!(s.set_pin_persisted("p", false), Ok(false));
+        fs::create_dir(dir.join("pending-pin.json.tmp")).unwrap();
+        assert!(s.settle_capture(written).is_err());
+        assert_eq!(
+            history_ids(&s),
+            ["h2", "p"],
+            "memory is corrected all the same"
+        );
+
+        fs::remove_dir(&blocker).unwrap();
+        fs::remove_dir(dir.join("pending-pin.json.tmp")).unwrap();
+        drop(s);
+        let reloaded = Store::load(dir.clone());
+
+        assert!(reloaded.find("h2").is_some(), "the newer row stays");
+        assert_eq!(picture_files_exist(&dir, "h2"), (true, true));
+        assert!(reloaded.find("h1").is_none(), "the oldest goes");
+        assert_eq!(picture_files_exist(&dir, "h1"), (false, false));
+        assert!(reloaded.find("p").is_some(), "the unpinned row stays");
+        assert_eq!(picture_files_exist(&dir, "p"), (true, true));
+        assert!(reloaded.pending_pin.is_none());
+    }
+
+    /// The review's case 2: no disk fault at all at the restart. The unpin's
+    /// journal reached the disk (it is flushed), its layers and the copy did
+    /// not, and the process stopped before the copy was settled.
+    #[test]
+    fn a_power_cut_before_the_copy_is_settled_spares_the_newer_row() {
+        let dir = test_dir();
+        let t = now_ms() - 30 * MINUTE;
+        let (h1, p, h2) = (t, t + MINUTE, t + 2 * MINUTE);
+        let mut s = shelf_on_disk(&dir, 2, 0, &[("h2", h2), ("h1", h1)], &[("p", p)]);
+        let blocker = dir.join("history.json.tmp");
+        let _never_settled = a_copy_that_will_not_land(&mut s, &blocker);
+        assert_eq!(s.set_pin_persisted("p", false), Ok(false));
+
+        drop(s);
+        fs::remove_dir(&blocker).unwrap();
+        let reloaded = Store::load(dir.clone());
+
+        assert!(reloaded.find("h2").is_some(), "the newer row stays");
+        assert_eq!(picture_files_exist(&dir, "h2"), (true, true));
+        assert!(reloaded.find("h1").is_none());
+        assert_eq!(picture_files_exist(&dir, "h1"), (false, false));
+        assert!(reloaded.find("p").is_some());
+        assert_eq!(picture_files_exist(&dir, "p"), (true, true));
+    }
+
+    /// The same power cut with room for every row once the copy is gone: the
+    /// journal pushed `h1` off to make room for the copy, and nothing has to go.
+    #[test]
+    fn a_power_cut_below_the_limit_pushes_nothing_off() {
+        let dir = test_dir();
+        let t = now_ms() - 30 * MINUTE;
+        let (h1, p, h2) = (t, t + MINUTE, t + 2 * MINUTE);
+        let mut s = shelf_on_disk(&dir, 3, 0, &[("h2", h2), ("h1", h1)], &[("p", p)]);
+        let blocker = dir.join("history.json.tmp");
+        let _never_settled = a_copy_that_will_not_land(&mut s, &blocker);
+        assert_eq!(s.set_pin_persisted("p", false), Ok(false));
+
+        drop(s);
+        fs::remove_dir(&blocker).unwrap();
+        let reloaded = Store::load(dir.clone());
+
+        assert_eq!(reloaded.history.len(), 3, "all three fit");
+        for name in ["h2", "p", "h1"] {
+            assert!(reloaded.find(name).is_some(), "{name} stays");
+            assert_eq!(picture_files_exist(&dir, name), (true, true), "{name}");
+        }
+    }
+
+    /// What a launch finds after either case: the layers as they were before
+    /// the unpin, and a journal whose choice names the newer `h2`. Finishing
+    /// it lets go what the policy picks now — `h1` — and deletes the files of
+    /// that row, and of no row still held.
+    #[test]
+    fn finishing_a_stale_pin_journal_deletes_the_files_of_what_goes_now_and_only_those() {
+        let dir = test_dir();
+        let t = now_ms() - 30 * MINUTE;
+        let mut s = shelf_on_disk(
+            &dir,
+            2,
+            0,
+            &[("h2", t + 2 * MINUTE), ("h1", t)],
+            &[("p", t + MINUTE)],
+        );
+        let stale = s.find("h2").unwrap().clone();
+        let mut item = s.find("p").unwrap().clone();
+        item.is_pinned = false;
+        item.pinned_order = None;
+        s.pending_pin = Some(PendingPin {
+            item,
+            desired: false,
+            dropped: vec![stale],
+        });
+
+        s.finish_pending_pin().unwrap();
+
+        assert_eq!(history_ids(&s), ["h2", "p"]);
+        assert!(s.pinned.is_empty());
+        assert_eq!(picture_files_exist(&dir, "h2"), (true, true), "still held");
+        assert_eq!(
+            picture_files_exist(&dir, "h1"),
+            (false, false),
+            "let go now"
+        );
+        assert_eq!(picture_files_exist(&dir, "p"), (true, true));
+        assert!(!dir.join(PENDING_PIN_FILE).exists());
+    }
+
+    /// A row deleted a moment ago is still history's while its undo lasts:
+    /// one unpinned meanwhile is weighed against it, and is not removed for
+    /// being older than what remains — the delete may yet be taken back.
+    #[test]
+    fn a_row_waiting_for_its_undo_still_counts_when_an_unpin_is_weighed() {
+        let dir = test_dir();
+        let t = now_ms() - 30 * MINUTE;
+        let mut s = shelf_on_disk(
+            &dir,
+            5,
+            0,
+            &[("y", t + 5 * MINUTE), ("x", t + MINUTE)],
+            &[("r", t + 3 * MINUTE)],
+        );
+        let token = s.delete_reversible("x").unwrap();
+
+        assert_eq!(s.set_pin_persisted("r", false), Ok(false));
+        assert_eq!(history_ids(&s), ["y", "r"], "newer than x: taken back");
+        assert_eq!(picture_files_exist(&dir, "r"), (true, true));
+
+        s.undo_delete(&token).unwrap();
+        assert_eq!(history_ids(&s), ["y", "r", "x"]);
+    }
+
+    /// The waiting row can only lower the bar of a history that has rows; it
+    /// does not stand in for an empty one. Its only row deleted a moment ago,
+    /// history is empty, and an empty history takes the row back (ت١٧).
+    #[test]
+    fn a_waiting_delete_does_not_turn_an_empty_history_against_an_unpin() {
+        let dir = test_dir();
+        let t = now_ms() - 30 * MINUTE;
+        let mut s = shelf_on_disk(&dir, 5, 0, &[("d", t + 2 * MINUTE)], &[("p", t)]);
+        let token = s.delete_reversible("d").unwrap();
+
+        assert_eq!(s.set_pin_persisted("p", false), Ok(false));
+        assert_eq!(history_ids(&s), ["p"]);
+        assert_eq!(picture_files_exist(&dir, "p"), (true, true));
+
+        s.undo_delete(&token).unwrap();
+        assert_eq!(history_ids(&s), ["d", "p"]);
+        let reloaded = Store::load(dir.clone());
+        assert_eq!(history_ids(&reloaded), ["d", "p"]);
+    }
+
+    /// The same, across a crash: the unpin's layers did not land, and the
+    /// restart decides again — with the delete still waiting in its journal.
+    #[test]
+    fn a_restart_weighs_an_unpin_against_a_delete_still_waiting_for_its_undo() {
+        let dir = test_dir();
+        let t = now_ms() - 30 * MINUTE;
+        let mut s = shelf_on_disk(
+            &dir,
+            5,
+            0,
+            &[("y", t + 5 * MINUTE), ("x", t + MINUTE)],
+            &[("r", t + 3 * MINUTE)],
+        );
+        s.delete_reversible("x").unwrap();
+        let blocker = dir.join("history.json.tmp");
+        fs::create_dir(&blocker).unwrap();
+        assert_eq!(s.set_pin_persisted("r", false), Ok(false));
+        assert_eq!(history_ids(&s), ["y", "r"]);
+
+        drop(s);
+        fs::remove_dir(&blocker).unwrap();
+        let reloaded = Store::load(dir.clone());
+
+        assert!(
+            reloaded.find("r").is_some(),
+            "what the user saw come back stays"
+        );
+        assert_eq!(picture_files_exist(&dir, "r"), (true, true));
+    }
+
+    /// Weighed again after the copy is taken back, a row older than all of
+    /// history is still not taken back — even with room for it now.
+    #[test]
+    fn a_double_failure_still_removes_a_row_older_than_all_of_history() {
+        let dir = test_dir();
+        let t = now_ms() - 30 * MINUTE;
+        let (p, h1, h2) = (t, t + MINUTE, t + 2 * MINUTE);
+        let mut s = shelf_on_disk(&dir, 3, 0, &[("h2", h2), ("h1", h1)], &[("p", p)]);
+        let blocker = dir.join("history.json.tmp");
+        let written = a_copy_that_will_not_land(&mut s, &blocker);
+        assert_eq!(s.set_pin_persisted("p", false), Ok(false));
+
+        assert!(s.settle_capture(written).is_err());
+        assert_eq!(history_ids(&s), ["h2", "h1"]);
+
+        fs::remove_dir(&blocker).unwrap();
+        drop(s);
+        let reloaded = Store::load(dir.clone());
+        assert_eq!(history_ids(&reloaded), ["h2", "h1"]);
+        assert!(reloaded.find("p").is_none());
+        assert_eq!(picture_files_exist(&dir, "p"), (false, false));
+        assert_eq!(picture_files_exist(&dir, "h1"), (true, true));
+        assert_eq!(picture_files_exist(&dir, "h2"), (true, true));
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -4664,19 +4889,28 @@ mod audit_tests {
 
     // --- H4 / RAFF-AUD-001 ------------------------------------------------
 
+    /// بقاعدة سلطان (2026-10-21) يُستبعد العنصر الأقدم من كل السجل عند إلغاء
+    /// تثبيته، ولا يُزاح لأجله عنصر أحدث. والرفض يعيد الطبقتين كما كانتا.
     #[test]
-    fn aud001_unpin_at_cap_keeps_item_or_refuses_without_side_effects() {
+    fn aud001_unpin_at_cap_removes_the_older_item_or_refuses_without_side_effects() {
         let dir = tmp_dir("aud001");
         let (mut s, pinned_id) = full_history_with_old_pinned(&dir);
         let before = (ids(&s.history), ids(&s.pinned));
-        match s.set_pin_persisted(&pinned_id, false) {
-            Ok(_) => assert!(s.find(&pinned_id).is_some(), "نجاح يجب ألا يفقد العنصر"),
-            Err(_) => assert_eq!(
-                (ids(&s.history), ids(&s.pinned)),
-                before,
-                "الرفض يجب أن يعيد الطبقتين كما كانتا"
-            ),
-        }
+        assert_eq!(s.set_pin_persisted(&pinned_id, false), Ok(false));
+        assert!(s.find(&pinned_id).is_none(), "أقدم من كل السجل: يُستبعد");
+        assert_eq!(ids(&s.history), before.0, "ولا يُزاح عنصر أحدث");
+        assert!(s.pinned.is_empty());
+
+        let dir = tmp_dir("aud001-refused");
+        let (mut s, pinned_id) = full_history_with_old_pinned(&dir);
+        let before = (ids(&s.history), ids(&s.pinned));
+        fs::create_dir(dir.join(PENDING_PIN_FILE)).unwrap();
+        assert!(s.set_pin_persisted(&pinned_id, false).is_err());
+        assert_eq!(
+            (ids(&s.history), ids(&s.pinned)),
+            before,
+            "الرفض يعيد الطبقتين كما كانتا"
+        );
         let _ = fs::remove_dir_all(dir);
     }
 
