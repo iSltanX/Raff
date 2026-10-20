@@ -31,18 +31,21 @@ let lastErrorFrom = 'check';
 // Two fixed heights, never a continuous per-pixel resize: the "compact" tier
 // (checking/uptodate/installed — no version box) fits Rust's initial
 // 280px build size exactly, so opening the window never jumps. "Expanded"
-// kicks in whenever the version/notes region can be present. This includes a
+// kicks in whenever the version/notes region is present. This includes a
 // download/install error: that state deliberately keeps the release context
 // visible above its error and retry action, so shrinking it back to 280px
-// would clip the bottom controls. A resize only fires when the tier actually
-// changes, so available→downloading→error remains one single grow.
+// would clip the bottom controls. A failed check or restart has no version
+// box — one line and a button — and stays compact. A resize only fires when
+// the tier actually changes, so available→downloading→error remains one
+// single grow.
 const COMPACT_HEIGHT = 280;
 const EXPANDED_HEIGHT = 430;
-const EXPANDED_STATES = new Set(['available', 'downloading', 'installing', 'error']);
+const EXPANDED_STATES = new Set(['available', 'downloading', 'installing']);
 let currentTier = 'compact'; // matches the window's built size — see commands.rs
 
-function resizeForState(state) {
-  const tier = EXPANDED_STATES.has(state) ? 'expanded' : 'compact';
+function resizeForState(state, data) {
+  const showsRelease = EXPANDED_STATES.has(state) || (state === 'error' && data.from === 'download');
+  const tier = showsRelease ? 'expanded' : 'compact';
   if (tier === currentTier) return;
   currentTier = tier;
   const tauriWindow = window.__TAURI__?.window;
@@ -76,7 +79,7 @@ function setProgress(percent) {
 }
 
 function render(state, data = {}) {
-  resizeForState(state);
+  resizeForState(state, data);
   updateWindowEl.setAttribute(
     'aria-busy',
     String(state === 'checking' || state === 'downloading' || state === 'installing')
