@@ -553,6 +553,10 @@ pub fn detect_kind(text: &str) -> ItemKind {
 /// leniently: every `"imageFile"` / `"thumbFile"` value that can still be
 /// recovered from the text counts. Keeping one file too many costs disk;
 /// keeping one too few destroys the images the copy exists to point at.
+///
+/// Leniently includes the encoding: a write cut short inside a two-byte
+/// Arabic letter leaves bytes that are not UTF-8, and the names around them
+/// (plain ASCII) are still worth every image they keep.
 fn referenced_by_recovery_copies(dir: &Path) -> std::collections::HashSet<String> {
     const KEYS: [&str; 2] = ["\"imageFile\"", "\"thumbFile\""];
     let mut found = std::collections::HashSet::new();
@@ -564,11 +568,12 @@ fn referenced_by_recovery_copies(dir: &Path) -> std::collections::HashSet<String
         if path.extension().and_then(|e| e.to_str()) != Some("corrupt") {
             continue;
         }
-        let Ok(text) = fs::read_to_string(&path) else {
+        let Ok(bytes) = fs::read(&path) else {
             continue;
         };
+        let text = String::from_utf8_lossy(&bytes);
         for key in KEYS {
-            let mut rest = text.as_str();
+            let mut rest = text.as_ref();
             while let Some(at) = rest.find(key) {
                 rest = &rest[at + key.len()..];
                 if let Some(name) = json_string_value(rest) {
@@ -2667,6 +2672,86 @@ mod tests {
             images.join("a.png").exists(),
             "the only metadata naming this image is the recovery copy"
         );
+    }
+
+    #[test]
+    fn a_recovery_copy_cut_inside_an_arabic_letter_still_keeps_its_images() {
+        // A write cut short by a power loss most often stops inside a two-byte
+        // Arabic letter, so the copy set aside is not valid UTF-8 at all. The
+        // image names in it are plain ASCII and must still count.
+        for layer in [HISTORY_FILE, PINNED_FILE] {
+            let dir = std::env::temp_dir().join(format!("raff-test-{}", uuid::Uuid::new_v4()));
+            let images = dir.join(IMAGES_DIR);
+            fs::create_dir_all(&images).unwrap();
+            fs::write(images.join("kept.png"), b"kept").unwrap();
+            fs::write(images.join("kept.thumb.png"), b"kept thumb").unwrap();
+            let mut cut = r#"[{"type":"image","imageFile":"kept.png","thumbFile":"kept.thumb.png","text":"صورة مرحب"#
+                .as_bytes()
+                .to_vec();
+            cut.push("ا".as_bytes()[0]);
+            fs::write(dir.join(layer), &cut).unwrap();
+
+            // First boot: the layer is set aside and collection is skipped.
+            let mut store = Store::load(dir.clone());
+            assert!(
+                dir.join(layer).with_extension("json.corrupt").exists(),
+                "{layer}: set aside"
+            );
+
+            // The ordinary save that heals the layer: a capture rewrites
+            // history, and pinning it rewrites pinned as well.
+            let result = store.capture(
+                ItemKind::Text,
+                "نصّ بعد الانقطاع".into(),
+                None,
+                None,
+                None,
+                None,
+                None,
+                ("Notes".into(), "com.apple.Notes".into()),
+            );
+            let store = std::sync::Mutex::new(store);
+            persist_capture(&store, result).unwrap();
+            let mut store = store.into_inner().unwrap();
+            if layer == PINNED_FILE {
+                let id = store.history[0].id.clone();
+                store.set_pin_persisted(&id, true).unwrap();
+            }
+            drop(store);
+
+            // Second boot: both layers parse, so orphan collection runs.
+            let store = Store::load(dir.clone());
+            assert!(!store.unreadable_shelf, "{layer}: healed by the save");
+            for name in ["kept.png", "kept.thumb.png"] {
+                assert!(
+                    images.join(name).exists(),
+                    "{layer}: {name} is named only by the recovery copy"
+                );
+            }
+
+            // And it holds across a further save and reload.
+            let mut store = store;
+            let result = store.capture(
+                ItemKind::Text,
+                "نسخة أخرى".into(),
+                None,
+                None,
+                None,
+                None,
+                None,
+                ("Notes".into(), "com.apple.Notes".into()),
+            );
+            let store = std::sync::Mutex::new(store);
+            persist_capture(&store, result).unwrap();
+            drop(store);
+            let _ = Store::load(dir.clone());
+            assert_eq!(fs::read(images.join("kept.png")).unwrap(), b"kept");
+            assert_eq!(
+                fs::read(images.join("kept.thumb.png")).unwrap(),
+                b"kept thumb"
+            );
+            let _ = fs::remove_dir_all(dir);
+        }
     }
 
     fn set_aside_contents(dir: &Path) -> Vec<Vec<u8>> {
