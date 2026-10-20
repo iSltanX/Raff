@@ -673,10 +673,12 @@ function renderCaptureStrip() {
   action.textContent = status.action.label;
   action.onclick = () => {
     action.disabled = true;
-    Promise.resolve(status.action.run()).finally(() => {
-      action.disabled = false;
-      searchEl.focus({ preventScroll: true });
-    });
+    Promise.resolve(status.action.run())
+      .catch((err) => deliverFeedback(errorMessage(err), { duration: PIN_TOAST_MS, kind: 'error' }))
+      .finally(() => {
+        action.disabled = false;
+        searchEl.focus({ preventScroll: true });
+      });
   };
 }
 
