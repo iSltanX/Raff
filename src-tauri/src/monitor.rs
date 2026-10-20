@@ -530,6 +530,61 @@ mod tests {
         );
     }
 
+    fn solid_png(w: u32, h: u32, rgba: [u8; 4]) -> Vec<u8> {
+        let pixels = image::RgbaImage::from_pixel(w, h, image::Rgba(rgba));
+        encode_png(&image::DynamicImage::ImageRgba8(pixels)).unwrap()
+    }
+
+    #[test]
+    fn a_pinned_image_without_a_fingerprint_keeps_its_own_picture() {
+        let dir = std::env::temp_dir().join(format!("raff-hashless-test-{}", uuid::Uuid::new_v4()));
+        let images = dir.join(crate::storage::IMAGES_DIR);
+        std::fs::create_dir_all(&images).unwrap();
+
+        // An older pinned row with no fingerprint, under the label every
+        // 100×100 image gets.
+        let original = solid_png(100, 100, [200, 30, 30, 255]);
+        std::fs::write(images.join("legacy.png"), &original).unwrap();
+        std::fs::write(
+            dir.join(crate::storage::PINNED_FILE),
+            r#"[{"id":"legacy","type":"image","text":"صورة 100×100","imageFile":"legacy.png","sourceAppBundleId":"com.apple.Preview","sourceApp":"Preview","createdAt":100,"isPinned":true,"pinnedOrder":0,"copyCount":1,"pasteCount":0,"lastUsedAt":100}]"#,
+        )
+        .unwrap();
+        let store = Mutex::new(Store::load(dir.clone()));
+
+        // A different picture of the same size, copied twice.
+        let other = solid_png(100, 100, [30, 30, 200, 255]);
+        assert!(capture_reading(&store, image_reading(other.clone())));
+        assert!(capture_reading(&store, image_reading(other.clone())));
+
+        let check = |store: &Store, when: &str| {
+            assert_eq!(store.pinned.len(), 1, "{when}");
+            assert_eq!(
+                store.pinned[0].image_file.as_deref(),
+                Some("legacy.png"),
+                "{when}: the pinned row still points at its own picture"
+            );
+            assert_eq!(
+                std::fs::read(images.join("legacy.png")).unwrap(),
+                original,
+                "{when}: and that picture is still on disk, unchanged"
+            );
+            assert_eq!(
+                store.history.len(),
+                1,
+                "{when}: the new picture is one row of its own"
+            );
+            let file = store.history[0].image_file.clone().unwrap();
+            assert_eq!(std::fs::read(images.join(file)).unwrap(), other, "{when}");
+        };
+        check(&store.lock().unwrap(), "after the copies");
+        drop(store);
+
+        // A clean load runs orphan collection: both files must still count.
+        check(&Store::load(dir.clone()), "after reload");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
     #[test]
     fn the_pixel_budget_is_decided_from_the_header_alone() {
         let side = (MAX_IMAGE_PIXELS as f64).sqrt() as u32 + 1_000;

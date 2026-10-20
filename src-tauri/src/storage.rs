@@ -356,9 +356,9 @@ pub fn content_hash(bytes: &[u8]) -> String {
 ///
 /// Every image whose file survives is re-fingerprinted from that file, so no
 /// duplicate is ever accepted as the price of the change. One whose file is
-/// gone loses its fingerprint instead of keeping an unverifiable value: `None`
-/// falls back to comparing text, where a stale hash would match nothing and
-/// block the row from ever healing.
+/// gone loses its fingerprint instead of keeping an unverifiable value. With
+/// none it matches no capture (`Store::same_content`): its label is shared by
+/// every image of its size, so it says nothing about the picture.
 fn migrate_image_hashes(items: &mut [ClipItem], images_dir: &Path) -> bool {
     let mut changed = false;
     for item in items.iter_mut() {
@@ -1044,12 +1044,17 @@ impl Store {
             .find(|i| i.id == id)
     }
 
+    /// Two images are the same only when their fingerprints are. An image's
+    /// text is a label every picture of that size shares («صورة 100×100»), so
+    /// letting it decide merged a row with no fingerprint into whatever image
+    /// of the same size came next — replacing a pinned picture with another.
     fn same_content(a: &ClipItem, kind: ItemKind, text: &str, hash: Option<&str>) -> bool {
         if a.kind != kind {
             return false;
         }
         match (a.hash.as_deref(), hash) {
             (Some(h1), Some(h2)) => h1 == h2,
+            _ if kind == ItemKind::Image => false,
             _ => a.text == text,
         }
     }
