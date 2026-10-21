@@ -363,7 +363,9 @@ function buildRow(item, index) {
   pinBtn.className = 'row-action pin-btn' + (item.isPinned ? ' is-pinned' : '');
   pinBtn.replaceChildren(createIcon(item.isPinned ? PIN_TOGGLE : PIN));
   pinBtn.title = item.isPinned ? 'إلغاء تثبيت العنصر' : 'تثبيت العنصر';
-  pinBtn.setAttribute('aria-label', pinBtn.title);
+  // A toggle: one name, its state in aria-pressed (ت٤٠). The tooltip may say
+  // what a click will do; the accessible name must not flip with the state.
+  pinBtn.setAttribute('aria-label', 'تثبيت العنصر');
   pinBtn.setAttribute('aria-pressed', String(item.isPinned));
   pinBtn.addEventListener('click', (e) => {
     e.stopPropagation();

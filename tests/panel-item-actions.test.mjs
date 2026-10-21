@@ -62,7 +62,9 @@ test('row actions and feedback are transactional, accessible, and deterministic'
     assert.equal(pin(dom, 'r1').getAttribute('aria-label'), 'تثبيت العنصر');
     assert.equal(pin(dom, 'r1').getAttribute('aria-pressed'), 'false');
     assert.equal(pin(dom, 'p1').title, 'إلغاء تثبيت العنصر');
-    assert.equal(pin(dom, 'p1').getAttribute('aria-label'), 'إلغاء تثبيت العنصر');
+    // A toggle keeps one name and says its state with aria-pressed (ت٤٠):
+    // «إلغاء تثبيت العنصر، مضغوط» would read as the opposite.
+    assert.equal(pin(dom, 'p1').getAttribute('aria-label'), 'تثبيت العنصر');
     assert.equal(pin(dom, 'p1').getAttribute('aria-pressed'), 'true');
     assert.equal(trash(dom, 'r2').tabIndex, 0);
     assert.equal(trash(dom, 'r2').title, 'حذف العنصر');
@@ -157,7 +159,7 @@ test('row actions and feedback are transactional, accessible, and deterministic'
     assert.equal(fake.getState().pinned[0].id, 'p1');
     assert.equal(fake.getState().pinned[0].isPinned, true);
     assert.equal(pin(dom, 'p1').getAttribute('aria-pressed'), 'true');
-    assert.equal(pin(dom, 'p1').getAttribute('aria-label'), 'إلغاء تثبيت العنصر');
+    assert.equal(pin(dom, 'p1').getAttribute('aria-label'), 'تثبيت العنصر');
   });
 
   await t.test('five-second expiry commits the delete and dismisses the one toast', async () => {
