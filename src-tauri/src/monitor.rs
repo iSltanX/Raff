@@ -246,7 +246,8 @@ enum Look {
 
 /// One poll of the pasteboard. `last` carries the change count across ticks.
 fn poll_once(app: &AppHandle, last: &mut isize) {
-    if macos::change_count() == *last {
+    let glance = macos::change_count();
+    if glance == *last {
         return;
     }
     let detected_at = Instant::now();
@@ -257,6 +258,7 @@ fn poll_once(app: &AppHandle, last: &mut isize) {
         &state.own_writes,
         &state.pause,
         rules,
+        glance,
         last,
     );
     if pause_ended {
@@ -272,12 +274,14 @@ fn poll_once(app: &AppHandle, last: &mut isize) {
 }
 
 /// Looks at the pasteboard once, with the gate held from the change count to
-/// the last byte read. Returns what it found, and whether a pause ended here.
+/// the last byte read. `glance` is the count `rules` were gathered for.
+/// Returns what it found, and whether a pause ended here.
 fn look(
     pb: &impl Pasteboard,
     own: &OwnWrites,
     pause: &Mutex<Pause>,
     rules: Rules,
+    glance: isize,
     last: &mut isize,
 ) -> (Look, bool) {
     let mut record = own.hold();
@@ -289,6 +293,13 @@ fn look(
     // user's own copy replaced.
     if record.take() == Some(count) {
         return (Look::Own, false);
+    }
+    // Another app's copy landed after the rules were gathered: the front app
+    // and the exclusions they hold may be about the change before it. The
+    // next poll looks at it afresh, so it is not marked as seen.
+    if count != glance {
+        *last = glance;
+        return (Look::Moved, false);
     }
 
     // Before the pasteboard is touched at all: a change skipped on purpose
@@ -652,10 +663,11 @@ mod tests {
         store: &Mutex<Store>,
         last: &mut isize,
     ) -> &'static str {
-        if board.change_count() == *last {
+        let glance = board.change_count();
+        if glance == *last {
             return "unchanged";
         }
-        match look(board, own, pause, rules(), last).0 {
+        match look(board, own, pause, rules(), glance, last).0 {
             Look::Own => "own",
             Look::Skipped => "skipped",
             Look::Moved => "moved",
@@ -896,6 +908,38 @@ mod tests {
         assert_eq!(last, 3);
         assert_eq!(poll(&board, &own, &pause, &store, &mut last), "captured");
         assert_eq!(texts(&store), ["ثانية"]);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// A copy landing between the poll's glance and its look: the rules were
+    /// gathered for the glance (who was in front, the exclusions), so the new
+    /// change is left to the next poll, which gathers them for it. Nothing is
+    /// read, and a pending skip is not spent on it.
+    #[test]
+    fn a_copy_landing_before_the_look_is_judged_by_its_own_rules() {
+        let (dir, store) = empty_store();
+        let board = FakeBoard::new(3, "أولى");
+        let own = OwnWrites::new();
+        let pause = Mutex::new(Pause::SkipNext);
+        let mut last = 2;
+        {
+            let b = board.clone();
+            // Read 2: the count the look decides on.
+            board.at_count_read(2, move || {
+                b.write("ثانية", None);
+            });
+        }
+        assert_eq!(poll(&board, &own, &pause, &store, &mut last), "moved");
+        assert_eq!(board.clip_reads.load(Ordering::SeqCst), 0);
+        assert_eq!(*pause.lock().unwrap(), Pause::SkipNext);
+        assert_eq!(last, 3, "the new change is not marked as seen");
+        // The next poll takes it up with its own rules: it is the user's next
+        // copy, so the skip goes to it, unread.
+        assert_eq!(poll(&board, &own, &pause, &store, &mut last), "skipped");
+        assert_eq!(board.clip_reads.load(Ordering::SeqCst), 0);
+        board.write("ثالثة", None);
+        assert_eq!(poll(&board, &own, &pause, &store, &mut last), "captured");
+        assert_eq!(texts(&store), ["ثالثة"]);
         let _ = std::fs::remove_dir_all(dir);
     }
 
