@@ -54,3 +54,14 @@ test('the README command table builds the frontend before the Rust tests', () =>
   assert.ok(build >= 0, 'README lists npm run build:frontend');
   assert.ok(build < cargo, 'and lists it before cargo test, which needs dist/');
 });
+
+test('the release, like CI, stops on a known Rust advisory before it builds', () => {
+  // A tag can be pushed long after the last CI run; advisories land in between
+  // (nine did between 2026-10-09 and 10-20, F-DEP).
+  for (const file of ['ci.yml', 'release.yml']) {
+    const steps = runSteps(read('.github', 'workflows', file));
+    const audit = steps.indexOf('cargo audit');
+    assert.ok(audit >= 0, `${file} runs cargo audit`);
+    assert.ok(audit < steps.findIndex((s) => s.startsWith('cargo test')), `${file}: before the Rust tests`);
+  }
+});

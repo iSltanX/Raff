@@ -56,6 +56,16 @@ jobs:
       - name: تثبيت الاعتماديات
         run: npm ci
 
+      # البوابة نفسها التي في ci.yml: إصدار من وسم لا يُبنى على ثغرة معروفة
+      # ظهرت بعد آخر دمج.
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
+
+      - name: ثغرات اعتمادات Rust
+        working-directory: src-tauri
+        run: cargo audit
+
       - name: اختبارات الواجهة
         run: npm test
 

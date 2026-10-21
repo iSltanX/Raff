@@ -13,7 +13,11 @@ tauri = { version = "2", features = ["macos-private-api"] }
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-autostart = "2"
 tauri-plugin-single-instance = "2"
-tauri-plugin-updater = "2"
+# Default features minus `zip`, which only unpacks Windows (zip) and Linux
+# (tar.gz) updates and pulls in `zip` 4, with three advisories (RUSTSEC-2026-
+# 0367..0369) and no patched 4.x. The macOS path unpacks Raff.app.tar.gz with
+# tar and flate2, which the plugin depends on for macOS regardless of features.
+tauri-plugin-updater = { version = "2", default-features = false, features = ["rustls-tls"] }
 tauri-nspanel = { git = "https://github.com/ahkohd/tauri-nspanel", branch = "v2" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
