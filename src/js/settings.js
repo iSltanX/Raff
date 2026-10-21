@@ -5,7 +5,7 @@
 
 import { api, on } from './store.js';
 import { arabicDigits, metaLine, hotkeyDisplay, hotkeyFromEvent, hotkeyRefusal } from './logic.js';
-import { ALERT, CAPTURE_OFF, CLEAR, PAUSE, createIcon } from './icons.js';
+import { ALERT, CAPTURE_OFF, CLEAR, KEYBOARD, PAUSE, createIcon } from './icons.js';
 
 // The native WKWebView menu is English ("Reload") — never shown in Raff.
 window.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -153,6 +153,7 @@ el('confirm-icon').replaceChildren(createIcon(ALERT));
 // ─── Load / sync ──────────────────────────────────────────────────────────
 
 let unreadableSettingsShown = false;
+let staleHotkeyShown = false;
 
 async function load() {
   const state = await api.getSettings();
@@ -167,6 +168,13 @@ async function load() {
   // being shown keep what they say.
   if (!recording) hotkeyChip.textContent = hotkeyDisplay(settings.hotkey);
   if (!hotkeySub.classList.contains('error')) showHotkeyHint();
+  // A hotkey saved before its kind was refused: said once, opened to, and
+  // left for the user to change (ت٣١).
+  const stale = renderHotkeyWarning(settings.hotkey);
+  if (stale && !staleHotkeyShown && !state.unreadableSettings) {
+    staleHotkeyShown = true;
+    activateSettingsTab(el('settings-tab-general'));
+  }
   setChecked('launch-toggle', settings.launchAtLogin);
   setChecked('capture-toggle', settings.captureEnabled);
   // The switch is the request; this row is the outcome — the same status, in
@@ -422,6 +430,31 @@ function flashHotkeyError(message) {
       });
     });
   }, 4000);
+}
+
+el('hotkey-warning-icon').replaceChildren(createIcon(KEYBOARD));
+el('hotkey-warning-action').addEventListener('click', () => hotkeyChip.click());
+
+/**
+ * Says when the saved hotkey is one رفّ now refuses, and returns whether it
+ * is. It still works, and still takes that command from every app; it is not
+ * changed here, and the backend only checks a hotkey that changes, so every
+ * other setting keeps saving (ت٢٢، ت٣١).
+ */
+function renderHotkeyWarning(accel) {
+  const box = el('hotkey-warning');
+  const refusal = hotkeyRefusal(accel);
+  box.hidden = !refusal;
+  if (!refusal) return false;
+  const keys = `\u2066${hotkeyDisplay(accel)}\u2069`;
+  const why =
+    refusal === 'shared'
+      ? `كل التطبيقات تستعمل ${keys}، ورفّ يأخذه منها ما دام يعمل.`
+      : `الاختصار ${keys} بلا ⌘ أو ⌥ أو ⌃، فيأخذ حرفًا من كل كتابة.`;
+  const text = `${why} لم يُغيَّر تلقائيًا، وبقية إعداداتك تُحفظ كالمعتاد.`;
+  const line = el('hotkey-warning-text');
+  if (line.textContent !== text) line.textContent = text;
+  return true;
 }
 
 /** The line under the badge back to its hint — written only if it changed,

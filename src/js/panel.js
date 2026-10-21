@@ -6,7 +6,7 @@
 // its content type, and the paired Figma actions sit at the trailing edge.
 
 import { api, on } from './store.js';
-import { arabicDigits, filterItems, relativeTimeAr } from './logic.js';
+import { arabicDigits, filterItems, hotkeyDisplay, hotkeyRefusal, relativeTimeAr } from './logic.js';
 import {
   SETTINGS,
   CLOSE,
@@ -22,6 +22,7 @@ import {
   MOVE_DOWN,
   PAUSE,
   CAPTURE_OFF,
+  KEYBOARD,
   contentTypeIcon,
   createIcon,
 } from './icons.js';
@@ -649,6 +650,28 @@ function captureStatus() {
   return null;
 }
 
+/**
+ * A hotkey saved before its kind was refused (ت٢٢) still opens رفّ — and so
+ * takes that command from every app. The panel is what it opens, so the
+ * panel says so, after anything about capture itself (ت٣١).
+ */
+function hotkeyStatus() {
+  const accel = state.settings?.hotkey;
+  const refusal = accel ? hotkeyRefusal(accel) : null;
+  if (!refusal) return null;
+  const keys = `\u2066${hotkeyDisplay(accel)}\u2069`;
+  return {
+    tone: 'warning',
+    icon: KEYBOARD,
+    text:
+      refusal === 'shared'
+        ? `اختصار رفّ ${keys} يأخذ هذا الأمر من كل التطبيقات`
+        : `اختصار رفّ ${keys} يأخذ حرفًا من كل كتابة`,
+    action: { label: 'تغيير', run: () => api.openSettings() },
+    blocking: false,
+  };
+}
+
 function enableCapture() {
   if (!state.settings) return Promise.resolve();
   return api
@@ -661,7 +684,7 @@ let shownStripText = null;
 
 function renderCaptureStrip() {
   if (!captureStripEl) return;
-  const status = phase === 'ready' ? captureStatus() : null;
+  const status = phase === 'ready' ? (captureStatus() ?? hotkeyStatus()) : null;
   if (!status) {
     captureStripEl.hidden = true;
     shownStripText = null;
