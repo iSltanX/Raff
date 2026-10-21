@@ -177,6 +177,7 @@ pub(crate) mod test_clipboard {
     use std::cell::{Cell, RefCell};
 
     thread_local! {
+        static AFTER_WRITE: RefCell<Option<Box<dyn FnOnce()>>> = const { RefCell::new(None) };
         static POLICY: Cell<Option<Clipboard>> = const { Cell::new(None) };
         static PASTEBOARD: RefCell<Option<Retained<NSPasteboard>>> = const { RefCell::new(None) };
         static TOUCHES: Cell<usize> = const { Cell::new(0) };
@@ -190,6 +191,18 @@ pub(crate) mod test_clipboard {
     pub(crate) fn pasteboard() -> Option<Retained<NSPasteboard>> {
         TOUCHES.set(TOUCHES.get() + 1);
         PASTEBOARD.with_borrow(Clone::clone)
+    }
+
+    /// Runs `f` inside the next `write_clip`, after its representations are
+    /// set and before it returns: another app writing at that moment.
+    pub(crate) fn after_write(f: impl FnOnce() + 'static) {
+        AFTER_WRITE.set(Some(Box::new(f)));
+    }
+
+    pub(crate) fn run_after_write() {
+        if let Some(f) = AFTER_WRITE.take() {
+            f();
+        }
     }
 
     pub(crate) fn note_cmd_v() {
@@ -276,8 +289,13 @@ pub fn read_clip() -> RawClip {
 }
 
 /// Writes the given representations to the general pasteboard and returns the
-/// new change count only when at least one requested representation was
-/// accepted (so callers never report copy/paste success for a rejected write).
+/// change count only when at least one requested representation was accepted
+/// (so callers never report copy/paste success for a rejected write).
+///
+/// The count is the one `clearContents` produced, not one read afterwards:
+/// setting representations does not move it, so a count read after the last
+/// one would name another app's write landing in between as رفّ's, and that
+/// copy would never be captured.
 pub fn write_clip(
     text: Option<&str>,
     html: Option<&str>,
@@ -285,7 +303,7 @@ pub fn write_clip(
     png: Option<&[u8]>,
 ) -> Option<isize> {
     let pb = general_pasteboard()?;
-    pb.clearContents();
+    let cleared = pb.clearContents();
     let mut accepted = false;
     if let Some(t) = text {
         accepted |= pb.setString_forType(&NSString::from_str(t), &NSString::from_str(TYPE_TEXT));
@@ -299,7 +317,9 @@ pub fn write_clip(
     if let Some(p) = png {
         accepted |= pb.setData_forType(Some(&NSData::with_bytes(p)), &NSString::from_str(TYPE_PNG));
     }
-    accepted.then(|| pb.changeCount())
+    #[cfg(test)]
+    test_clipboard::run_after_write();
+    accepted.then_some(cleared)
 }
 
 /// «اختر صورة…» in the report window: a native open panel limited to the
@@ -837,6 +857,33 @@ mod tests {
         });
         assert_eq!(read_back.as_deref(), Some("private text"));
         assert!(touched.0 >= 2 && touched.1 == 1, "{touched:?}");
+    }
+
+    /// F-OWNWRITE: the count a write reports is the one its own clear
+    /// produced. Another app writing after that clear is a change of its own,
+    /// which the capture loop must see as the user's — a count read after the
+    /// last representation would have named it رفّ's and hidden it.
+    #[test]
+    fn a_write_reports_the_count_its_own_clear_produced() {
+        test_clipboard::run(Clipboard::Real, || {
+            let ours =
+                write_clip(Some("رفّ"), Some("<b>رفّ</b>"), Some(b"{\\rtf1 x}"), None).unwrap();
+            assert_eq!(
+                change_count(),
+                ours,
+                "setting representations does not move the count"
+            );
+
+            test_clipboard::after_write(|| {
+                write_clip(Some("تطبيق آخر"), None, None, None).unwrap();
+            });
+            let ours = write_clip(Some("رفّ"), None, None, None).unwrap();
+            assert!(
+                change_count() > ours,
+                "the other app's write is not taken for رفّ's"
+            );
+            assert_eq!(read_clip().text.as_deref(), Some("تطبيق آخر"));
+        });
     }
 
     #[test]

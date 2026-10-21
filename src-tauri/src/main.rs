@@ -17,7 +17,7 @@ mod storage;
 mod tray;
 mod updater;
 
-use std::sync::atomic::{AtomicBool, AtomicI64};
+use std::sync::atomic::AtomicBool;
 use std::sync::{Mutex, MutexGuard};
 use std::time::{Duration, SystemTime};
 
@@ -26,8 +26,9 @@ use tauri_plugin_autostart::MacosLauncher;
 
 pub struct AppState {
     pub store: Mutex<storage::Store>,
-    /// Pasteboard change count produced by our own writes; the monitor skips it.
-    pub skip_change_count: AtomicI64,
+    /// رفّ's own pasteboard writes, which the monitor skips, and the gate a
+    /// write and a poll both pass through.
+    pub own_writes: monitor::OwnWrites,
     /// pid of the app that was frontmost when the panel opened (focus restore).
     pub previous_app: Mutex<Option<i32>>,
     /// False once the capture loop has given up. `capture_enabled` is a
@@ -376,7 +377,7 @@ fn main() {
             startup_trace::mark("theme_applied");
             app.manage(AppState {
                 store: Mutex::new(store),
-                skip_change_count: AtomicI64::new(-1),
+                own_writes: monitor::OwnWrites::new(),
                 previous_app: Mutex::new(None),
                 capture_alive: AtomicBool::new(true),
                 pause: Mutex::new(Pause::default()),

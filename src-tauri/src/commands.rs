@@ -204,8 +204,10 @@ pub async fn paste_item(app: AppHandle, id: String, plain: bool) -> Result<bool,
     result
 }
 
+/// Async, like `paste_item`: the write can wait out a poll's read and reads
+/// the picture file, neither of which belongs on the main thread.
 #[tauri::command]
-pub fn copy_item(app: AppHandle, id: String) -> Result<(), String> {
+pub async fn copy_item(app: AppHandle, id: String) -> Result<(), String> {
     let began = std::time::Instant::now();
     if macos::clipboard_inert() {
         crate::diagnostics::record("copy", "clipboard-off", began);

@@ -356,16 +356,15 @@ async fn send_to(endpoint: &str, body: &str, key: &str, timeout: Duration) -> Se
     }
 }
 
-/// Writes text to the clipboard the way رفّ writes everything it pastes: the
-/// change count is recorded so the capture loop skips رفّ's own write.
+/// Writes text to the clipboard the way رفّ writes everything it pastes:
+/// through the gate that records it, so the capture loop skips رفّ's own
+/// write. Blocking, so its commands run off the main thread.
 fn write_clipboard(app: &AppHandle, text: &str) -> Result<(), String> {
-    let count = crate::macos::write_clip(Some(text), None, None, None)
-        .ok_or_else(|| err::COPY_FAILED.to_string())?;
-    let state = app.state::<crate::AppState>();
-    state
-        .skip_change_count
-        .store(count as i64, std::sync::atomic::Ordering::SeqCst);
-    Ok(())
+    app.state::<crate::AppState>()
+        .own_writes
+        .write(|| crate::macos::write_clip(Some(text), None, None, None))
+        .map(|_| ())
+        .ok_or_else(|| err::COPY_FAILED.to_string())
 }
 
 // ─── Commands ─────────────────────────────────────────────────────────────
@@ -479,7 +478,7 @@ pub async fn report_copy(app: AppHandle, window: tauri::WebviewWindow) -> Result
 
 /// «نسخ الرقم» — `#id`, through the same skipped write.
 #[tauri::command]
-pub fn report_copy_number(
+pub async fn report_copy_number(
     app: AppHandle,
     window: tauri::WebviewWindow,
     id: u64,
