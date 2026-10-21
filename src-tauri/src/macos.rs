@@ -62,6 +62,7 @@ const TYPE_HTML: &str = "public.html";
 const TYPE_RTF: &str = "public.rtf";
 const TYPE_PNG: &str = "public.png";
 const TYPE_TIFF: &str = "public.tiff";
+const TYPE_JPEG: &str = "public.jpeg";
 const TYPE_FILE_URL: &str = "public.file-url";
 
 /// Rich representations larger than this are not stored (keeps the JSON store lean).
@@ -349,6 +350,9 @@ pub enum PastedImage {
     /// A file copied in Finder: its pasteboard image is the file's icon, not
     /// the picture, so it is not attached — «اختر صورة…» picks the file.
     File,
+    /// An image, but over the input ceiling (019): said so, rather than «no
+    /// image».
+    TooLarge,
     Nothing,
 }
 
@@ -367,14 +371,19 @@ pub fn read_image_for_report() -> PastedImage {
     if is_file {
         return PastedImage::File;
     }
-    [TYPE_PNG, TYPE_TIFF]
+    [TYPE_PNG, TYPE_TIFF, TYPE_JPEG]
         .iter()
         .find_map(|t| {
             pb.dataForType(&NSString::from_str(t))
-                .filter(|d| !d.is_empty() && d.len() <= crate::report_image::MAX_INPUT_BYTES)
-                .map(|d| d.to_vec())
+                .filter(|d| !d.is_empty())
         })
-        .map_or(PastedImage::Nothing, PastedImage::Image)
+        .map_or(PastedImage::Nothing, |d| {
+            if d.len() > crate::report_image::MAX_INPUT_BYTES {
+                PastedImage::TooLarge
+            } else {
+                PastedImage::Image(d.to_vec())
+            }
+        })
 }
 
 pub fn frontmost_app() -> FrontApp {
@@ -871,6 +880,35 @@ mod tests {
             Some((0, false, None, None, true, false)),
             "and every answer is the empty one"
         );
+    }
+
+    /// 019: a pasted picture is read whatever its type — JPEG too, which the
+    /// report accepts from a file — and one over the ceiling is said to be
+    /// too large, not missing.
+    #[test]
+    fn a_pasted_picture_is_read_as_jpeg_too_and_a_huge_one_is_too_large() {
+        let put = |kind: &str, bytes: &[u8]| {
+            let pb = test_clipboard::pasteboard().unwrap();
+            pb.clearContents();
+            assert!(pb.setData_forType(Some(&NSData::with_bytes(bytes)), &NSString::from_str(kind)));
+        };
+        test_clipboard::run(Clipboard::Real, || {
+            put("public.jpeg", b"\xff\xd8\xff jpeg");
+            assert!(
+                matches!(read_image_for_report(), PastedImage::Image(b) if b.starts_with(b"\xff\xd8")),
+                "jpeg"
+            );
+            put(
+                TYPE_PNG,
+                &vec![0u8; crate::report_image::MAX_INPUT_BYTES + 1],
+            );
+            assert!(
+                matches!(read_image_for_report(), PastedImage::TooLarge),
+                "over the ceiling"
+            );
+            put(TYPE_TEXT, b"just text");
+            assert!(matches!(read_image_for_report(), PastedImage::Nothing));
+        });
     }
 
     #[test]

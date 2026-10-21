@@ -212,7 +212,7 @@ fn freeze(
                 .ok_or(err::INVALID)?,
         ),
     };
-    let description = description.trim().to_string();
+    let description = trim_like_the_window(&description).to_string();
     let length = description.chars().count();
     if length == 0 || length > MAX_DESCRIPTION_CHARS {
         return Err(err::INVALID.into());
@@ -510,13 +510,20 @@ fn store_image(epoch: u64, prepared: Prepared) {
 
 /// A failed attach leaves no image behind: the window then says there is
 /// none, and a preview must never carry an earlier one it no longer shows.
-fn forget_image_on_error<T>(result: Result<T, String>) -> Result<T, String> {
+/// Only for the window it started in, like `store_image`: a late failure from
+/// a closed report must not take the image off the one open now (019).
+fn forget_image_on_error<T>(epoch: u64, result: Result<T, String>) -> Result<T, String> {
     if result.is_err() {
-        let mut session = lock();
+        forget_attach(&mut lock(), epoch);
+    }
+    result
+}
+
+fn forget_attach(session: &mut Session, epoch: u64) {
+    if session.epoch == epoch {
         session.image = None;
         session.frozen = None;
     }
-    result
 }
 
 /// «اختر صورة…» — a native open panel; the path never reaches the webview.
@@ -524,13 +531,26 @@ fn forget_image_on_error<T>(result: Result<T, String>) -> Result<T, String> {
 #[tauri::command]
 pub async fn report_pick_image(window: tauri::WebviewWindow) -> Result<Option<ImageMeta>, String> {
     crate::access::require(&window, "report_pick_image")?;
-    forget_image_on_error(pick_image().await)
+    let epoch = lock().epoch;
+    forget_image_on_error(epoch, pick_image().await)
+}
+
+/// Trims what the report window's `String.trim()` trims, so the count the
+/// window shows and the one checked here agree (019): JavaScript's set takes
+/// U+FEFF and leaves U+0085, Rust's `trim` the other way round.
+fn trim_like_the_window(text: &str) -> &str {
+    text.trim_matches(|c: char| (c.is_whitespace() && c != '\u{85}') || c == '\u{feff}')
 }
 
 /// Reads at most the input ceiling plus one byte from a regular file, so a
 /// special file or a symlink to one cannot feed an endless stream.
 fn read_capped(path: &std::path::Path) -> Result<Vec<u8>, report_image::ImageError> {
     use std::io::Read;
+    // Before opening: opening a named pipe waits for a writer (019).
+    let kind = std::fs::metadata(path).map_err(|_| report_image::ImageError::Unreadable)?;
+    if !kind.is_file() {
+        return Err(report_image::ImageError::Unreadable);
+    }
     let file = std::fs::File::open(path).map_err(|_| report_image::ImageError::Unreadable)?;
     let meta = file
         .metadata()
@@ -575,12 +595,16 @@ async fn pick_image() -> Result<Option<ImageMeta>, String> {
 #[tauri::command]
 pub async fn report_paste_image(window: tauri::WebviewWindow) -> Result<Option<ImageMeta>, String> {
     crate::access::require(&window, "report_paste_image")?;
+    let epoch = lock().epoch;
     let result = match crate::macos::read_image_for_report() {
         crate::macos::PastedImage::Image(bytes) => prepare_off_main(bytes, true).await.map(Some),
         crate::macos::PastedImage::File => Err(err::PASTED_FILE.into()),
+        crate::macos::PastedImage::TooLarge => {
+            Err(report_image::ImageError::TooLarge.code().to_string())
+        }
         crate::macos::PastedImage::Nothing => Ok(None),
     };
-    forget_image_on_error(result)
+    forget_image_on_error(epoch, result)
 }
 
 #[tauri::command]
@@ -774,6 +798,85 @@ mod tests {
                 .is_err(),
             "the body never reaches the host a redirect names"
         );
+    }
+
+    /// 019: a pick that started in a report window since closed fails late —
+    /// it must not take the image off the window open now.
+    #[test]
+    fn a_late_failure_from_a_closed_window_keeps_the_current_image() {
+        let image = Prepared {
+            mime: "image/png",
+            bytes: vec![7],
+            width: 1,
+            height: 1,
+            thumb: String::new(),
+        };
+        let mut session = Session {
+            epoch: 5,
+            image: Some(image),
+            ..Session::default()
+        };
+        forget_attach(&mut session, 4);
+        assert!(
+            session.image.is_some(),
+            "a failure from epoch 4 leaves epoch 5's image"
+        );
+        forget_attach(&mut session, 5);
+        assert!(session.image.is_none(), "its own failure still clears it");
+    }
+
+    /// 019: a named pipe picked as the image. Opening one for reading waits
+    /// for a writer, so the check that it is a regular file must come first.
+    #[test]
+    fn a_named_pipe_is_refused_without_waiting_for_a_writer() {
+        let dir = std::env::temp_dir().join(format!("raff-fifo-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let fifo = dir.join("picture.png");
+        assert!(std::process::Command::new("mkfifo")
+            .arg(&fifo)
+            .status()
+            .unwrap()
+            .success());
+        let (tx, rx) = std::sync::mpsc::channel();
+        let path = fifo.clone();
+        std::thread::spawn(move || {
+            let _ = tx.send(read_capped(&path).err());
+        });
+        let answer = rx.recv_timeout(Duration::from_secs(2));
+        if answer.is_err() {
+            // Unblock the reader stuck in `open`, so the thread can end.
+            let _ = std::fs::OpenOptions::new().write(true).open(&fifo);
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(answer, Ok(Some(report_image::ImageError::Unreadable)));
+    }
+
+    /// 019: what the window counts is what is checked here.
+    #[test]
+    fn the_description_is_trimmed_as_the_window_trims_it() {
+        let ok = |text: &str| {
+            freeze(
+                "bug",
+                None,
+                text,
+                diag(),
+                None,
+                "5.1.0".into(),
+                "15.4".into(),
+                ENDPOINT,
+            )
+            .is_ok()
+        };
+        let full = "ب".repeat(MAX_DESCRIPTION_CHARS);
+        assert!(
+            ok(&format!("\u{feff}{full}\u{feff}")),
+            "BOM is trimmed, as in the window"
+        );
+        assert!(
+            !ok(&format!("\u{85}{full}")),
+            "NEL is counted, as in the window"
+        );
+        assert!(!ok("\u{feff}"), "a lone BOM is empty");
     }
 
     #[test]
