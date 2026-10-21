@@ -224,13 +224,33 @@ permissionRetry.addEventListener('click', () => {
 // ─── Splash ───────────────────────────────────────────────────────────────
 
 // The mark and its line, over step 1 (already shown and focused beneath it).
-// It lifts by itself, or at once on the first key or click — which then does
-// nothing else, since nothing on it can be pressed.
+// It lifts by itself, or at once on the first key or press — which does
+// nothing else: the key is consumed (⌘ shortcuts excepted), and the click
+// that completes the press is swallowed, since the splash is click-through by
+// then and it would land on whatever lies beneath.
 const splash = el('splash');
-function liftSplash() {
+function swallowClick(e) {
+  e.preventDefault();
+  e.stopPropagation();
+}
+function liftSplash(e) {
+  if (splash.classList.contains('is-done')) return;
   splash.classList.add('is-done');
   window.removeEventListener('keydown', liftSplash, true);
   window.removeEventListener('pointerdown', liftSplash, true);
+  if (e?.type === 'pointerdown') {
+    window.addEventListener('click', swallowClick, { capture: true, once: true });
+    // A press that ends in no click (dragged off) must not eat the next one.
+    window.addEventListener(
+      'pointerup',
+      () => setTimeout(() => window.removeEventListener('click', swallowClick, true), 0),
+      { capture: true, once: true }
+    );
+  }
+  if (e?.type === 'keydown' && !e.metaKey && !e.ctrlKey) {
+    e.preventDefault();
+    e.stopPropagation();
+  }
 }
 window.addEventListener('keydown', liftSplash, true);
 window.addEventListener('pointerdown', liftSplash, true);

@@ -78,6 +78,26 @@ test('any key or click lifts it at once, without acting on anything else', async
   }
 });
 
+test('the click that lifts the splash does not land on the button beneath it', async () => {
+  const dom = await mount('splash-click-through');
+  const doc = dom.window.document;
+  const splash = doc.getElementById('splash');
+  // Pressed over «التالي»: the splash lifts on the press; the click that
+  // completes it is the same gesture, not a second one.
+  splash.dispatchEvent(new dom.window.MouseEvent('pointerdown', { bubbles: true }));
+  doc.getElementById('next').dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, cancelable: true }));
+  assert.equal(doc.getElementById('step-idea').hidden, false, 'still the first step');
+  doc.getElementById('next').dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, cancelable: true }));
+  assert.equal(doc.getElementById('step-open').hidden, false, 'the next click is an ordinary click');
+});
+
+test('the key that lifts the splash does nothing else', async () => {
+  const dom = await mount('splash-key-swallowed');
+  const press = new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
+  dom.window.document.getElementById('idea-title').dispatchEvent(press);
+  assert.equal(press.defaultPrevented, true);
+});
+
 test('a lifted splash is out of the way: hidden and click-through', () => {
   const done = firstrunCss.match(/\.splash\.is-done\s*\{([^}]*)\}/u)?.[1] ?? '';
   assert.match(done, /visibility:\s*hidden/u);

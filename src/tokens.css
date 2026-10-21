@@ -130,6 +130,9 @@
 :root[data-appearance='dark'] {
   color-scheme: dark;
 
+  /* Half the light wash: clay on the toast's button keeps 4.5:1. */
+  --inverse-wash: rgba(255, 255, 255, 0.06);
+
   --bg-window: #221e1b;
   --bg-canvas: #181411;
   --bg-raised: #2b2622;
@@ -316,5 +319,6 @@ bdi,
   *::after {
     transition-duration: 0ms !important;
     animation-duration: 0ms !important;
+    animation-iteration-count: 1 !important;
   }
 }

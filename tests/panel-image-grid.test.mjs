@@ -10,10 +10,11 @@ import { click, clickFilter, flush, minutesAgo, mountPanel, sampleItem } from '.
 const images = Array.from({ length: 7 }, (_, i) =>
   sampleItem(`img${i + 1}`, { type: 'image', text: `صورة ${i + 1}`, hasImage: true, createdAt: minutesAgo(i + 1) })
 );
+const pinnedImage = sampleItem('pimg', { type: 'image', text: 'صورة مثبّتة', hasImage: true, isPinned: true, pinnedOrder: 0, createdAt: minutesAgo(30) });
 
 test('panel: the Images filter is a keyboard-navigable grid of cards', async (t) => {
   const { dom, fake } = await mountPanel({
-    pinned: [],
+    pinned: [pinnedImage],
     history: [sampleItem('t1', { createdAt: minutesAgo(0) }), ...images],
     settings: { captureEnabled: true, hotkey: 'shift+super+v' },
     axTrusted: true,
@@ -33,7 +34,7 @@ test('panel: the Images filter is a keyboard-navigable grid of cards', async (t)
     clickFilter(dom, 'image');
     assert.equal(list.classList.contains('is-grid'), true);
     const cards = [...doc.querySelectorAll('#list .row')];
-    assert.equal(cards.length, 7);
+    assert.equal(cards.length, 8);
     for (const card of cards) {
       assert.ok(card.classList.contains('is-card'));
       assert.equal(card.getAttribute('role'), 'row', 'the same accessible list');
@@ -41,7 +42,10 @@ test('panel: the Images filter is a keyboard-navigable grid of cards', async (t)
       assert.ok(card.querySelector('.card-foot .row-time'), 'its time');
       assert.ok(card.querySelector('.card-foot .row-kind'), 'its kind');
       assert.equal(card.querySelector('.row-actions'), null, 'no buttons on a card (Figma Item Card)');
+      assert.equal(card.querySelector('.row-time').closest('[role="gridcell"]') !== null, true, 'its time is in a cell');
     }
+    const pinned = doc.querySelector('#list .row[data-id="pimg"]');
+    assert.match(pinned.textContent, /مثبّت/u, 'a pinned picture says so to a screen reader, not only with a flag');
   });
 
   await t.test('arrows move across and down the grid', () => {
@@ -58,6 +62,35 @@ test('panel: the Images filter is a keyboard-navigable grid of cards', async (t)
     assert.equal(selected(), 'img1', '↑ is one row up');
     key({ key: 'ArrowUp' });
     assert.equal(selected(), 'img1', 'and stops at the top');
+  });
+
+  await t.test('with a query typed, ←/→ still cross the grid from the end of the text', async () => {
+    const search = doc.getElementById('search');
+    search.focus();
+    search.value = 'صورة';
+    search.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    await flush(4);
+    search.setSelectionRange(search.value.length, search.value.length);
+    const first = selected();
+    const press = new dom.window.KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true, cancelable: true });
+    search.dispatchEvent(press);
+    assert.equal(press.defaultPrevented, true, 'the caret has nowhere to go: the grid takes it');
+    assert.notEqual(selected(), first, 'the next card');
+    search.setSelectionRange(1, 1);
+    const inText = new dom.window.KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true, cancelable: true });
+    search.dispatchEvent(inText);
+    assert.equal(inText.defaultPrevented, false, 'inside the text, the caret moves');
+    search.value = '';
+    search.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    await flush(4);
+    search.blur();
+  });
+
+  await t.test('a picture whose file is gone says so on its card', async () => {
+    const card = doc.querySelector('#list .row[data-id="img1"]');
+    const missing = card.querySelector('.preview-missing');
+    assert.ok(missing, 'the card has the words');
+    assert.equal(missing.textContent, 'الصورة غير متاحة');
   });
 
   await t.test('⌘2 and a click choose a card exactly as they choose a row', async () => {

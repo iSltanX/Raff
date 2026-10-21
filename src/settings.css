@@ -113,6 +113,16 @@ body {
   outline: none;
 }
 
+.settings-page:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+
+/* The stale-hotkey warning under its card (a shared .callout). */
+.settings-rows + .callout {
+  margin-top: var(--space-8);
+}
+
 .page-heading {
   display: none;
 }

@@ -46,10 +46,16 @@ test('panel: the preview opens with intent, previews only, and closes in order',
   const shows = () => preview.dataset.id ?? null;
   const pointer = (el, type, init = {}) =>
     el.dispatchEvent(new win.MouseEvent(type, { bubbles: type !== 'mouseenter' && type !== 'mouseleave', cancelable: true, clientX: 100, clientY: 100, ...init }));
-  const hover = (el, init) => {
-    pointer(el, 'mouseover', init);
-    pointer(el, 'mousemove', init);
+  // A real pointer arrives somewhere new each time; content that moves under
+  // a pointer that has not moved reports the same point again.
+  // Arriving on an item and settling a few points further in, as a hand does.
+  let travelled = 0;
+  const hover = (el) => {
+    travelled += 10;
+    pointer(el, 'mouseover', { clientX: 100 + travelled, clientY: 100 });
+    pointer(el, 'mousemove', { clientX: 105 + travelled, clientY: 100 });
   };
+  const lastPoint = () => ({ clientX: 105 + travelled, clientY: 100 });
   const key = (init) => win.dispatchEvent(new win.KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init }));
   const leavePanel = () => pointer(doc.getElementById('panel'), 'mouseout', { relatedTarget: doc.body });
 
@@ -157,6 +163,7 @@ test('panel: the preview opens with intent, previews only, and closes in order',
     await flush(4);
     assert.equal(isOpen(), true);
     assert.equal(shows(), 'a');
+    assert.match(doc.getElementById('preview-announcer').textContent, /معاينة/u, 'a screen reader hears it opened');
     key({ key: 'ArrowDown' });
     await flush(2);
     assert.equal(shows(), 'b', 'follows the selection');
@@ -185,6 +192,61 @@ test('panel: the preview opens with intent, previews only, and closes in order',
     await flush(4);
   });
 
+  await t.test('the keys the preview shows act on the item it shows', async () => {
+    for (let i = 0; i < 5; i += 1) key({ key: 'ArrowUp' });
+    assert.equal(doc.querySelector('#list .row.selected')?.dataset.id, 'a', 'a is selected');
+    hover(row('c'));
+    await wait(DWELL + 80);
+    await flush(4);
+    assert.equal(shows(), 'c', 'c is previewed');
+    key({ key: 'c', code: 'KeyC', metaKey: true });
+    await flush(4);
+    assert.deepEqual(fake.invocationArgs('copy_item').at(-1), { id: 'c' }, '⌘C copies what the preview shows');
+    assert.equal(doc.querySelector('#list .row.selected')?.dataset.id, 'c', 'and the selection follows it');
+    key({ key: 'Enter' });
+    await flush(4);
+    assert.equal(fake.invocationArgs('paste_item').at(-1)?.id, 'c', '↵ pastes it, not the row selected before');
+    key({ key: 'Escape' });
+    await flush(4);
+  });
+
+  await t.test('content moving under a still pointer is not hover, and Esc sticks', async () => {
+    assert.equal(isOpen(), false);
+    // The list re-renders under the pointer: the same point, another row.
+    pointer(row('b'), 'mouseover', lastPoint());
+    pointer(row('b'), 'mousemove', lastPoint());
+    await wait(DWELL + 80);
+    await flush(4);
+    assert.equal(isOpen(), false, 'rows moving under a parked pointer open nothing');
+
+    hover(row('a'));
+    await wait(DWELL + 80);
+    await flush(4);
+    assert.equal(isOpen(), true);
+    key({ key: 'Escape' });
+    await flush(4);
+    const jitter = { clientX: lastPoint().clientX + 2, clientY: 101 };
+    pointer(row('a'), 'mouseover', jitter);
+    pointer(row('a'), 'mousemove', jitter);
+    await wait(DWELL + 80);
+    await flush(4);
+    assert.equal(isOpen(), false, 'a jitter does not undo Esc');
+  });
+
+  await t.test('holding Space does not flicker the preview', async () => {
+    key({ key: 'ArrowDown' });
+    key({ key: ' ', code: 'Space' });
+    await flush(4);
+    assert.equal(isOpen(), true);
+    const repeat = new win.KeyboardEvent('keydown', { key: ' ', code: 'Space', repeat: true, bubbles: true, cancelable: true });
+    win.dispatchEvent(repeat);
+    await flush(4);
+    assert.equal(isOpen(), true, 'a repeat is not a second press');
+    assert.equal(repeat.defaultPrevented, true, 'and types no space');
+    key({ key: 'Escape' });
+    await flush(4);
+  });
+
   await t.test('it previews cards in the Images grid, picture included', async () => {
     doc.querySelector('#filters .segment[data-filter="image"]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
     await flush(4);
@@ -207,12 +269,12 @@ test('panel: the preview opens with intent, previews only, and closes in order',
     const first = doc.querySelector('#list .row');
     // WebKit re-sends the pointer where it already is when content changes
     // under it; that is not a person resting on a row.
-    hover(first, { clientX: 300, clientY: 140 });
+    pointer(first, 'mouseover', { clientX: 300, clientY: 140 });
+    pointer(first, 'mousemove', { clientX: 301, clientY: 140 });
     await wait(DWELL + 80);
     await flush(4);
     assert.equal(isOpen(), false, 'appearing under the pointer is not intent');
-    hover(first, { clientX: 312, clientY: 141 });
-    hover(first, { clientX: 312, clientY: 141 });
+    hover(first);
     await wait(DWELL + 80);
     await flush(6);
     assert.equal(isOpen(), true, 'once it moves and rests, it previews');
@@ -229,5 +291,9 @@ test('panel: the preview opens with intent, previews only, and closes in order',
     await flush(6);
     assert.equal(isOpen(), false);
     assert.equal(html.dataset.preview, undefined);
+    key({ key: 'y', code: 'KeyY', metaKey: true });
+    await flush(6);
+    assert.equal(isOpen(), false);
+    assert.match(doc.getElementById('toast-message').textContent, /لا متّسع للمعاينة/u, 'asked by a key, it says why not');
   });
 });

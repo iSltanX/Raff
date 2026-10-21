@@ -95,6 +95,52 @@ test('every window draws its own thin, flat scroll bar', () => {
   }
 });
 
+test('findings of the independent UI review stay fixed', () => {
+  // The stale-hotkey warning is a .callout: Settings must load controls.css.
+  assert.match(read('src/settings.html'), /href="controls\.css"/u);
+  // «مثبّت» shows four row actions (move ↑↓, pin, delete): 4 × 28 + 3 × 2.
+  assert.match(read('src/panel.css'), /\.row\.has-reorder \.row-time\s*\{[^}]*min-width:\s*118px;/u);
+  assert.match(read('src/js/panel.js'), /row\.classList\.add\('has-reorder'\)/u);
+  // Reduced motion: an install with no progress must not read as a fixed 30%.
+  assert.match(
+    read('src/update.css'),
+    /@media \(prefers-reduced-motion: reduce\)\s*\{\s*\.update-bar\.indeterminate \.update-bar-fill\s*\{[^}]*width:\s*100%;[^}]*animation:\s*none;/u
+  );
+  // A settings page that takes the focus shows it.
+  assert.match(read('src/settings.css'), /\.settings-page:focus-visible\s*\{[^}]*outline:\s*2px solid var\(--focus\);/u);
+});
+
+test('the preview geometry agrees across Rust, CSS and the browser mock', () => {
+  // 340pt preview + 16pt gap = the 356pt the window widens by; the panel
+  // keeps its 460, so the preview starts 476 from the panel's own edge.
+  const extra = Number(read('src-tauri/src/panel.rs').match(/const PREVIEW_EXTRA: f64 = ([\d.]+);/u)[1]);
+  const css = read('src/panel.css');
+  const width = Number(block(css, '.preview-pane').match(/width:\s*(\d+)px;/u)[1]);
+  const offset = Number(css.match(/html\[data-preview='left'\] \.preview-pane\s*\{\s*right:\s*(\d+)px;/u)[1]);
+  const panel = Number(css.match(/html\[data-preview\] \.panel\s*\{[^}]*width:\s*(\d+)px;/u)[1]);
+  assert.equal(panel, 460);
+  assert.equal(extra, width + 16, 'the window widens by the preview and its gap');
+  assert.equal(offset, panel + 16, 'the preview sits one gap beyond the panel');
+  assert.match(read('src/js/mock.js'), new RegExp(`innerWidth >= ${panel + extra}`, 'u'));
+});
+
+test('the toast action stays legible on its washed button in both appearances', () => {
+  const tokens = read('src/tokens.css');
+  const rgba = (value) => {
+    if (value.startsWith('#')) return [1, 3, 5].map((i) => parseInt(value.slice(i, i + 2), 16)).concat(1);
+    return value.match(/[\d.]+/gu).map(Number);
+  };
+  const toHex = (rgb) => `#${rgb.map((c) => Math.round(c).toString(16).padStart(2, '0')).join('')}`;
+  for (const scope of [':root', ":root[data-appearance='dark']"]) {
+    const pick = (name) => token(tokens, scope, name) ?? token(tokens, ':root', name);
+    const [r, g, b, a] = rgba(pick('--inverse-wash'));
+    const base = rgba(pick('--bg-inverse'));
+    const button = toHex([r, g, b].map((c, i) => c * a + base[i] * (1 - a)));
+    const ratio = contrast(pick('--accent-on-inverse'), button);
+    assert.ok(ratio >= 4.5, `${scope}: ${ratio.toFixed(2)}:1`);
+  }
+});
+
 test('reading text keeps AA contrast on its surfaces in Light and Dark', () => {
   const tokens = read('src/tokens.css');
   for (const scope of [':root', ":root[data-appearance='dark']"]) {

@@ -49,6 +49,10 @@ body {
   color: var(--danger-ink);
 }
 
+.update-status {
+  overflow-wrap: anywhere;
+}
+
 .update-sub {
   font-size: var(--text-small);
   line-height: var(--line-body);
@@ -121,6 +125,16 @@ body {
   }
   to {
     transform: translateX(-340%);
+  }
+}
+
+/* Without motion, a bar that cannot say how far it is fills, quietly —
+   never a fixed 30% that would read as progress. */
+@media (prefers-reduced-motion: reduce) {
+  .update-bar.indeterminate .update-bar-fill {
+    width: 100%;
+    opacity: 0.4;
+    animation: none;
   }
 }
 

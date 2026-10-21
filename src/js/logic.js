@@ -7,17 +7,6 @@ export function arabicDigits(value) {
   return String(value).replace(/[0-9]/g, (d) => ARABIC_DIGITS[Number(d)]);
 }
 
-/** Strips Arabic diacritics (tashkeel) and tatweel, folds Arabic-Indic digits
- *  to Western, and folds the two spellings people actually disagree about —
- *  forgiving search in both directions.
- *
- *  This is the search normalizer and nothing else: stored and displayed text
- *  keeps every letter the user copied.
- *
- *  The fold is deliberately two rules and stays two. Taa marbuta against haa
- *  is the obvious next candidate and is left out on purpose: it buys a
- *  handful of spelling slips and pays for them in false matches on every
- *  feminine noun. */
 /**
  * A count with its noun, as Arabic counts: one and two have their own forms,
  * three to ten take the plural, eleven and up the singular accusative.
@@ -31,6 +20,17 @@ export function arabicCount(n, [one, two, few, many]) {
   return `${arabicDigits(n)} ${mod >= 3 && mod <= 10 ? few : many}`;
 }
 
+/** Strips Arabic diacritics (tashkeel) and tatweel, folds Arabic-Indic digits
+ *  to Western, and folds the two spellings people actually disagree about —
+ *  forgiving search in both directions.
+ *
+ *  This is the search normalizer and nothing else: stored and displayed text
+ *  keeps every letter the user copied.
+ *
+ *  The fold is deliberately two rules and stays two. Taa marbuta against haa
+ *  is the obvious next candidate and is left out on purpose: it buys a
+ *  handful of spelling slips and pays for them in false matches on every
+ *  feminine noun. */
 export function normalizeArabic(s) {
   return s
     .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660))

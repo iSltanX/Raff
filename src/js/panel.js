@@ -379,6 +379,8 @@ function buildRow(item, index) {
   // list they are marked in place inside one timeline, and a timeline is not
   // something to rearrange.
   if (item.isPinned && filter === 'pinned') {
+    // Four actions float over the time slot here, not two: reserve their room.
+    row.classList.add('has-reorder');
     const shelf = pinnedShelfIds();
     const at = shelf.indexOf(item.id);
     actions.prepend(
@@ -460,7 +462,10 @@ function buildCard(row, item, index) {
   const media = document.createElement('div');
   media.className = 'card-media';
   media.setAttribute('role', 'gridcell');
-  media.append(buildThumb(row, item));
+  const missing = document.createElement('span');
+  missing.className = 'preview-missing';
+  missing.textContent = 'الصورة غير متاحة';
+  media.append(buildThumb(row, item), missing);
   if (index < QUICK_SLOTS) {
     const slot = document.createElement('kbd');
     slot.className = 'row-index';
@@ -473,7 +478,15 @@ function buildCard(row, item, index) {
   foot.className = 'card-foot';
   const time = document.createElement('span');
   time.className = 'row-time';
+  time.setAttribute('role', 'gridcell');
   time.textContent = relativeTimeAr(item.createdAt);
+  if (item.isPinned) {
+    // The flag is drawn for the eye; this says it to a screen reader.
+    const pinned = document.createElement('span');
+    pinned.className = 'sr-only';
+    pinned.textContent = 'مثبّت، ';
+    time.prepend(pinned);
+  }
   const kind = document.createElement('span');
   kind.className = 'row-kind';
   kind.setAttribute('role', 'gridcell');
@@ -1415,6 +1428,12 @@ function paste(id, plain) {
     .catch((err) => showToast(errorMessage(err), PIN_TOAST_MS, 'error'));
 }
 
+/** The search caret sits after the last character (or the field is empty). */
+function caretAtEnd() {
+  const end = searchEl.value.length;
+  return searchEl.selectionStart === end && searchEl.selectionEnd === end;
+}
+
 function copyItem(id) {
   api
     .copyItem(id)
@@ -1703,6 +1722,7 @@ const previewSizeEl = document.getElementById('preview-size');
 const previewBodyEl = document.getElementById('preview-body');
 const previewNotesEl = document.getElementById('preview-notes');
 const previewPinLabelEl = document.getElementById('preview-pin-label');
+const previewAnnouncerEl = document.getElementById('preview-announcer');
 const PREVIEW_TEXT_LIMIT = 1000; // what Rust sends of a long text (PREVIEW_MAX_CHARS)
 const GRID_COLUMNS = 3;
 
@@ -1736,6 +1756,8 @@ async function applyPreview() {
     if (previewWant !== want) return; // superseded while measuring
     if (side !== 'left' && side !== 'right') {
       previewWant = null; // no room beside the panel on this screen
+      // Asked for by a key or a right-click: say why nothing happened.
+      if (want.mode === 'held') showToast('لا متّسع للمعاينة بجانب اللوحة على هذه الشاشة');
       return;
     }
     // The panel is pinned to its edge before the window widens away from it.
@@ -1743,10 +1765,19 @@ async function applyPreview() {
     previewSide = side;
     fillPreview(item);
     previewEl.hidden = false;
+    // Keys keep the focus in the search, so a screen reader hears it opened.
+    if (want.mode === 'held') announcePreview(`معاينة ${previewKindEl.textContent} — Esc يغلقها`);
     await api.setPanelPreview(side);
     return;
   }
   fillPreview(item);
+}
+
+function announcePreview(message) {
+  previewAnnouncerEl.textContent = '';
+  queueMicrotask(() => {
+    previewAnnouncerEl.textContent = message;
+  });
 }
 
 async function closePreviewWindow() {
@@ -1756,6 +1787,21 @@ async function closePreviewWindow() {
   delete previewEl.dataset.id;
   await api.setPanelPreview(null);
   if (!previewSide) delete document.documentElement.dataset.preview;
+}
+
+/** Closed by Esc, Space or ⌘Y: hover may not reopen it until the pointer moves. */
+function closePreviewByHand() {
+  hoverIntent.cancel();
+  disarmHover();
+  requestPreview(null);
+}
+
+/** Enter (⌥ for plain), ⌘C, ⌥P and ⌘⌫ — the keys that act on one item. */
+function actsOnItem(e) {
+  if (e.ctrlKey || e.shiftKey) return false;
+  if (e.key === 'Enter' && !e.metaKey) return true;
+  if (e.metaKey && !e.altKey && (e.code === 'KeyC' || e.key === 'Backspace')) return true;
+  return e.altKey && !e.metaKey && e.code === 'KeyP';
 }
 
 /** The panel was hidden, and Rust narrowed its window with it. */
@@ -1771,13 +1817,14 @@ function resetPreview() {
 
 function togglePreviewFromKeys() {
   if (previewWant) {
-    requestPreview(null);
+    closePreviewByHand();
     return;
   }
   if (!selectedId && visible[0]) setSelection(visible[0].id);
   if (selectedId) requestPreview({ id: selectedId, mode: 'held' });
 }
 
+let previewBodyText = null;
 const CHARS = ['حرف واحد', 'حرفان', 'أحرف', 'حرفًا'];
 const TIMES = ['مرة', 'مرتين', 'مرات', 'مرة'];
 const DAYS = ['يوم', 'يومين', 'أيام', 'يومًا'];
@@ -1801,7 +1848,11 @@ function fillPreview(item) {
       ? `أكثر من ${arabicDigits(PREVIEW_TEXT_LIMIT)} حرف`
       : arabicCount(chars, CHARS);
 
-  if (!sameItem || item.type !== 'image') previewBodyEl.replaceChildren(previewContent(item));
+  // Re-rendering the list refills the preview; rebuild only what changed.
+  if (!sameItem || previewBodyText !== item.text) {
+    previewBodyText = item.text;
+    previewBodyEl.replaceChildren(previewContent(item));
+  }
   previewBodyEl.scrollTop = sameItem ? previewBodyEl.scrollTop : 0;
 
   const notes = [];
@@ -1827,6 +1878,17 @@ function fillPreview(item) {
   previewPinLabelEl.textContent = item.isPinned ? 'إلغاء التثبيت' : 'تثبيت';
 }
 
+/** Originals already fetched for the preview, the latest few. */
+const fullImages = new Map();
+const FULL_IMAGE_CACHE = 4;
+const FULL_IMAGE_SETTLE_MS = 150;
+
+function rememberFullImage(id, url) {
+  fullImages.delete(id);
+  fullImages.set(id, url);
+  while (fullImages.size > FULL_IMAGE_CACHE) fullImages.delete(fullImages.keys().next().value);
+}
+
 function previewContent(item) {
   if (item.type === 'image') {
     const frame = document.createElement('div');
@@ -1837,13 +1899,31 @@ function previewContent(item) {
     const show = (src) => {
       if (src && previewEl.dataset.id === item.id) img.src = src;
     };
+    img.addEventListener('error', () => {
+      const missing = document.createElement('p');
+      missing.className = 'preview-missing-note';
+      missing.textContent = 'الصورة غير متاحة';
+      frame.replaceChildren(missing);
+    });
     // The thumbnail at once if the list has it, then the original (sharper
-    // at 308pt) in its place.
-    if (thumbs.has(item.id)) show(thumbs.get(item.id));
-    api
-      .getFullImage(item.id)
-      .then(show)
-      .catch((err) => diag('preview:image-failed', err));
+    // at 308pt) in its place — fetched only once the preview has settled on
+    // this picture, and kept for the next few.
+    if (fullImages.has(item.id)) {
+      show(fullImages.get(item.id));
+    } else {
+      if (thumbs.has(item.id)) show(thumbs.get(item.id));
+      setTimeout(() => {
+        if (previewEl.dataset.id !== item.id) return; // moved on
+        api
+          .getFullImage(item.id)
+          .then((url) => {
+            if (!url) return;
+            rememberFullImage(item.id, url);
+            show(url);
+          })
+          .catch((err) => diag('preview:image-failed', err));
+      }, FULL_IMAGE_SETTLE_MS);
+    }
     frame.append(img);
     return frame;
   }
@@ -1904,9 +1984,21 @@ function disarmHover() {
   armedFrom = null;
 }
 
+// Rows that move under a parked pointer (a keystroke re-rendering the list,
+// an arrow scrolling it) are reported at the point the pointer already had;
+// only a new point is someone pointing.
+let lastPointer = null;
+
 function onPointer(e) {
   const target = e.target;
   if (!target?.closest) return;
+  const point = { x: e.clientX, y: e.clientY };
+  const still = lastPointer && lastPointer.x === point.x && lastPointer.y === point.y;
+  lastPointer = point;
+  if (still) {
+    if (previewEl.contains(target)) hoverIntent.hold();
+    return;
+  }
   if (!hoverArmed) {
     if (!armedFrom) armedFrom = { x: e.clientX, y: e.clientY };
     if (Math.hypot(e.clientX - armedFrom.x, e.clientY - armedFrom.y) < 4) return;
@@ -1944,21 +2036,28 @@ window.addEventListener('keydown', (e) => {
     setQuickSlotsVisible(true);
     return;
   }
-  // Esc closes the preview before it closes anything else.
+  // Esc closes the preview before it closes anything else — and it stays
+  // closed: a pointer still resting on the row has to move to ask again.
   if (e.key === 'Escape' && previewWant) {
     e.preventDefault();
-    requestPreview(null);
+    closePreviewByHand();
     return;
   }
   // ⌘Y toggles the preview of the selection (Quick Look's key); so does Space
-  // while there is nothing typed — with a query, Space is a space.
+  // while there is nothing typed — with a query, Space is a space. A held key
+  // repeats; it is still one press.
   const previewKey =
     (e.metaKey && !e.altKey && !e.ctrlKey && !e.shiftKey && e.code === 'KeyY') ||
     (e.key === ' ' && !e.metaKey && !e.altKey && !e.ctrlKey && !query && !isIndependentControl(e.target));
   if (previewKey) {
     e.preventDefault();
-    togglePreviewFromKeys();
+    if (!e.repeat) togglePreviewFromKeys();
     return;
+  }
+  // The keys the preview shows (↵ ⌥↵ ⌘C ⌥P ⌘⌫) act on the item it shows: an
+  // item previewed by hover or a right-click becomes the selection first.
+  if (previewWant && previewWant.id !== selectedId && actsOnItem(e)) {
+    setSelection(previewWant.id);
   }
   if (e.metaKey && !e.ctrlKey && !e.shiftKey && /^Digit[1-9]$/.test(e.code)) {
     const item = visible[Number(e.code.slice(5)) - 1];
@@ -2050,8 +2149,8 @@ window.addEventListener('keydown', (e) => {
     case 'ArrowLeft':
     case 'ArrowRight':
       // Across the grid; RTL, so ← is the next card. A typed query keeps its
-      // caret.
-      if (!isGrid() || (isWritable(document.activeElement) && searchEl.value)) return;
+      // caret, except at the end of the text, where it has nowhere to go.
+      if (!isGrid() || (isWritable(document.activeElement) && !caretAtEnd())) return;
       e.preventDefault();
       moveSelection(e.key === 'ArrowLeft' ? 1 : -1);
       return;
