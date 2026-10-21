@@ -1346,8 +1346,11 @@ function deleteItem(id, { restoreFocus = false } = {}) {
     try {
       const receipt = await api.deleteItem(id);
       if (!receipt?.token) throw new Error('تعذّر إنشاء مهلة التراجع');
-      optimisticDeletedIds.delete(id);
+      // The row stays marked deleted through its own refresh (Rust no longer
+      // lists it either) and becomes the undo receipt in the same step, so no
+      // refresh ever finds it neither — and drops its picture before «تراجع».
       await refresh();
+      optimisticDeletedIds.delete(id);
       activeDelete = { token: receipt.token, snapshot };
       presentToast('تم حذف العنصر', {
         duration: DELETE_TOAST_MS,
@@ -1556,6 +1559,21 @@ const RETRY_DELAYS_MS = [250, 750];
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/** Pictures of items no longer in Rust's state (deleted, trimmed by the
+ *  history limit or retention) are dropped, so what the list keeps is bounded
+ *  by what it shows rather than by everything it showed this session. An item
+ *  that can still come back keeps its picture: one in its delete's undo
+ *  window, or one whose delete or undo is still on its way to Rust. */
+function forgetPicturesOfGoneItems(next) {
+  const ids = new Set([...(next.pinned ?? []), ...(next.history ?? [])].map((item) => item.id));
+  for (const id of optimisticDeletedIds) ids.add(id);
+  for (const snapshot of optimisticRestores.values()) ids.add(snapshot.item.id);
+  if (activeDelete) ids.add(activeDelete.snapshot.item.id);
+  for (const cache of [thumbs, fullImages]) {
+    for (const id of cache.keys()) if (!ids.has(id)) cache.delete(id);
+  }
+}
+
 /**
  * Fetches state and re-renders. With `retry`, a failed fetch is attempted up
  * to two more times with a short backoff before the failure state is
@@ -1569,16 +1587,6 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
  * mid-refresh is a normal race, not a fault, and must never be mistaken for
  * one and answered with a reload.
  */
-/** Pictures of items no longer in Rust's state (deleted, trimmed by the
- *  history limit or retention) are dropped, so what the list keeps is bounded
- *  by what it shows rather than by everything it showed this session. */
-function forgetPicturesOfGoneItems(next) {
-  const ids = new Set([...(next.pinned ?? []), ...(next.history ?? [])].map((item) => item.id));
-  for (const cache of [thumbs, fullImages]) {
-    for (const id of cache.keys()) if (!ids.has(id)) cache.delete(id);
-  }
-}
-
 async function refresh({ retry = false } = {}) {
   const token = ++refreshToken;
   const attempts = retry ? RETRY_DELAYS_MS.length + 1 : 1;

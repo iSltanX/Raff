@@ -68,6 +68,27 @@ test('panel: a picture too large to preview is not a missing file', async (t) =>
     }
   });
 
+  await t.test('a picture deleted and taken back is not dropped meanwhile', async () => {
+    // The delete's own refresh no longer lists the row; its undo window does.
+    // Dropping the picture there made «تراجع» redraw the card empty and ask
+    // again — racing the undo itself, so the answer could be «الملف مفقود»
+    // (independent review of this fix, 2026-10-21).
+    const before = fetchesOf('ok');
+    click(dom, row('ok').querySelector('.delete-btn'));
+    await flush(8);
+    assert.equal(row('ok'), null, 'deleted');
+    // A copy made elsewhere while the toast is up: one more refresh inside
+    // the undo window.
+    fake.emit('raff://changed', null);
+    await flush(8);
+    click(dom, doc.getElementById('toast-undo'));
+    await flush(8);
+    assert.ok(row('ok'), 'back');
+    assert.equal(row('ok').classList.contains('is-image-missing'), false);
+    assert.equal(row('ok').querySelector('img').getAttribute('src'), 'data:image/png;base64,AAAA');
+    assert.equal(fetchesOf('ok'), before, 'drawn from what the list kept');
+  });
+
   await t.test('pictures of items that left the state are not kept', async () => {
     assert.equal(fetchesOf('ok'), 1, 'asked once, then kept');
     fake.setState({ ...emptyState(), history: structuredClone(ITEMS.slice(1)) });
