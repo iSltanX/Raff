@@ -223,7 +223,21 @@ fn dev_isolated() -> bool {
 
 fn main() {
     startup_trace::init();
+    // Before anything can reach the pasteboard (ت٤٨).
+    let inert_clipboard = macos::decide_clipboard() == macos::Clipboard::Inert;
+    if inert_clipboard {
+        startup_trace::mark("CLIPBOARD_INERT");
+        eprintln!("raff: a test run — the clipboard is never read, written or pasted");
+    }
     let mut builder = tauri::Builder::default();
+    if inert_clipboard {
+        // The pages too: WebKit's own copy, cut and paste, in every window.
+        builder = builder.plugin(
+            tauri::plugin::Builder::<tauri::Wry>::new("raff-inert-clipboard")
+                .js_init_script(include_str!("inert_clipboard.js").to_string())
+                .build(),
+        );
+    }
     if !dev_isolated() {
         // Must be the first plugin: a second launch exits immediately and this
         // callback runs in the surviving instance instead (no duplicate tray,

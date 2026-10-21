@@ -66,6 +66,10 @@ pub fn write_item_to_clipboard(app: &AppHandle, id: &str, plain: bool) -> bool {
 /// fallback, using a fresh Accessibility check instead of stale panel state.
 pub async fn paste_item(app: &AppHandle, id: &str, plain: bool) -> Result<bool, String> {
     crate::startup_trace::mark("PASTE row_click_invoke");
+    // Before anything moves: no hide, no other app brought forward (ت٤٨).
+    if macos::clipboard_inert() {
+        return Err(crate::commands::err::CLIPBOARD_OFF.into());
+    }
     if !write_item_to_clipboard(app, id, plain) {
         crate::startup_trace::mark("PASTE write_item_to_clipboard FAILED (unknown id)");
         return Err(crate::commands::err::NOT_FOUND.into());

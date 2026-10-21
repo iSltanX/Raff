@@ -32,6 +32,8 @@ pub mod err {
     pub const UNDO_NO_ROOM: &str = crate::storage::UNDO_NO_ROOM;
     /// The same, because it is past the retention period.
     pub const UNDO_RETENTION: &str = crate::storage::UNDO_RETENTION;
+    /// A test run of رفّ: it has no clipboard to copy to or paste from (ت٤٨).
+    pub const CLIPBOARD_OFF: &str = "raff/clipboard-off";
 }
 
 /// Keeps the detail where it is useful — the process log — and hands the
@@ -205,6 +207,10 @@ pub async fn paste_item(app: AppHandle, id: String, plain: bool) -> Result<bool,
 #[tauri::command]
 pub fn copy_item(app: AppHandle, id: String) -> Result<(), String> {
     let began = std::time::Instant::now();
+    if macos::clipboard_inert() {
+        crate::diagnostics::record("copy", "clipboard-off", began);
+        return Err(err::CLIPBOARD_OFF.into());
+    }
     if paste::write_item_to_clipboard(&app, &id, false) {
         paste::bump_copy_signals(&app, &id);
         crate::diagnostics::record("copy", "ok", began);
