@@ -275,8 +275,11 @@ function answer(cmd, args) {
         return Promise.reject(new Error('انتهت مهلة التراجع عن الحذف'));
       }
       pendingDelete.layer.splice(pendingDelete.index, 0, pendingDelete.entry);
-      pendingDelete = null;
-      return Promise.resolve(null);
+      {
+        const standing = pendingDelete.entry.id;
+        pendingDelete = null;
+        return Promise.resolve(standing);
+      }
     case 'commit_delete':
       if (pendingDelete?.token === args.token) pendingDelete = null;
       return Promise.resolve(null);

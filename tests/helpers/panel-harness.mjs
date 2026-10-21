@@ -208,8 +208,10 @@ export function createFakeTauri(initialState, { failTimes = 0 } = {}) {
         return Promise.reject(new Error('انتهت مهلة التراجع عن الحذف'));
       }
       state[pendingDelete.layer].splice(pendingDelete.index, 0, pendingDelete.item);
+      const standing = pendingDelete.item.id;
       pendingDelete = null;
-      return Promise.resolve(null);
+      // As Rust: the id of the row that stands for the item now.
+      return Promise.resolve(standing);
     }
     if (cmd === 'commit_delete') {
       if (pendingDelete && pendingDelete.token === args?.token) {

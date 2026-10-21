@@ -1434,11 +1434,15 @@ function undoLastDelete() {
 
   enqueueMutation(async () => {
     try {
-      await api.undoDelete(pending.token);
+      const standing = await api.undoDelete(pending.token);
       // From here the backend is the authority: it may have folded the row
       // into a newer copy of it (017) rather than bring it back as it was, so
-      // the painted-back snapshot must not outlive the refresh.
+      // the painted-back snapshot must not outlive the refresh — and the
+      // selection follows to the row that now stands for it (ت٤٥ ب٦).
       optimisticRestores.delete(pending.snapshot.item.id);
+      if (typeof standing === 'string' && selectedId === pending.snapshot.item.id) {
+        selectedId = standing;
+      }
       await refresh();
     } catch (err) {
       optimisticRestores.delete(pending.snapshot.item.id);

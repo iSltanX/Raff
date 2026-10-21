@@ -21,9 +21,17 @@ test('panel: an undo folded into a newer copy leaves no ghost row', async () => 
   // folds h1 into it.
   fake.respond('undo_delete', (_args, state) => {
     state.history = [sampleItem('c1', { text: 'نفس النص', copyCount: 2, createdAt: Date.now() }), ...state.history.filter((i) => i.id !== 'h1')];
-    return null;
+    // As Rust answers: the id of the row that now stands for the item.
+    return 'c1';
   });
   click(dom, doc.getElementById('toast-undo'));
   await flush(10);
   assert.deepEqual(rowIds(dom), ['c1', 'h2'], 'one row for the text, the one the backend kept');
+  // ت٤٥ ب٦: the undone item is selected, as an undo selects — here as the
+  // row it was folded into, not as nothing because its own id is gone.
+  assert.deepEqual(
+    [...doc.querySelectorAll('.row.selected')].map((row) => row.dataset.id),
+    ['c1'],
+    'the row it was folded into is selected'
+  );
 });

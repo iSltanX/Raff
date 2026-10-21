@@ -2405,8 +2405,10 @@ impl Store {
 
     /// Restores the one pending receipt according to its saved chronological
     /// or pinned order, so capture de-duplication and concurrent pin mutations
-    /// cannot make a numeric index or neighbor position stale.
-    pub fn undo_delete(&mut self, token: &str) -> Result<(), String> {
+    /// cannot make a numeric index or neighbor position stale. Answers the id
+    /// of the row that stands for the item now: its own, or the newer copy's
+    /// a history item was folded into (ت٤٥ ب٦).
+    pub fn undo_delete(&mut self, token: &str) -> Result<String, String> {
         // A pin still being written is finished first: the undo may take a
         // row out of the shelf, and an unfinished pin journal would put it
         // back afterwards — two of one item.
@@ -2456,6 +2458,17 @@ impl Store {
                     || (pending.layer == DeletedLayer::Pinned && layer == DeletedLayer::Pinned)
             }
             None => pending.layer == layer,
+        };
+        // A history item folded into its newer copy is that copy from now on;
+        // anything else comes back as itself.
+        let standing = match (pending.layer, twin) {
+            (DeletedLayer::History, Some((DeletedLayer::History, index))) => {
+                self.history[index].id.clone()
+            }
+            (DeletedLayer::History, Some((DeletedLayer::Pinned, index))) => {
+                self.pinned[index].id.clone()
+            }
+            _ => deleted.id.clone(),
         };
         let history_before = changes(DeletedLayer::History).then(|| self.history.clone());
         let pinned_before = changes(DeletedLayer::Pinned).then(|| self.pinned.clone());
@@ -2590,7 +2603,7 @@ impl Store {
         // sees the live item and retires the stale receipt without deleting.
         self.pending_delete = None;
         self.save_pending_delete();
-        Ok(())
+        Ok(standing)
     }
 
     /// Permanently closes an undo window and removes image files only after the
@@ -5945,8 +5958,10 @@ mod data_safety_tests {
         let token = s.delete_reversible(&deleted).unwrap();
         capture_text(&mut s, "x"); // copied again inside the undo window
 
-        s.undo_delete(&token).expect("undo succeeds");
+        let standing = s.undo_delete(&token).expect("undo succeeds");
         let xs: Vec<&ClipItem> = s.history.iter().filter(|i| i.text == "x").collect();
+        assert_eq!(standing, xs[0].id, "the panel is told which row it is now");
+        assert_ne!(standing, deleted);
         assert_eq!(xs.len(), 1, "one row, not two");
         assert_eq!(xs[0].copy_count, 5, "carrying both counts");
         assert_eq!(s.history[0].text, "x", "where the new copy put it");
@@ -5967,7 +5982,8 @@ mod data_safety_tests {
         let token = s.delete_reversible(&id).unwrap();
         capture_text(&mut s, "pinned text"); // lands in history: the pin is gone for now
 
-        s.undo_delete(&token).expect("undo succeeds");
+        let standing = s.undo_delete(&token).expect("undo succeeds");
+        assert_eq!(standing, id, "a pin comes back as itself");
         let pinned = s
             .pinned
             .iter()
@@ -6264,7 +6280,8 @@ mod data_safety_tests {
         let copy = s.history[0].id.clone();
         assert!(s.toggle_pin(&copy));
 
-        s.undo_delete(&token).expect("undo succeeds");
+        let standing = s.undo_delete(&token).expect("undo succeeds");
+        assert_eq!(standing, copy, "folded into the pinned copy");
         assert!(s.find(&deleted).is_none());
         assert!(s.history.is_empty(), "not back in history beside its pin");
         assert_eq!(s.pinned[0].id, copy);

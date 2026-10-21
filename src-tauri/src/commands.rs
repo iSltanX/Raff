@@ -348,9 +348,9 @@ pub fn undo_delete(
     app: AppHandle,
     state: State<'_, AppState>,
     token: String,
-) -> Result<(), String> {
+) -> Result<String, String> {
     crate::access::require(&window, "undo_delete")?;
-    {
+    let standing = {
         let mut store = crate::lock_store(&state.store);
         store.undo_delete(&token).map_err(|e| {
             if e == err::UNDO_NO_ROOM || e == err::UNDO_RETENTION {
@@ -358,10 +358,10 @@ pub fn undo_delete(
             } else {
                 save_failed(e)
             }
-        })?;
-    }
+        })?
+    };
     notify(&app);
-    Ok(())
+    Ok(standing)
 }
 
 /// Off the main thread, like `delete_item`: it deletes files and the journal.
