@@ -16,8 +16,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { flush, minutesAgo, mountPanel, sampleItem, wait } from './helpers/panel-harness.mjs';
-
-const DWELL = 300;
+import { DWELL_MS as DWELL } from '../src/js/hover-intent.js';
 
 test('panel: the preview opens with intent, previews only, and closes in order', async (t) => {
   const { dom, fake } = await mountPanel({

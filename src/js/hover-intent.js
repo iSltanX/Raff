@@ -10,8 +10,11 @@
 //
 // It only reports; what "open" and "close" mean is the caller's.
 
+/** How long the pointer has to rest on one item before it counts as wanted. */
+export const DWELL_MS = 300;
+
 export function createHoverIntent({
-  dwellMs = 300,
+  dwellMs = DWELL_MS,
   followMs = 150,
   closeMs = 300,
   tolerance = 8,

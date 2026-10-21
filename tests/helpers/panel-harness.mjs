@@ -3,6 +3,8 @@
 // `src/js/panel.js` is a long-lived singleton in production (the webview is
 // never destroyed — Rust just orders the NSPanel in and out) and ES modules
 // are cached per process, so a module can only be mounted once per test file.
+// `mountPanel` enforces that: a second call throws instead of returning a
+// fresh DOM the cached module never draws into.
 // Each recovery scenario that needs a *fresh* first load therefore lives in
 // its own file, and they share this harness instead of duplicating it.
 //
@@ -16,6 +18,15 @@ import { JSDOM, VirtualConsole } from 'jsdom';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const indexHtml = readFileSync(path.join(here, '../../src/index.html'), 'utf8');
+const panelSource = readFileSync(path.join(here, '../../src/js/panel.js'), 'utf8');
+
+/** The commands the app registers (`generate_handler!` in main.rs). Tauri
+ *  rejects any other name, and so does the fake. */
+export const REGISTERED_COMMANDS = (() => {
+  const main = readFileSync(path.join(here, '../../src-tauri/src/main.rs'), 'utf8');
+  const list = main.match(/generate_handler!\[([^\]]*)\]/u)[1];
+  return new Set([...list.matchAll(/\w+::(\w+)/gu)].map((m) => m[1]));
+})();
 
 const now = Date.now();
 
@@ -221,6 +232,7 @@ export function createFakeTauri(initialState, { failTimes = 0 } = {}) {
       return Promise.resolve(state.previewSide === undefined ? 'left' : state.previewSide);
     }
     if (cmd === 'set_panel_preview') return Promise.resolve(null);
+    if (!REGISTERED_COMMANDS.has(cmd)) return Promise.reject(`command ${cmd} not found`);
     return Promise.resolve(null);
   };
 
@@ -309,8 +321,10 @@ export function flush(times = 4) {
 
 export const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
-/** Long enough for both retry backoffs (250ms + 750ms) plus slack. */
-export const RETRIES_EXHAUSTED_MS = 1400;
+/** Long enough for every retry backoff in panel.js plus slack — read from
+ *  panel.js, so a change to the backoffs cannot outrun this wait. */
+export const RETRIES_EXHAUSTED_MS =
+  JSON.parse(panelSource.match(/const RETRY_DELAYS_MS = (\[[\d, ]*\]);/u)[1]).reduce((a, b) => a + b, 0) + 400;
 
 export function rowIds(dom) {
   return [...dom.window.document.querySelectorAll('.row')].map((r) => r.dataset.id);
@@ -406,7 +420,16 @@ export function activeFilter(dom) {
  * Boots the real panel module once, with `location.reload` stubbed so the
  * fallback path is observable instead of tearing the test env down.
  */
+let mounted = false;
+
 export async function mountPanel(initialState, options = {}) {
+  if (mounted) {
+    throw new Error(
+      'mountPanel: panel.js runs once per test file (ES modules are cached), so a second mount would ' +
+        'draw nothing — give this scenario its own file (see the header of panel-harness.mjs)'
+    );
+  }
+  mounted = true;
   // jsdom locks `location` and `location.reload` down, so rather than stubbing
   // the production call we observe it: jsdom reports an attempted reload as a
   // `jsdomError` on the virtual console. Nothing in `panel.js` is altered for
