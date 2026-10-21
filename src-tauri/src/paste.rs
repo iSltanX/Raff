@@ -117,6 +117,7 @@ pub async fn paste_item(app: &AppHandle, id: &str, plain: bool) -> Result<bool, 
         let (tx, rx) = std::sync::mpsc::channel();
         let ticket = Arc::new(PasteTicket::new());
         let ours = Arc::clone(&ticket);
+        let presser = Arc::clone(&ticket);
         // Not `run_on_main_thread`: tao drains that queue only while it is
         // processing events, the queue that once held a panel show for 2.5s
         // (`macos::dispatch_to_main`).
@@ -155,6 +156,15 @@ pub async fn paste_item(app: &AppHandle, id: &str, plain: bool) -> Result<bool, 
                             previous_pid == Some(front_before_paste.pid)
                         )
                     });
+                    // The point of no return: past it the wait sees this
+                    // through; short of it, the wait has already told the
+                    // user, and nothing may be pressed now.
+                    if !presser.press() {
+                        crate::startup_trace::mark(
+                            "PASTE abandoned before the keystroke — nothing pressed",
+                        );
+                        return;
+                    }
                     let still_trusted = macos::ax_trusted();
                     let sent = if may_press_paste(still_trusted, front_before_paste.pid, own) {
                         macos::send_cmd_v()
@@ -199,15 +209,27 @@ pub async fn paste_item(app: &AppHandle, id: &str, plain: bool) -> Result<bool, 
     Ok(pasted)
 }
 
-/// One paste's claim on the panel and the keystroke (015). The work queued on
-/// the main thread and the wait for it race for the claim, and one wins: work
-/// that starts after the wait gave up hides nothing and presses nothing, and a
-/// wait that finds the work started sees it through.
+/// One paste's claims on the panel and on the keystroke (015). The work and
+/// the wait for it race for each, and one side wins each race:
+///
+/// - **Start** — taken by the main-thread work before it hides the panel, or
+///   by the wait once `PASTE_PATIENCE` runs out. Called off here, the paste
+///   never moves anything: no hide, no activation, no ⌘V.
+/// - **Press** — taken by the work immediately before ⌘V, or by the wait once
+///   `PASTE_FINISH` runs out too. Abandoned here, the panel was hidden and the
+///   old app brought forward, but nothing is pressed, then or later.
+///
+/// The press claim is the point of no return. Once the work holds it, the
+/// keystroke is out or going out, and the wait waits for the answer that
+/// follows it rather than report a failure that already pasted. So the user is
+/// never told a paste failed before a ⌘V that then lands.
 struct PasteTicket(AtomicU8);
 
 const WAITING: u8 = 0;
 const STARTED: u8 = 1;
 const CALLED_OFF: u8 = 2;
+const PRESSING: u8 = 3;
+const ABANDONED: u8 = 4;
 
 impl PasteTicket {
     fn new() -> Self {
@@ -217,18 +239,31 @@ impl PasteTicket {
     /// The work's side, before anything moves: false once the paste was
     /// called off.
     fn start(&self) -> bool {
-        self.claim(STARTED)
+        self.claim(WAITING, STARTED)
     }
 
     /// The wait's side, once its patience runs out: true when the work had
     /// not started, and now never will.
     fn call_off(&self) -> bool {
-        self.claim(CALLED_OFF)
+        self.claim(WAITING, CALLED_OFF)
     }
 
-    fn claim(&self, by: u8) -> bool {
+    /// The work's side, immediately before the keystroke: false once the
+    /// wait gave up on it.
+    fn press(&self) -> bool {
+        self.claim(STARTED, PRESSING)
+    }
+
+    /// The wait's side, once the started work has also outlasted
+    /// `PASTE_FINISH`: true when the keystroke had not been claimed, and now
+    /// never will be.
+    fn abandon(&self) -> bool {
+        self.claim(STARTED, ABANDONED)
+    }
+
+    fn claim(&self, from: u8, to: u8) -> bool {
         self.0
-            .compare_exchange(WAITING, by, Ordering::AcqRel, Ordering::Acquire)
+            .compare_exchange(from, to, Ordering::AcqRel, Ordering::Acquire)
             .is_ok()
     }
 }
@@ -245,11 +280,11 @@ fn if_claimed(ticket: &PasteTicket, work: impl FnOnce()) {
 }
 
 /// Waits for the paste's answer. A paste that has not started within
-/// `patience` is called off and reported as failed — the item is on the
-/// clipboard already, which is what the failure message says. One that has
-/// started is waited out: hiding, activating and pressing take a few hundred
-/// milliseconds, and leaving them running would put a ⌘V into whatever is in
-/// front after the panel was shown again.
+/// `patience` is called off; one that started but has not claimed its
+/// keystroke within `finish` more is abandoned. Either is reported as failed —
+/// the item is on the clipboard already, which is what the failure message
+/// says — and neither presses anything afterwards. One whose keystroke is out
+/// is waited for once more, for the answer that comes right after it.
 fn await_paste(
     rx: &Receiver<bool>,
     ticket: &PasteTicket,
@@ -259,7 +294,11 @@ fn await_paste(
     match rx.recv_timeout(patience) {
         Ok(pasted) => Ok(pasted),
         Err(err) if ticket.call_off() => Err(err.to_string()),
-        Err(_) => rx.recv_timeout(finish).map_err(|err| err.to_string()),
+        Err(_) => match rx.recv_timeout(finish) {
+            Ok(pasted) => Ok(pasted),
+            Err(err) if ticket.abandon() => Err(err.to_string()),
+            Err(_) => rx.recv_timeout(finish).map_err(|err| err.to_string()),
+        },
     }
 }
 
@@ -452,12 +491,86 @@ mod tests {
         assert_eq!(take_target(&other, OWN), Target::App(None), "spent");
     }
 
+    /// A paste run with chosen delays: when the main-thread work starts, how
+    /// long from hiding the panel to the keystroke, and from the keystroke to
+    /// the answer. Returns what the wait answered, and in order what the work
+    /// did and when the user was told.
+    fn run_paste(
+        start_after: Duration,
+        press_after: Duration,
+        answer_after: Duration,
+    ) -> (Result<bool, String>, Vec<&'static str>) {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let ticket = Arc::new(PasteTicket::new());
+        let events = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let (ours, log) = (Arc::clone(&ticket), Arc::clone(&events));
+        let work = std::thread::spawn(move || {
+            std::thread::sleep(start_after);
+            let presser = Arc::clone(&ours);
+            if_claimed(&ours, move || {
+                log.lock().unwrap().push("hidden");
+                std::thread::sleep(press_after);
+                if presser.press() {
+                    log.lock().unwrap().push("pressed");
+                    std::thread::sleep(answer_after);
+                    let _ = tx.send(true);
+                } else {
+                    log.lock().unwrap().push("held back");
+                }
+            });
+        });
+        let answer = await_paste(&rx, &ticket, PATIENCE, PATIENCE);
+        events.lock().unwrap().push("told");
+        work.join().unwrap();
+        let events = events.lock().unwrap().clone();
+        (answer, events)
+    }
+
+    /// Still queued when the patience ran out: called off whole. Nothing is
+    /// hidden and nothing pressed, then or later.
+    #[test]
+    fn a_paste_still_queued_at_the_timeout_never_moves_anything() {
+        let (answer, events) = run_paste(PATIENCE * 3, Duration::ZERO, Duration::ZERO);
+        assert!(answer.is_err());
+        assert_eq!(events, ["told"]);
+    }
+
+    /// Started, then stuck between hiding the panel and the keystroke past
+    /// both waits: the user is told the paste failed, so the keystroke must
+    /// not go out after that — into whatever is in front by then.
+    #[test]
+    fn a_paste_that_started_and_stalled_presses_nothing_after_the_user_is_told() {
+        let (answer, events) = run_paste(Duration::ZERO, PATIENCE * 4, Duration::ZERO);
+        assert!(answer.is_err());
+        assert_eq!(events, ["hidden", "told", "held back"]);
+    }
+
+    /// Past the point of no return — the keystroke claimed — the wait does
+    /// not report a failure that already went out as a paste: it waits for
+    /// the answer that follows the keystroke.
+    #[test]
+    fn a_keystroke_that_went_out_is_waited_for_not_reported_failed() {
+        let (answer, events) = run_paste(Duration::ZERO, Duration::ZERO, PATIENCE * 5 / 2);
+        assert_eq!(answer, Ok(true));
+        assert_eq!(events, ["hidden", "pressed", "told"]);
+    }
+
     #[test]
     fn the_claim_is_won_once() {
         let started = PasteTicket::new();
         assert!(started.start());
         assert!(!started.call_off());
         assert!(!started.start(), "and started once");
+        assert!(started.press());
+        assert!(!started.abandon(), "a keystroke claimed is not abandoned");
+
+        let abandoned = PasteTicket::new();
+        assert!(abandoned.start());
+        assert!(abandoned.abandon());
+        assert!(!abandoned.press(), "nor pressed once abandoned");
+
+        let never_started = PasteTicket::new();
+        assert!(!never_started.press(), "no keystroke without a start");
 
         let called_off = PasteTicket::new();
         assert!(called_off.call_off());
@@ -474,6 +587,10 @@ mod tests {
         assert!(claims < flow.find("panel::hide").unwrap());
         assert!(flow.contains("await_paste(&rx, &ticket, PASTE_PATIENCE, PASTE_FINISH)"));
         assert!(!flow.contains(".run_on_main_thread("));
+        let claimed = flow
+            .find("if !presser.press()")
+            .expect("the keystroke is claimed");
+        assert!(claimed < flow.find("macos::send_cmd_v()").unwrap());
         // A paste that ends in the failure message is still a copy (م٣).
         let failed = &flow[flow.find("PASTE ERROR").unwrap()..];
         let counted = failed.find("bump_paste_signals(app, id)").expect("counted");
