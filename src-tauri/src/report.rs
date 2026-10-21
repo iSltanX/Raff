@@ -212,7 +212,7 @@ fn freeze(
                 .ok_or(err::INVALID)?,
         ),
     };
-    let description = trim_like_the_window(&description).to_string();
+    let description = trim_like_the_window(description).to_string();
     let length = description.chars().count();
     if length == 0 || length > MAX_DESCRIPTION_CHARS {
         return Err(err::INVALID.into());
