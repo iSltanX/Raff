@@ -321,6 +321,7 @@ pub fn init(app: &AppHandle) -> tauri::Result<()> {
     // window is transparent only so the opaque CSS surface keeps its 16pt
     // corners; a 1px line, not a shadow, separates it from what is behind.
     let panel = window.to_panel()?;
+    guard_key_status();
     panel.set_level(PANEL_LEVEL);
     panel.set_style_mask(STYLE_MASK_NON_ACTIVATING_PANEL);
     panel.set_collection_behaviour(
@@ -376,12 +377,76 @@ pub fn init(app: &AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
+/// Whether the panel may take the key: only while it is shown (ت٤٧).
+fn accepts_key(shown: bool) -> bool {
+    shown
+}
+
+/// Hidden, the panel stays ordered in (see `init`), and `RawNSPanel` answers
+/// `canBecomeKeyWindow` with YES whatever its state. So when another رفّ
+/// window closed, AppKit handed the invisible panel the key, and what the
+/// user typed next went into its search field. Its answer now follows
+/// `SHOWN`. Only that class changes: its own method is replaced, never one
+/// it inherits from NSPanel or NSWindow. Installing twice is harmless.
+fn guard_key_status() {
+    use objc2::runtime::{AnyClass, Bool, Imp, Sel};
+
+    extern "C-unwind" fn can_become_key(_this: &AnyObject, _cmd: Sel) -> Bool {
+        Bool::new(accepts_key(SHOWN.load(Ordering::Acquire)))
+    }
+    let selector = objc2::sel!(canBecomeKeyWindow);
+    let Some(class) = AnyClass::get(c"RawNSPanel") else {
+        eprintln!("raff: RawNSPanel is not defined; the hidden panel can take the key");
+        return;
+    };
+    let methods = class.instance_methods();
+    let Some(method) = methods.iter().find(|method| method.name() == selector) else {
+        eprintln!("raff: RawNSPanel has no canBecomeKeyWindow of its own; left as it is");
+        return;
+    };
+    // SAFETY: the replacement has the replaced method's signature,
+    // `- (BOOL)canBecomeKeyWindow` — (id, SEL) -> BOOL — and reads only an
+    // atomic, so any thread AppKit asks from is fine.
+    unsafe {
+        let imp: Imp = std::mem::transmute::<extern "C-unwind" fn(&AnyObject, Sel) -> Bool, Imp>(
+            can_become_key,
+        );
+        method.set_implementation(imp);
+    }
+}
+
+/// Whether, after a رفّ window other than the panel closed, the app the user
+/// came from should take the front back: رفّ is still the active app, no
+/// window of it has the key, and the panel is not open. Typing would
+/// otherwise go nowhere (ت٤٧).
+fn should_hand_back(app_active: bool, has_key_window: bool, panel_shown: bool) -> bool {
+    app_active && !has_key_window && !panel_shown
+}
+
+/// Called when a رفّ window other than the panel leaves the screen. AppKit
+/// gives the key to another رفّ window if one is left; the panel no longer
+/// takes it while hidden. With none left, the app the user was in takes the
+/// front back, so the next keystroke lands where they can see it.
+pub fn after_window_closed() {
+    // The next turn of the main queue: the close has finished by then, and
+    // AppKit has picked the next key window, if any.
+    macos::dispatch_to_main(|| {
+        let (active, has_key_window) = macos::app_focus();
+        if should_hand_back(active, has_key_window, SHOWN.load(Ordering::Acquire)) {
+            crate::startup_trace::mark("FOCUS_HANDED_BACK");
+            macos::hand_focus_back();
+        }
+    });
+}
+
 /// Presents the (already ordered-in) panel and gives it keyboard focus.
 fn present(panel: &tauri_nspanel::raw_nspanel::RawNSPanel) {
+    // Before `show`, which makes the panel key: it may take the key only
+    // while shown (`guard_key_status`).
+    SHOWN.store(true, Ordering::Release);
     panel.set_ignore_mouse_events(false);
     panel.set_alpha_value(1.0);
     panel.show();
-    SHOWN.store(true, Ordering::Release);
 }
 
 /// Hides the panel without ordering it out: transparent, click-through, and
@@ -488,9 +553,10 @@ pub fn toggle(app: &AppHandle) {
 }
 
 /// When the panel resigns key status, the moment to remember — only if that
-/// resignation hid a visible panel. Hidden, it can still become key (AppKit
-/// hands it the key when another رفّ window closes) and lose it to the very
-/// click on the icon; that click closed nothing and must open the panel.
+/// resignation hid a visible panel. Hidden, it used to become key when
+/// another رفّ window closed and lose it to the very click on the icon; that
+/// click closed nothing and must open the panel. It no longer takes the key
+/// while hidden (`guard_key_status`); the stamp stays the second guard.
 fn resign_stamp(shown: bool, now_ms: u64, previous_ms: u64) -> u64 {
     if shown {
         now_ms
@@ -608,6 +674,68 @@ fn constrain_and_save(app: &AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ت٤٧ ─────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn the_hidden_panel_cannot_take_the_key() {
+        use objc2::runtime::{AnyClass, Bool};
+        use tauri_nspanel::objc_foundation::INSObject;
+        // `to_panel` defines the class the same way, on first use.
+        let _ = tauri_nspanel::raw_nspanel::RawNSPanel::class();
+        let window = AnyClass::get(c"NSWindow").unwrap();
+        let window_answer = window
+            .instance_method(objc2::sel!(canBecomeKeyWindow))
+            .unwrap()
+            .implementation();
+        guard_key_status();
+        guard_key_status(); // installing twice changes nothing
+
+        let class = AnyClass::get(c"RawNSPanel").unwrap();
+        // Never initialised: only its answer is asked, which reads no state.
+        let panel: *mut AnyObject = unsafe { msg_send![class, alloc] };
+        let asks = |shown: bool| {
+            SHOWN.store(shown, Ordering::Release);
+            let answer: Bool = unsafe { msg_send![panel, canBecomeKeyWindow] };
+            answer.as_bool()
+        };
+        assert!(!asks(false), "hidden, it does not take the key");
+        assert!(asks(true), "shown, it does");
+        SHOWN.store(false, Ordering::Release);
+        // Runtime IMPs, not Rust functions: their addresses are the identity.
+        let window_answer_now = window
+            .instance_method(objc2::sel!(canBecomeKeyWindow))
+            .unwrap()
+            .implementation();
+        assert!(
+            std::ptr::fn_addr_eq(window_answer_now, window_answer),
+            "no other window class is touched"
+        );
+    }
+
+    #[test]
+    fn the_key_follows_whether_the_panel_is_shown() {
+        assert!(accepts_key(true));
+        assert!(!accepts_key(false));
+    }
+
+    #[test]
+    fn rff_steps_aside_only_when_nothing_of_it_is_left_to_type_into() {
+        // (active, a window has the key, panel shown) → hand back
+        assert!(
+            should_hand_back(true, false, false),
+            "active, nothing to type into"
+        );
+        assert!(
+            !should_hand_back(true, true, false),
+            "another رفّ window took the key"
+        );
+        assert!(!should_hand_back(true, false, true), "the panel is open");
+        assert!(
+            !should_hand_back(false, false, false),
+            "the front is already elsewhere"
+        );
+    }
 
     #[test]
     fn centers_first_position_in_visible_area() {

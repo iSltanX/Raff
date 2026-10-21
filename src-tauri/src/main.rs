@@ -298,33 +298,44 @@ fn main() {
             updater::consume_update_intent,
             updater::open_updates,
         ])
-        .on_window_event(|window, event| match event {
-            tauri::WindowEvent::Moved(_) if window.label() == panel::PANEL_LABEL => {
-                panel::remember_position(window.app_handle());
-            }
-            // The update window is a singleton the tray reopens repeatedly —
-            // hide instead of destroy so its in-progress state (or a staged
-            // "restart" prompt) survives being closed and reshown, exactly
-            // like the requirement to show the current operation on reopen.
-            tauri::WindowEvent::CloseRequested { api, .. } if window.label() == "update" => {
-                api.prevent_close();
-                let _ = window.hide();
-            }
-            // A report is forgotten with its window: the frozen payload, its
-            // key and the image never outlive what the user was looking at.
-            tauri::WindowEvent::Destroyed if window.label() == "report" => report::reset(),
-            // Closing the welcome is an answer too: it does not come back on
-            // every launch. «تم» marks it the same way, before closing.
-            tauri::WindowEvent::Destroyed if window.label() == "firstrun" => {
-                let state = window.state::<AppState>();
-                let mut store = lock_store(&state.store);
-                if !store.settings.first_run_shown {
-                    if let Err(err) = store.mark_first_run_shown_persisted() {
-                        eprintln!("raff: could not record the welcome as shown: {err}");
+        .on_window_event(|window, event| {
+            // Any رفّ window but the panel leaving the screen: closed, or the
+            // update window hidden in its place (ت٤٧).
+            let leaves = window.label() != panel::PANEL_LABEL
+                && (matches!(event, tauri::WindowEvent::Destroyed)
+                    || (window.label() == "update"
+                        && matches!(event, tauri::WindowEvent::CloseRequested { .. })));
+            match event {
+                tauri::WindowEvent::Moved(_) if window.label() == panel::PANEL_LABEL => {
+                    panel::remember_position(window.app_handle());
+                }
+                // The update window is a singleton the tray reopens repeatedly —
+                // hide instead of destroy so its in-progress state (or a staged
+                // "restart" prompt) survives being closed and reshown, exactly
+                // like the requirement to show the current operation on reopen.
+                tauri::WindowEvent::CloseRequested { api, .. } if window.label() == "update" => {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+                // A report is forgotten with its window: the frozen payload, its
+                // key and the image never outlive what the user was looking at.
+                tauri::WindowEvent::Destroyed if window.label() == "report" => report::reset(),
+                // Closing the welcome is an answer too: it does not come back on
+                // every launch. «تم» marks it the same way, before closing.
+                tauri::WindowEvent::Destroyed if window.label() == "firstrun" => {
+                    let state = window.state::<AppState>();
+                    let mut store = lock_store(&state.store);
+                    if !store.settings.first_run_shown {
+                        if let Err(err) = store.mark_first_run_shown_persisted() {
+                            eprintln!("raff: could not record the welcome as shown: {err}");
+                        }
                     }
                 }
+                _ => {}
             }
-            _ => {}
+            if leaves {
+                panel::after_window_closed();
+            }
         })
         .setup(|app| {
             startup_trace::mark("setup_enter");

@@ -11,7 +11,7 @@ use objc2::rc::Retained;
 use objc2::runtime::AnyObject;
 use objc2::{define_class, msg_send, sel, AnyThread};
 use objc2_app_kit::{
-    NSApplicationActivationOptions, NSModalResponseOK, NSOpenPanel, NSPasteboard,
+    NSApplication, NSApplicationActivationOptions, NSModalResponseOK, NSOpenPanel, NSPasteboard,
     NSRunningApplication, NSWorkspace, NSWorkspaceApplicationKey,
     NSWorkspaceDidActivateApplicationNotification,
 };
@@ -278,7 +278,64 @@ pub fn note_activation(app: FrontApp) {
     // in force, and dropping it would lose the answer for older windows.
     let keep_from = log.iter().rposition(|a| a.at <= cutoff).unwrap_or(0);
     log.drain(..keep_from);
+    remember_front(app.pid, is_regular_app(app.pid));
     log.push(Activation { at: now, app });
+}
+
+/// The last app other than رفّ to take the front: where the user was (ت٤٧).
+/// Kept apart from the activation log, which forgets after ten seconds.
+static LAST_OTHER_APP: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(0);
+
+/// Whether an app taking the front is one to give it back to later: not رفّ
+/// itself, and a regular app — an agent with no windows would leave the
+/// keyboard as dead as before.
+fn worth_returning_to(pid: i32, own: i32, regular: bool) -> bool {
+    pid > 0 && pid != own && regular
+}
+
+fn remember_front(pid: i32, regular: bool) {
+    if worth_returning_to(pid, std::process::id() as i32, regular) {
+        LAST_OTHER_APP.store(pid, std::sync::atomic::Ordering::Release);
+    }
+}
+
+fn is_regular_app(pid: i32) -> bool {
+    use objc2_app_kit::NSApplicationActivationPolicy;
+    pid > 0
+        && NSRunningApplication::runningApplicationWithProcessIdentifier(pid).is_some_and(|app| {
+            !app.isTerminated() && app.activationPolicy() == NSApplicationActivationPolicy::Regular
+        })
+}
+
+pub fn last_other_app() -> Option<i32> {
+    let pid = LAST_OTHER_APP.load(std::sync::atomic::Ordering::Acquire);
+    (pid > 0).then_some(pid)
+}
+
+/// Whether رفّ is the active app, and whether one of its windows has the
+/// key. Main thread; elsewhere it answers "nothing to do".
+pub fn app_focus() -> (bool, bool) {
+    let Some(mtm) = MainThreadMarker::new() else {
+        return (false, true);
+    };
+    let app = NSApplication::sharedApplication(mtm);
+    // SAFETY: `keyWindow` takes no arguments and returns an NSWindow or nil.
+    let key: *mut AnyObject = unsafe { msg_send![&*app, keyWindow] };
+    (app.isActive(), !key.is_null())
+}
+
+/// Gives the front back to the app the user was in before رفّ took it; when
+/// that app is gone, رفّ just steps aside and macOS picks the next one.
+/// Main thread.
+pub fn hand_focus_back() {
+    match last_other_app().filter(|pid| is_regular_app(*pid)) {
+        Some(pid) => activate_app(pid),
+        None => {
+            if let Some(mtm) = MainThreadMarker::new() {
+                NSApplication::sharedApplication(mtm).deactivate();
+            }
+        }
+    }
 }
 
 /// Snapshot of the activation log, oldest first.
@@ -581,6 +638,26 @@ pub fn ax_prompt() -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_app_the_user_came_from_is_remembered_past_raff_itself() {
+        let own = std::process::id() as i32;
+        assert!(worth_returning_to(4242, own, true));
+        assert!(!worth_returning_to(own, own, true), "not رفّ itself");
+        assert!(
+            !worth_returning_to(0, own, true),
+            "nor a payload with no process"
+        );
+        assert!(
+            !worth_returning_to(4243, own, false),
+            "nor an agent with no windows"
+        );
+
+        remember_front(4242, true);
+        remember_front(own, true);
+        remember_front(4243, false);
+        assert_eq!(last_other_app(), Some(4242));
+    }
 
     fn act(at: Instant, bundle: &str) -> Activation {
         Activation {
