@@ -517,13 +517,21 @@ pub fn remember_position(app: &AppHandle) {
     }
 }
 
+/// Hides a shown panel and tells its page. The page cannot tell a concealed
+/// panel from a blurred one by itself, so without `panel://hidden` it kept
+/// fetching and rebuilding the list on every copy, for nobody (F-HIDDEN).
+fn hide_shown(handle: &AppHandle, panel: &tauri_nspanel::raw_nspanel::RawNSPanel) {
+    collapse_preview(handle);
+    conceal(panel);
+    let _ = handle.emit_to(PANEL_LABEL, "panel://hidden", ());
+}
+
 pub fn hide(app: &AppHandle) {
     let handle = app.clone();
     on_main(move || {
         if let Ok(panel) = handle.get_webview_panel(PANEL_LABEL) {
             if SHOWN.load(Ordering::Acquire) {
-                collapse_preview(&handle);
-                conceal(&panel);
+                hide_shown(&handle, &panel);
             }
         }
     });
@@ -537,8 +545,7 @@ pub fn toggle(app: &AppHandle) {
             Err(_) => return show(&handle),
         };
         if SHOWN.load(Ordering::Acquire) {
-            collapse_preview(&handle);
-            conceal(&panel);
+            hide_shown(&handle, &panel);
             return;
         }
         // The panel is already hidden. If that happened moments ago because

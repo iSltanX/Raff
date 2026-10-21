@@ -2285,6 +2285,14 @@ on('panel://shown', async () => {
   listEl.scrollTop = 0;
 }).catch((err) => diag('listen:failed', err));
 
+// Rust conceals the panel on a paste, a click outside it, the hotkey and the
+// menu-bar icon without the page seeing anything but a blur — which also
+// happens with the panel still on screen. Rust knows, and says so.
+on('panel://hidden', () => {
+  diag('event:panel-hidden');
+  isShown = false;
+}).catch((err) => diag('listen:failed', err));
+
 // Belt-and-suspenders alongside panel://shown: if the panel ever regains
 // focus without that IPC event landing (native window activation is a more
 // reliable signal than a webview message), this still resyncs the list
