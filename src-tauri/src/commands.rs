@@ -268,10 +268,13 @@ fn set_pin(store: &mut Store, id: &str, is_pinned: bool) -> Result<PinDto, Strin
     })
 }
 
-#[tauri::command]
+/// Off the main thread, like `delete_item`: a pin writes its journal and two
+/// layers before it returns (F-MAINTHREAD-COST). The panel sends its changes
+/// one at a time, so this does not reorder them.
+#[tauri::command(async)]
 pub fn toggle_pin(
     app: AppHandle,
-    state: State<AppState>,
+    state: State<'_, AppState>,
     id: String,
     is_pinned: bool,
 ) -> Result<PinDto, String> {
@@ -286,10 +289,13 @@ pub struct DeleteReceiptDto {
     pub token: String,
 }
 
-#[tauri::command]
+/// Off the main thread: the journal is flushed to the device and the layer
+/// rewritten before this returns — tens of milliseconds on a large history,
+/// during which the main thread would draw nothing (F-MAINTHREAD-COST).
+#[tauri::command(async)]
 pub fn delete_item(
     app: AppHandle,
-    state: State<AppState>,
+    state: State<'_, AppState>,
     id: String,
 ) -> Result<DeleteReceiptDto, String> {
     let token = {
@@ -300,8 +306,13 @@ pub fn delete_item(
     Ok(DeleteReceiptDto { token })
 }
 
-#[tauri::command]
-pub fn undo_delete(app: AppHandle, state: State<AppState>, token: String) -> Result<(), String> {
+/// Off the main thread, like `delete_item`: it rewrites the layer.
+#[tauri::command(async)]
+pub fn undo_delete(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    token: String,
+) -> Result<(), String> {
     {
         let mut store = crate::lock_store(&state.store);
         store.undo_delete(&token).map_err(|e| {
@@ -316,8 +327,9 @@ pub fn undo_delete(app: AppHandle, state: State<AppState>, token: String) -> Res
     Ok(())
 }
 
-#[tauri::command]
-pub fn commit_delete(state: State<AppState>, token: String) -> Result<(), String> {
+/// Off the main thread, like `delete_item`: it deletes files and the journal.
+#[tauri::command(async)]
+pub fn commit_delete(state: State<'_, AppState>, token: String) -> Result<(), String> {
     let mut store = crate::lock_store(&state.store);
     store.commit_delete(&token).map_err(save_failed)
 }
