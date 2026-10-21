@@ -75,6 +75,13 @@ let mutationQueue = Promise.resolve();
 
 const PIN_TOAST_MS = 3000;
 const DELETE_TOAST_MS = 5000;
+
+/** Why an unpin left its row out of history, in the backend's words (ت٢٩). */
+const UNPIN_REMOVAL_WORDS = Object.freeze({
+  retention: 'أُلغي التثبيت، وحُذف العنصر لانتهاء مدة الاحتفاظ',
+  olderThanHistory: 'أُلغي التثبيت، وحُذف العنصر لأنه أقدم من سجلّك',
+  limit: 'أُلغي التثبيت، وحُذف العنصر لأن سجلّك بلغ حدّه',
+});
 /** Longer than PIN_TOAST_MS: this toast carries a button the user needs time
  * to read and act on, not just a status line to glance at. */
 const ACCESS_TOAST_MS = 6000;
@@ -1138,8 +1145,8 @@ function togglePinItem(id, { restoreFocus = false } = {}) {
           restoreFocus: follow.restoreFocus && focusIsLost(),
         }) || movedFocus;
       if (result?.removed === true) {
-        // History did not take it back: it was older than every row there.
-        deliverFeedback('أُلغي التثبيت، وحُذف العنصر لأنه أقدم من سجلّك', {
+        // History did not take it back, and the backend says why (ت٢٩).
+        deliverFeedback(UNPIN_REMOVAL_WORDS[result.reason] ?? UNPIN_REMOVAL_WORDS.olderThanHistory, {
           duration: DELETE_TOAST_MS,
           kind: 'delete',
         });

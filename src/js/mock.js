@@ -141,7 +141,17 @@ export function mockInvoke(cmd, args = {}) {
         // empty history, it is.
         const older =
           RECENT.length > 0 && RECENT.every((other) => entry.createdAt < other.createdAt);
-        if (older) return Promise.resolve({ isPinned: false, removed: true });
+        // Past the retention period the age limit is the reason (ت٢٩).
+        const pastRetention =
+          SETTINGS.retentionDays > 0 &&
+          entry.createdAt < Date.now() - SETTINGS.retentionDays * 86_400_000;
+        if (pastRetention || older) {
+          return Promise.resolve({
+            isPinned: false,
+            removed: true,
+            reason: pastRetention ? 'retention' : 'olderThanHistory',
+          });
+        }
         RECENT.push(entry);
         RECENT.sort((a, b) => b.createdAt - a.createdAt);
         return Promise.resolve({ isPinned: false, removed: false });

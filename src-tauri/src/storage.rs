@@ -205,6 +205,18 @@ fn weight(item: &ClipItem) -> usize {
 }
 
 /// A use of a row through رفّ: a paste, or a copy made from the panel or menu.
+/// Why an unpinned row left instead of coming back (ت١٧، ت٢٩).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum UnpinRemoval {
+    /// Past the retention period: the age limit counts from the copy.
+    Retention,
+    /// Older than every row history held before it came back.
+    OlderThanHistory,
+    /// Taken back, then let go by the count or the byte budget.
+    Limit,
+}
+
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum Usage {
     Paste,
@@ -355,6 +367,9 @@ pub struct Store {
     pending_pin: Option<PendingPin>,
     /// Layers whose learning counters moved and have not been written yet.
     dirty_signals: DirtySignals,
+    /// Why the last unpin did not take its row back (`return_to_history`),
+    /// so the panel can say it. Cleared by every move.
+    unpin_removal: Option<UnpinRemoval>,
 }
 
 /// Which layers are carrying unwritten learning-counter bumps.
@@ -1027,6 +1042,7 @@ impl Store {
             pending_delete,
             pending_pin,
             dirty_signals: DirtySignals::default(),
+            unpin_removal: None,
         };
 
         store.resolve_interrupted_pin();
@@ -1839,6 +1855,7 @@ impl Store {
     /// history by its date (`return_to_history`) — or not at all, and then it
     /// is among the rows let go.
     fn move_pin(&mut self, id: &str) -> Option<PendingPin> {
+        self.unpin_removal = None;
         if let Some(pos) = self.history.iter().position(|i| i.id == id) {
             let mut item = self.history.remove(pos);
             item.is_pinned = true;
@@ -1866,6 +1883,11 @@ impl Store {
             desired: false,
             dropped,
         })
+    }
+
+    /// Why the last unpin did not take its row back, if it did not.
+    pub fn unpin_removal(&self) -> Option<UnpinRemoval> {
+        self.unpin_removal
     }
 
     /// `move_pin` without the record, for tests that set up a layer by hand.
@@ -1901,7 +1923,18 @@ impl Store {
             .map(|other| other.created_at)
             .min()
             .map(|oldest| waiting.map_or(oldest, |waiting| oldest.min(waiting)));
+        // Past the retention period, the age limit is what lets it go — in
+        // an empty history as well, and ahead of it being older than all of
+        // it: that is the reason the panel gives (ت٢٩).
+        let past_retention = self
+            .oldest_allowed_ms()
+            .is_some_and(|oldest_allowed| item.created_at < oldest_allowed);
         if oldest.is_some_and(|oldest| item.created_at < oldest) {
+            self.unpin_removal = Some(if past_retention {
+                UnpinRemoval::Retention
+            } else {
+                UnpinRemoval::OlderThanHistory
+            });
             let mut dropped = self.prune_history();
             dropped.push(item);
             return dropped;
@@ -1913,8 +1946,17 @@ impl Store {
             .iter()
             .position(|other| other.created_at <= item.created_at)
             .unwrap_or(self.history.len());
+        let id = item.id.clone();
         self.history.insert(at, item);
-        self.prune_history()
+        let dropped = self.prune_history();
+        if dropped.iter().any(|gone| gone.id == id) {
+            self.unpin_removal = Some(if past_retention {
+                UnpinRemoval::Retention
+            } else {
+                UnpinRemoval::Limit
+            });
+        }
+        dropped
     }
 
     /// Moves an item between the two persisted layers without ever reporting
@@ -4545,6 +4587,39 @@ mod tests {
         );
         assert_eq!(picture_files_exist(&dir, "p"), (false, false));
         assert!(Store::load(dir.clone()).find("p").is_none());
+    }
+
+    #[test]
+    fn a_removed_unpin_says_whether_its_age_or_the_history_let_it_go() {
+        // Past retention, the age limit is the reason: into an empty history
+        // as well, and also when the row is older than all of it.
+        let month_ago = now_ms() - 30 * 24 * 60 * MINUTE;
+        let a_minute_ago = now_ms() - MINUTE;
+        for history in [&[][..], &[("h1", a_minute_ago)][..]] {
+            let dir = test_dir();
+            let mut s = shelf_on_disk(&dir, 5, 7, history, &[("p", month_ago)]);
+            assert_eq!(s.set_pin_persisted("p", false), Ok(false));
+            assert!(s.find("p").is_none());
+            assert_eq!(
+                s.unpin_removal(),
+                Some(UnpinRemoval::Retention),
+                "history {history:?}"
+            );
+        }
+
+        // Within retention, older than every row history holds.
+        let t = now_ms() - 30 * MINUTE;
+        let dir = test_dir();
+        let mut s = shelf_on_disk(&dir, 5, 7, &[("h1", t + MINUTE)], &[("p", t)]);
+        assert_eq!(s.set_pin_persisted("p", false), Ok(false));
+        assert_eq!(s.unpin_removal(), Some(UnpinRemoval::OlderThanHistory));
+
+        // Taken back: there is no reason to give, and none left over.
+        let dir = test_dir();
+        let mut s = shelf_on_disk(&dir, 5, 7, &[("h1", t)], &[("p", t + MINUTE)]);
+        assert_eq!(s.set_pin_persisted("p", false), Ok(false));
+        assert!(s.find("p").is_some());
+        assert_eq!(s.unpin_removal(), None);
     }
 
     #[test]

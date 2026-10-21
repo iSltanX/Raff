@@ -230,22 +230,26 @@ pub fn reorder_pinned(
 }
 
 /// Where a pin change left the row. `removed` is an unpin that history did
-/// not take back — the row was older than all of it — so the panel can say
-/// why the row is gone.
+/// not take back, and `reason` says why — past the retention period, older
+/// than all of history, or let go by its limit — so the panel can say it.
 #[derive(Serialize, Debug, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct PinDto {
     pub is_pinned: bool,
     pub removed: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<crate::storage::UnpinRemoval>,
 }
 
 fn set_pin(store: &mut Store, id: &str, is_pinned: bool) -> Result<PinDto, String> {
     let is_pinned = store
         .set_pin_persisted(id, is_pinned)
         .map_err(save_failed)?;
+    let removed = store.find(id).is_none();
     Ok(PinDto {
         is_pinned,
-        removed: store.find(id).is_none(),
+        removed,
+        reason: if removed { store.unpin_removal() } else { None },
     })
 }
 
@@ -950,14 +954,16 @@ mod tests {
             pinned,
             PinDto {
                 is_pinned: true,
-                removed: false
+                removed: false,
+                reason: None,
             }
         );
         assert_eq!(
             set_pin(&mut store, &newer, false).unwrap(),
             PinDto {
                 is_pinned: false,
-                removed: false
+                removed: false,
+                reason: None,
             },
             "newer than the history it returns to: taken back"
         );
@@ -968,19 +974,39 @@ mod tests {
             set_pin(&mut store, &older, false).unwrap(),
             PinDto {
                 is_pinned: false,
-                removed: true
+                removed: true,
+                reason: Some(crate::storage::UnpinRemoval::OlderThanHistory),
             },
             "older than all of it: gone"
         );
-        let wire = serde_json::to_value(PinDto {
-            is_pinned: false,
-            removed: true,
-        })
-        .unwrap();
         assert_eq!(
-            wire,
-            serde_json::json!({ "isPinned": false, "removed": true })
+            serde_json::to_value(PinDto {
+                is_pinned: false,
+                removed: false,
+                reason: None,
+            })
+            .unwrap(),
+            serde_json::json!({ "isPinned": false, "removed": false }),
+            "no reason on the wire when there is none"
         );
+        for (reason, word) in [
+            (crate::storage::UnpinRemoval::Retention, "retention"),
+            (
+                crate::storage::UnpinRemoval::OlderThanHistory,
+                "olderThanHistory",
+            ),
+            (crate::storage::UnpinRemoval::Limit, "limit"),
+        ] {
+            assert_eq!(
+                serde_json::to_value(PinDto {
+                    is_pinned: false,
+                    removed: true,
+                    reason: Some(reason),
+                })
+                .unwrap(),
+                serde_json::json!({ "isPinned": false, "removed": true, "reason": word })
+            );
+        }
     }
 
     #[test]

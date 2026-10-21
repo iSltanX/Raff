@@ -109,6 +109,7 @@ export function createFakeTauri(initialState, { failTimes = 0 } = {}) {
           const pinnedIndex = state.pinned.findIndex((item) => item.id === id);
           let isPinned;
           let removed = false;
+          let reason;
           if (pinnedIndex >= 0 && desired === false) {
             const [item] = state.pinned.splice(pinnedIndex, 1);
             item.isPinned = false;
@@ -119,8 +120,14 @@ export function createFakeTauri(initialState, { failTimes = 0 } = {}) {
             const older =
               state.history.length > 0 &&
               state.history.every((other) => item.createdAt < other.createdAt);
-            if (older) {
+            // Past the retention period the age limit is what lets it go,
+            // whatever history holds — and the panel says so (ت٢٩).
+            const retentionDays = state.settings?.retentionDays ?? 0;
+            const pastRetention =
+              retentionDays > 0 && item.createdAt < Date.now() - retentionDays * 86_400_000;
+            if (pastRetention || older) {
               removed = true;
+              reason = pastRetention ? 'retention' : 'olderThanHistory';
             } else {
               state.history.push(item);
               state.history.sort((a, b) => b.createdAt - a.createdAt);
@@ -136,7 +143,7 @@ export function createFakeTauri(initialState, { failTimes = 0 } = {}) {
           } else {
             isPinned = pinnedIndex >= 0;
           }
-          return Promise.resolve({ isPinned, removed }).then((result) => {
+          return Promise.resolve(reason ? { isPinned, removed, reason } : { isPinned, removed }).then((result) => {
             notify('raff://changed');
             return result;
           });
