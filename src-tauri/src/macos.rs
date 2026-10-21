@@ -403,9 +403,11 @@ pub struct Activation {
     pub app: FrontApp,
 }
 
-/// Activations older than this are dropped on the next write. The capture path
-/// never looks back further than one poll interval, so this is generous.
-const ACTIVATION_KEEP: Duration = Duration::from_secs(10);
+/// Activations older than this are dropped on the next write. A capture looks
+/// back to the previous poll (`monitor::Watch`), which is one interval apart
+/// unless a poll was held up — a large image, a wait at the gate for another
+/// app's slow data — so the log keeps far more than any such delay.
+const ACTIVATION_KEEP: Duration = Duration::from_secs(5 * 60);
 
 fn activation_log() -> &'static Mutex<Vec<Activation>> {
     static LOG: OnceLock<Mutex<Vec<Activation>>> = OnceLock::new();
@@ -418,17 +420,22 @@ pub fn note_activation(app: FrontApp) {
     let mut log = activation_log()
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
-    let cutoff = now.checked_sub(ACTIVATION_KEEP).unwrap_or(now);
-    // Keep the newest activation at or before the cutoff: it is the one still
-    // in force, and dropping it would lose the answer for older windows.
-    let keep_from = log.iter().rposition(|a| a.at <= cutoff).unwrap_or(0);
-    log.drain(..keep_from);
+    forget_old_activations(&mut log, now);
     remember_front(app.pid, is_regular_app(app.pid));
     log.push(Activation { at: now, app });
 }
 
+/// Drops what no capture will ask about any more. The newest activation at or
+/// before the cutoff stays: it is the one still in force, and dropping it
+/// would lose the answer for older windows.
+fn forget_old_activations(log: &mut Vec<Activation>, now: Instant) {
+    let cutoff = now.checked_sub(ACTIVATION_KEEP).unwrap_or(now);
+    let keep_from = log.iter().rposition(|a| a.at <= cutoff).unwrap_or(0);
+    log.drain(..keep_from);
+}
+
 /// The last app other than رفّ to take the front: where the user was (ت٤٧).
-/// Kept apart from the activation log, which forgets after ten seconds.
+/// Kept apart from the activation log, which forgets after five minutes.
 static LAST_OTHER_APP: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(0);
 
 /// Whether an app taking the front is one to give it back to later: not رفّ
@@ -970,6 +977,22 @@ mod tests {
     }
 
     const WINDOW: Duration = Duration::from_millis(350);
+
+    /// Review م٤: a poll held up for half a minute looks back half a minute,
+    /// so the log must still hold the password manager that was in front then.
+    #[test]
+    fn the_log_outlasts_a_held_up_poll() {
+        let now = Instant::now();
+        let mut log = vec![
+            act(ago(now, 40_000), "com.apple.Safari"),
+            act(ago(now, 30_000), "com.agilebits.onepassword7"),
+            act(ago(now, 29_000), "com.apple.Terminal"),
+        ];
+        forget_old_activations(&mut log, now);
+        let excluded = vec!["com.agilebits.onepassword7".to_string()];
+        let window = Duration::from_millis(35_000);
+        assert!(window_has_excluded(&log, &excluded, now, window));
+    }
 
     #[test]
     fn an_excluded_app_inside_the_window_is_caught_even_when_it_is_not_the_last_one() {
