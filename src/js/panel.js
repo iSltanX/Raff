@@ -582,7 +582,9 @@ function movePinned(id, delta) {
       await refresh();
     } catch (err) {
       await refresh();
-      presentToast(errorMessage(err), { duration: PIN_TOAST_MS, kind: 'error' });
+      // Through the one lane: drawn over a delete's receipt it would clear
+      // the receipt's timer and leave that delete pending (audit 010).
+      deliverFeedback(errorMessage(err), { duration: PIN_TOAST_MS, kind: 'error' });
     }
   });
 }
