@@ -621,11 +621,19 @@ function renderExcluded() {
     remove.replaceChildren(createIcon(CLEAR));
     remove.title = 'إزالة';
     remove.setAttribute('aria-label', `إزالة ${bundleId}`);
-    remove.addEventListener('click', () =>
-      save((current) => ({
+    remove.addEventListener('click', async () => {
+      const at = settings.excludedApps.indexOf(bundleId);
+      const saved = await save((current) => ({
         excludedApps: current.excludedApps.filter((candidate) => candidate !== bundleId),
-      }))
-    );
+      }));
+      if (!saved) return;
+      // The row went with the focused button: focus the row that took its
+      // place, or the one before, or the field when the list is empty.
+      const buttons = [...el('excluded-list').querySelectorAll('.remove-excluded')];
+      (buttons[at] ?? buttons[at - 1] ?? manualBundle).focus();
+      // And the app may be offered again (audit 020 ج3).
+      if (!el('excluded-manager').hidden) await populateRunningApps();
+    });
     li.append(bundle, remove);
     list.append(li);
   }
@@ -678,13 +686,28 @@ const manualBundle = el('excluded-bundle');
 const manualError = el('excluded-manual-error');
 const manualErrorText = el('excluded-manual-error-text');
 
+const MANUAL_HINT = manualBundle.getAttribute('aria-describedby');
+
 function showManualError(message) {
   manualErrorText.textContent = message;
   manualError.hidden = false;
+  manualBundle.setAttribute('aria-invalid', 'true');
+  manualBundle.setAttribute('aria-describedby', `${MANUAL_HINT} excluded-manual-error`);
 }
 
-manualBundle.addEventListener('input', () => {
+function clearManualError() {
   manualError.hidden = true;
+  manualBundle.removeAttribute('aria-invalid');
+  manualBundle.setAttribute('aria-describedby', MANUAL_HINT);
+}
+
+manualBundle.addEventListener('input', clearManualError);
+
+// Enter in the field is its button, as in any one-field form (audit 020 ج3).
+manualBundle.addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter' || e.isComposing) return;
+  e.preventDefault();
+  el('add-excluded-manual').click();
 });
 
 el('add-excluded-manual').addEventListener('click', async () => {
@@ -705,7 +728,7 @@ el('add-excluded-manual').addEventListener('click', async () => {
     return;
   }
   manualBundle.value = '';
-  manualError.hidden = true;
+  clearManualError();
   await populateRunningApps();
 });
 
