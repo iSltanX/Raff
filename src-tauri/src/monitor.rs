@@ -15,9 +15,9 @@ use crate::storage::{
 use crate::{macos, tray, AppState, Pause};
 
 const POLL_MS: u64 = 350;
-/// How far back a capture looks when asking who owned the clipboard. A change
-/// noticed at `T` happened somewhere in `(T - POLL_MS, T]`, so that is exactly
-/// the span whose frontmost apps have to clear the exclusion list.
+/// The least a capture looks back when asking who owned the clipboard. The
+/// span it actually looks back over is the time since the last look (`Watch`),
+/// which is never shorter than the sleep between two looks.
 const SOURCE_WINDOW: Duration = Duration::from_millis(POLL_MS);
 /// Images declaring more pixels than this are refused before anything is
 /// allocated for them. A full-screen Retina capture on a 6K display is ~20
@@ -35,10 +35,10 @@ pub fn start(app: AppHandle) {
     start_signal_flusher(app.clone());
     start_retention_sweeper(app.clone());
     std::thread::spawn(move || {
-        let mut last = macos::change_count();
+        let mut watch = Watch::from(macos::change_count(), Instant::now());
         let outcome = supervise(|| {
             std::thread::sleep(Duration::from_millis(POLL_MS));
-            poll_once(&app, &mut last);
+            poll_once(&app, &mut watch);
             ControlFlow::Continue(())
         });
         if outcome == Supervision::GaveUp {
@@ -204,7 +204,7 @@ struct Rules {
 }
 
 impl Rules {
-    fn now(store: &Mutex<Store>, detected_at: Instant) -> Self {
+    fn now(store: &Mutex<Store>, detected_at: Instant, window: Duration) -> Self {
         let (enabled, respect_concealed, excluded_apps) = {
             let store = crate::lock_store(store);
             (
@@ -219,8 +219,8 @@ impl Rules {
         let activations = macos::activation_snapshot();
         let front_now = macos::frontmost_app();
         let excluded = excluded_apps.contains(&front_now.bundle_id)
-            || macos::window_has_excluded(&activations, &excluded_apps, detected_at, SOURCE_WINDOW);
-        let source = macos::front_at(&activations, detected_at, SOURCE_WINDOW).unwrap_or(front_now);
+            || macos::window_has_excluded(&activations, &excluded_apps, detected_at, window);
+        let source = macos::front_at(&activations, detected_at, window).unwrap_or(front_now);
         Rules {
             enabled,
             respect_concealed,
@@ -244,22 +244,54 @@ enum Look {
     Read(ClipReading),
 }
 
-/// One poll of the pasteboard. `last` carries the change count across ticks.
-fn poll_once(app: &AppHandle, last: &mut isize) {
-    let glance = macos::change_count();
-    if glance == *last {
-        return;
+/// Where the poll loop left off: the change count it last settled on, and
+/// when it last read the count.
+struct Watch {
+    last: isize,
+    looked_at: Instant,
+}
+
+impl Watch {
+    fn from(count: isize, at: Instant) -> Self {
+        Self {
+            last: count,
+            looked_at: at,
+        }
     }
+
+    /// Takes one look at the count, read between `before` and `after`. When it
+    /// moved, answers the span the change could have happened in: from the
+    /// previous look to this one.
+    ///
+    /// The previous look is the right start, not a fixed interval back: the
+    /// loop sleeps between looks, but the poll before that sleep can take far
+    /// longer than one interval (a large image, a wait at the gate), and an
+    /// excluded app in front during that time must still be found (007 ج1).
+    /// The next span starts before this read, so nothing falls between two.
+    fn notice(&mut self, count: isize, before: Instant, after: Instant) -> Option<Duration> {
+        let since = after.saturating_duration_since(self.looked_at);
+        self.looked_at = before;
+        (count != self.last).then(|| since.max(SOURCE_WINDOW))
+    }
+}
+
+/// One poll of the pasteboard. `watch` carries the change count across ticks.
+fn poll_once(app: &AppHandle, watch: &mut Watch) {
+    let before = Instant::now();
+    let glance = macos::change_count();
     let detected_at = Instant::now();
+    let Some(window) = watch.notice(glance, before, detected_at) else {
+        return;
+    };
     let state = app.state::<AppState>();
-    let rules = Rules::now(&state.store, detected_at);
+    let rules = Rules::now(&state.store, detected_at, window);
     let (found, pause_ended) = look(
         &SystemPasteboard,
         &state.own_writes,
         &state.pause,
         rules,
         glance,
-        last,
+        &mut watch.last,
     );
     if pause_ended {
         tray::sync_paused();
@@ -679,6 +711,54 @@ mod tests {
                 }
             }
         }
+    }
+
+    fn front(at: Instant, bundle: &str) -> macos::Activation {
+        macos::Activation {
+            at,
+            app: macos::FrontApp {
+                bundle_id: bundle.into(),
+                ..Default::default()
+            },
+        }
+    }
+
+    const MS: fn(u64) -> Duration = Duration::from_millis;
+
+    /// 007 ج1: the previous poll was slow — an image capture, or a wait at the
+    /// gate — so 750ms passed between two looks, not 350. The copy was made in
+    /// the password manager early in that span, and the user had switched away
+    /// before the later part of it. A fixed 350ms window looked only at the
+    /// later part, saw Terminal, and stored the copy.
+    #[test]
+    fn the_exclusion_window_reaches_back_to_the_previous_look() {
+        let t0 = Instant::now();
+        let mut watch = Watch::from(5, t0);
+        let (before, after) = (t0 + MS(750), t0 + MS(751));
+        let window = watch.notice(6, before, after).expect("the count moved");
+        assert!(window >= after - t0, "{window:?}");
+
+        let log = vec![
+            front(t0, "com.apple.Safari"),
+            front(t0 + MS(100), "com.agilebits.onepassword7"),
+            front(t0 + MS(200), "com.apple.Terminal"),
+        ];
+        let excluded = vec!["com.agilebits.onepassword7".to_string()];
+        assert!(macos::window_has_excluded(&log, &excluded, after, window));
+    }
+
+    /// A look that finds nothing moves the start of the next window, and the
+    /// window never shrinks below the sleep between two looks.
+    #[test]
+    fn the_window_starts_at_the_last_look_and_never_falls_below_the_sleep() {
+        let t0 = Instant::now();
+        let mut watch = Watch::from(5, t0);
+        assert_eq!(watch.notice(5, t0 + MS(400), t0 + MS(401)), None);
+        let window = watch.notice(6, t0 + MS(1_200), t0 + MS(1_201)).unwrap();
+        assert!(window >= MS(801) && window < MS(1_201), "{window:?}");
+
+        let mut quick = Watch::from(5, t0);
+        assert_eq!(quick.notice(6, t0 + MS(10), t0 + MS(11)), Some(SOURCE_WINDOW));
     }
 
     fn empty_store() -> (std::path::PathBuf, Mutex<Store>) {
