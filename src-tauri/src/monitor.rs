@@ -38,7 +38,7 @@ pub fn start(app: AppHandle) {
         let mut watch = Watch::from(macos::change_count(), Instant::now());
         let outcome = supervise(|| {
             std::thread::sleep(Duration::from_millis(POLL_MS));
-            poll_once(&app, &mut watch);
+            in_pool(|| poll_once(&app, &mut watch));
             ControlFlow::Continue(())
         });
         if outcome == Supervision::GaveUp {
@@ -50,6 +50,14 @@ pub fn start(app: AppHandle) {
             let _ = app.emit("raff://changed", ());
         }
     });
+}
+
+/// Runs one tick of the capture loop inside its own autorelease pool. The
+/// loop's thread lives as long as رفّ, and what AppKit hands back autoreleased
+/// from a pasteboard read would otherwise wait for the thread's implicit pool,
+/// which drains only when the thread ends — never (018).
+fn in_pool<R>(tick: impl FnOnce() -> R) -> R {
+    objc2::rc::autoreleasepool(|_| tick())
 }
 
 /// How often the retention policy is re-applied while Raff is running.
@@ -711,6 +719,32 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// 018: on a thread of its own, as the capture loop runs, an object a
+    /// tick autoreleases is gone once the tick is over.
+    #[test]
+    fn what_a_tick_autoreleases_is_freed_when_the_tick_ends() {
+        std::thread::spawn(|| {
+            let weak = in_pool(|| {
+                let object = objc2_foundation::NSObject::new();
+                let weak = objc2::rc::Weak::from_retained(&object);
+                let _ = objc2::rc::Retained::autorelease_ptr(object);
+                assert!(weak.load().is_some(), "held by the pool until it drains");
+                weak
+            });
+            assert!(weak.load().is_none(), "still alive after the tick");
+        })
+        .join()
+        .unwrap();
+    }
+
+    /// And the loop does run every tick that way.
+    #[test]
+    fn the_capture_loop_runs_each_tick_in_a_pool() {
+        let src = include_str!("monitor.rs");
+        let start = &src[src.find("pub fn start(").unwrap()..src.find("fn in_pool").unwrap()];
+        assert!(start.contains("in_pool(|| poll_once("));
     }
 
     fn front(at: Instant, bundle: &str) -> macos::Activation {
