@@ -63,8 +63,16 @@ let query = '';
 let filter = 'all';
 let selectedId = null;
 let visible = []; // flat filtered list, newest first
-const thumbs = new Map(); // item id → data URL
-const missingThumbs = new Set(); // ids whose image file is gone, until the next refresh
+const thumbs = new Map(); // item id → data URL, for the items still in the state
+// Item id → why it has no picture, until the next refresh: 'missing' (the file
+// is gone) or 'too-large' (it is there and still pastes, but has no thumbnail
+// and is too large to send to the panel).
+const missingThumbs = new Map();
+const UNAVAILABLE_NOTE = { missing: 'الملف مفقود', 'too-large': 'المعاينة غير متاحة' };
+const UNAVAILABLE_CLASS = { missing: 'is-image-missing', 'too-large': 'is-preview-unavailable' };
+/** Rust's answer for a picture that is there but too large to send. */
+const PREVIEW_TOO_LARGE = 'raff/preview-too-large';
+const unavailableNote = (id) => UNAVAILABLE_NOTE[missingThumbs.get(id) ?? 'missing'];
 const optimisticDeletedIds = new Set();
 const optimisticPins = new Map(); // item id → { generation, value }
 const optimisticRestores = new Map(); // item id → deleted-row snapshot during Undo IPC
@@ -297,7 +305,7 @@ function buildRow(item, index) {
     media.className = 'preview-media';
     const missing = document.createElement('span');
     missing.className = 'preview-missing';
-    missing.textContent = 'الصورة غير متاحة';
+    missing.textContent = unavailableNote(item.id);
     media.append(thumb, missing);
     preview.append(media);
   } else {
@@ -439,11 +447,12 @@ function buildThumb(row, item) {
   img.addEventListener('load', () => {
     thumb.dataset.state = 'ready';
   });
-  img.addEventListener('error', () => markThumbUnavailable(thumb));
+  // A picture that arrived but does not decode is there, just not showable.
+  img.addEventListener('error', () => markThumbUnavailable(thumb, 'too-large'));
   if (thumbs.has(item.id)) img.src = thumbs.get(item.id);
   else if (missingThumbs.has(item.id)) {
     thumb.dataset.state = 'unavailable';
-    row.classList.add('is-image-missing');
+    row.classList.add(UNAVAILABLE_CLASS[missingThumbs.get(item.id)]);
   } else requestThumb(item.id, img, thumb);
   thumb.append(placeholder, img);
   return thumb;
@@ -464,7 +473,7 @@ function buildCard(row, item, index) {
   media.setAttribute('role', 'gridcell');
   const missing = document.createElement('span');
   missing.className = 'preview-missing';
-  missing.textContent = 'الصورة غير متاحة';
+  missing.textContent = unavailableNote(item.id);
   media.append(buildThumb(row, item), missing);
   if (index < QUICK_SLOTS) {
     const slot = document.createElement('kbd');
@@ -954,20 +963,23 @@ async function loadThumb(id, img, thumb) {
       thumbs.set(id, url);
       img.src = url;
     } else {
-      markThumbUnavailable(thumb);
+      markThumbUnavailable(thumb, 'missing');
     }
-  } catch {
-    markThumbUnavailable(thumb);
+  } catch (err) {
+    markThumbUnavailable(thumb, err === PREVIEW_TOO_LARGE ? 'too-large' : 'missing');
   }
 }
 
-/** A stored image whose file is gone says so beside its placeholder.
- *  A class, not :has() — WebKit 15 on macOS 12 has no :has(). */
-function markThumbUnavailable(thumb) {
+/** An image with no picture to show says why beside its placeholder: its
+ *  file is gone, or only the preview is. A class, not :has() — WebKit 15 on
+ *  macOS 12 has no :has(). */
+function markThumbUnavailable(thumb, reason) {
   thumb.dataset.state = 'unavailable';
   const row = thumb.closest('.row');
-  row?.classList.add('is-image-missing');
-  if (row?.dataset.id) missingThumbs.add(row.dataset.id);
+  row?.classList.add(UNAVAILABLE_CLASS[reason]);
+  const note = row?.querySelector('.preview-missing');
+  if (note) note.textContent = UNAVAILABLE_NOTE[reason];
+  if (row?.dataset.id) missingThumbs.set(row.dataset.id, reason);
 }
 
 function scrollSelectedIntoView() {
@@ -1557,6 +1569,16 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
  * mid-refresh is a normal race, not a fault, and must never be mistaken for
  * one and answered with a reload.
  */
+/** Pictures of items no longer in Rust's state (deleted, trimmed by the
+ *  history limit or retention) are dropped, so what the list keeps is bounded
+ *  by what it shows rather than by everything it showed this session. */
+function forgetPicturesOfGoneItems(next) {
+  const ids = new Set([...(next.pinned ?? []), ...(next.history ?? [])].map((item) => item.id));
+  for (const cache of [thumbs, fullImages]) {
+    for (const id of cache.keys()) if (!ids.has(id)) cache.delete(id);
+  }
+}
+
 async function refresh({ retry = false } = {}) {
   const token = ++refreshToken;
   const attempts = retry ? RETRY_DELAYS_MS.length + 1 : 1;
@@ -1583,6 +1605,7 @@ async function refresh({ retry = false } = {}) {
         if (optimistic) item.isPinned = optimistic.value;
       }
       for (const snapshot of optimisticRestores.values()) restoreSnapshot(state, snapshot);
+      forgetPicturesOfGoneItems(next);
       phase = 'ready';
       diag('refresh:ok', {
         items: (next?.pinned?.length ?? 0) + (next?.history?.length ?? 0),
@@ -1905,12 +1928,14 @@ function previewContent(item) {
     const show = (src) => {
       if (src && previewEl.dataset.id === item.id) img.src = src;
     };
-    img.addEventListener('error', () => {
+    const note = (reason) => {
+      if (previewEl.dataset.id !== item.id) return;
       const missing = document.createElement('p');
       missing.className = 'preview-missing-note';
-      missing.textContent = 'الصورة غير متاحة';
+      missing.textContent = UNAVAILABLE_NOTE[reason];
       frame.replaceChildren(missing);
-    });
+    };
+    img.addEventListener('error', () => note('too-large'));
     // The thumbnail at once if the list has it, then the original (sharper
     // at 308pt) in its place — fetched only once the preview has settled on
     // this picture, and kept for the next few.
@@ -1923,11 +1948,17 @@ function previewContent(item) {
         api
           .getFullImage(item.id)
           .then((url) => {
-            if (!url) return;
+            if (!url) {
+              if (!thumbs.has(item.id)) note('missing');
+              return;
+            }
             rememberFullImage(item.id, url);
             show(url);
           })
-          .catch((err) => diag('preview:image-failed', err));
+          .catch((err) => {
+            if (err === PREVIEW_TOO_LARGE) note('too-large');
+            else diag('preview:image-failed', err);
+          });
       }, FULL_IMAGE_SETTLE_MS);
     }
     frame.append(img);

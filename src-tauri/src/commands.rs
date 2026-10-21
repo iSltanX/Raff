@@ -34,6 +34,9 @@ pub mod err {
     pub const UNDO_RETENTION: &str = crate::storage::UNDO_RETENTION;
     /// A test run of رفّ: it has no clipboard to copy to or paste from (ت٤٨).
     pub const CLIPBOARD_OFF: &str = "raff/clipboard-off";
+    /// The picture is there — it still pastes — but no thumbnail exists and
+    /// the original is too large to send to the panel.
+    pub const PREVIEW_TOO_LARGE: &str = "raff/preview-too-large";
 }
 
 /// Keeps the detail where it is useful — the process log — and hands the
@@ -542,54 +545,90 @@ fn validate_settings(settings: &Settings) -> Result<(), String> {
     Ok(())
 }
 
-/// The preview beside the panel shows the original picture up to this size;
-/// past it, the thumbnail. A data URL crosses the bridge as one string that
-/// the main thread evaluates, so a large screenshot would stall it.
+/// No picture crosses the bridge past this size, for the list or the preview:
+/// a data URL is one string that the main thread evaluates, so a large
+/// screenshot would stall it — and the list keeps what it gets for the whole
+/// session.
 const PREVIEW_IMAGE_MAX_BYTES: u64 = 4 * 1024 * 1024;
 
 /// `full` is the preview's request for the original picture. Off the main
-/// thread (`async`): reading and encoding a few megabytes there would stall
-/// the menu-bar icon and every window.
+/// thread (`async`), and the files are read with the store lock released:
+/// reading and encoding a few megabytes would otherwise hold up every capture
+/// and panel refresh, and on the main thread the menu-bar icon and every
+/// window.
+///
+/// `Ok(None)`: nothing to show — no such image, or its file is gone.
+/// `Err(PREVIEW_TOO_LARGE)`: the original is there, too large to send, and has
+/// no thumbnail; the item still pastes.
 #[tauri::command(async)]
-pub fn get_image(state: State<'_, AppState>, id: String, full: Option<bool>) -> Option<String> {
-    let store = crate::lock_store(&state.store);
-    image_data_url(&store, &id, full.unwrap_or(false))
+pub fn get_image(
+    state: State<'_, AppState>,
+    id: String,
+    full: Option<bool>,
+) -> Result<Option<String>, String> {
+    let files = ImageFiles::of(&crate::lock_store(&state.store), &id);
+    files.map_or(Ok(None), |files| files.data_url(full.unwrap_or(false)))
 }
 
-/// Prefer the compact preview, but recover from an interrupted/failed
-/// thumbnail write by reading the original image. Older history files can
-/// legitimately contain a stale `thumbFile`, so fallback happens on read
-/// failure rather than only when the field is absent. With `full`, the
-/// original comes first while it is small enough to send, then the thumbnail
-/// — never an original past the limit.
-fn image_data_url(store: &Store, id: &str, full: bool) -> Option<String> {
-    let item = store.find(id)?;
-    let dir = store.images_dir();
-    // Every name goes through `image_path` (005): one outside images/ is skipped.
-    let path = |file: &String| crate::storage::image_path(&dir, file);
-    let small = |file: &&String| {
-        path(file)
-            .is_some_and(|p| std::fs::metadata(p).is_ok_and(|m| m.len() <= PREVIEW_IMAGE_MAX_BYTES))
-    };
-    let candidates: Vec<&String> = if full {
-        item.image_file
-            .iter()
-            .filter(small)
-            .chain(item.thumb_file.iter())
-            .collect()
-    } else {
-        item.thumb_file
-            .iter()
-            .chain(item.image_file.iter())
-            .collect()
-    };
-    let bytes = candidates
-        .into_iter()
-        .find_map(|file| path(file).and_then(|p| std::fs::read(p).ok()))?;
-    Some(format!(
-        "data:image/png;base64,{}",
-        base64::engine::general_purpose::STANDARD.encode(bytes)
-    ))
+/// Where an image item's picture and thumbnail are, taken under the lock.
+/// Every name goes through `image_path` (005): one outside images/ is `None`.
+struct ImageFiles {
+    original: Option<std::path::PathBuf>,
+    thumbnail: Option<std::path::PathBuf>,
+}
+
+impl ImageFiles {
+    fn of(store: &Store, id: &str) -> Option<Self> {
+        let item = store.find(id)?;
+        let dir = store.images_dir();
+        let path = |file: &Option<String>| {
+            file.as_ref()
+                .and_then(|f| crate::storage::image_path(&dir, f))
+        };
+        Some(Self {
+            original: path(&item.image_file),
+            thumbnail: path(&item.thumb_file),
+        })
+    }
+
+    /// The thumbnail first, the original only while it fits the limit — or,
+    /// with `full`, the other way round. Older history files can legitimately
+    /// name a `thumbFile` that is gone, so the fallback is decided by what
+    /// reads, not by which names are recorded.
+    fn data_url(&self, full: bool) -> Result<Option<String>, String> {
+        let size = |p: &std::path::PathBuf| std::fs::metadata(p).ok().map(|m| m.len());
+        let small = self
+            .original
+            .as_ref()
+            .filter(|p| size(p).is_some_and(|n| n <= PREVIEW_IMAGE_MAX_BYTES));
+        let order = if full {
+            [small, self.thumbnail.as_ref()]
+        } else {
+            [self.thumbnail.as_ref(), small]
+        };
+        if let Some(bytes) = order
+            .into_iter()
+            .flatten()
+            .find_map(|p| std::fs::read(p).ok())
+        {
+            return Ok(Some(format!(
+                "data:image/png;base64,{}",
+                base64::engine::general_purpose::STANDARD.encode(bytes)
+            )));
+        }
+        // Nothing sendable. A picture that is there but too large is not a
+        // missing file: it pastes, and the panel says something else.
+        let too_large = self
+            .original
+            .as_ref()
+            .and_then(size)
+            .is_some_and(|n| n > PREVIEW_IMAGE_MAX_BYTES);
+        if too_large {
+            Err(err::PREVIEW_TOO_LARGE.into())
+        } else {
+            Ok(None)
+        }
+    }
 }
 
 /// Opens the shelf, for the first-run window's "open رفّ now".
@@ -1091,6 +1130,17 @@ mod tests {
         assert!(ids_matching(&store, "\u{0645}\u{062f}\u{0631}\u{0633}\u{0647}").is_empty());
     }
 
+    fn image_data_url(store: &Store, id: &str, full: bool) -> Result<Option<String>, String> {
+        ImageFiles::of(store, id).map_or(Ok(None), |files| files.data_url(full))
+    }
+
+    fn data_url_of(bytes: &[u8]) -> Result<Option<String>, String> {
+        Ok(Some(format!(
+            "data:image/png;base64,{}",
+            base64::engine::general_purpose::STANDARD.encode(bytes)
+        )))
+    }
+
     fn image_store(original: &[u8], thumb: Option<(&str, &[u8])>) -> (Store, String) {
         let root = std::env::temp_dir().join(format!("raff-image-test-{}", uuid::Uuid::new_v4()));
         let mut store = Store::load(root);
@@ -1115,10 +1165,9 @@ mod tests {
     #[test]
     fn get_image_prefers_the_persisted_thumbnail() {
         let (store, id) = image_store(b"original", Some(("preview.thumb.png", b"thumbnail")));
-        let expected = base64::engine::general_purpose::STANDARD.encode(b"thumbnail");
         assert_eq!(
             image_data_url(&store, &id, false),
-            Some(format!("data:image/png;base64,{expected}"))
+            data_url_of(b"thumbnail")
         );
     }
 
@@ -1127,37 +1176,59 @@ mod tests {
     #[test]
     fn the_preview_gets_the_original_picture_up_to_its_limit() {
         let (store, id) = image_store(b"original", Some(("preview.thumb.png", b"thumbnail")));
-        let original = base64::engine::general_purpose::STANDARD.encode(b"original");
-        assert_eq!(
-            image_data_url(&store, &id, true),
-            Some(format!("data:image/png;base64,{original}"))
-        );
+        assert_eq!(image_data_url(&store, &id, true), data_url_of(b"original"));
 
         let huge = vec![0u8; PREVIEW_IMAGE_MAX_BYTES as usize + 1];
         let (store, id) = image_store(&huge, Some(("preview.thumb.png", b"thumbnail")));
-        let thumbnail = base64::engine::general_purpose::STANDARD.encode(b"thumbnail");
         assert_eq!(
             image_data_url(&store, &id, true),
-            Some(format!("data:image/png;base64,{thumbnail}")),
+            data_url_of(b"thumbnail"),
             "too large for the bridge: the thumbnail instead"
         );
 
         let (store, id) = image_store(&huge, None);
         assert_eq!(
             image_data_url(&store, &id, true),
-            None,
-            "and with no thumbnail, nothing rather than the oversized original"
+            Err(err::PREVIEW_TOO_LARGE.into()),
+            "and with no thumbnail, no picture rather than the oversized original"
         );
+    }
+
+    /// F-THUMB-FALLBACK (audit 2026-10-21): the list's own request, with the
+    /// recorded thumbnail gone, used to send the original whatever its size —
+    /// the 64 MiB case was an 89-million-character string across the bridge.
+    /// Now nothing is sent, and the answer says why: the picture is there, it
+    /// is the preview that is not — the file is neither missing nor touched.
+    #[test]
+    fn a_card_never_gets_an_original_past_the_limit() {
+        let huge = vec![0u8; PREVIEW_IMAGE_MAX_BYTES as usize + 1];
+        let (store, id) = image_store(&huge, None);
+        assert_eq!(
+            image_data_url(&store, &id, false),
+            Err(err::PREVIEW_TOO_LARGE.into())
+        );
+        let original = store.images_dir().join("original.png");
+        assert_eq!(std::fs::read(original).unwrap().len(), huge.len());
+
+        let at_limit = vec![0u8; PREVIEW_IMAGE_MAX_BYTES as usize];
+        let (store, id) = image_store(&at_limit, None);
+        assert_eq!(image_data_url(&store, &id, false), data_url_of(&at_limit));
     }
 
     #[test]
     fn get_image_falls_back_when_the_recorded_thumbnail_is_missing() {
         let (store, id) = image_store(b"original", None);
-        let expected = base64::engine::general_purpose::STANDARD.encode(b"original");
-        assert_eq!(
-            image_data_url(&store, &id, false),
-            Some(format!("data:image/png;base64,{expected}"))
-        );
+        assert_eq!(image_data_url(&store, &id, false), data_url_of(b"original"));
+    }
+
+    /// A missing file is told apart from a picture too large to send.
+    #[test]
+    fn a_missing_picture_is_nothing_not_too_large() {
+        let (store, id) = image_store(b"original", None);
+        std::fs::remove_file(store.images_dir().join("original.png")).unwrap();
+        assert_eq!(image_data_url(&store, &id, false), Ok(None));
+        assert_eq!(image_data_url(&store, &id, true), Ok(None));
+        assert_eq!(image_data_url(&store, "no-such-id", false), Ok(None));
     }
 }
 

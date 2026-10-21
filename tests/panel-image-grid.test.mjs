@@ -90,7 +90,7 @@ test('panel: the Images filter is a keyboard-navigable grid of cards', async (t)
     const card = doc.querySelector('#list .row[data-id="img1"]');
     const missing = card.querySelector('.preview-missing');
     assert.ok(missing, 'the card has the words');
-    assert.equal(missing.textContent, 'الصورة غير متاحة');
+    assert.equal(missing.textContent, 'الملف مفقود');
   });
 
   await t.test('⌘2 and a click choose a card exactly as they choose a row', async () => {

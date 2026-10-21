@@ -370,7 +370,8 @@ body {
   min-width: 0;
 }
 
-/* A file that is gone says so where the picture would be. */
+/* A file that is gone, or a picture too large to preview, says so where the
+   picture would be. */
 .preview-missing {
   display: none;
   font-size: var(--text-caption);
@@ -378,7 +379,8 @@ body {
 }
 
 /* Set from JS: WebKit 15 (macOS 12) has no :has(). */
-.row.is-image-missing .preview-missing {
+.row.is-image-missing .preview-missing,
+.row.is-preview-unavailable .preview-missing {
   display: inline;
 }
 
