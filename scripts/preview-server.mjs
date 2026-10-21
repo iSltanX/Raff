@@ -32,9 +32,11 @@ export function previewServer(folder) {
   const root = path.resolve(folder);
   return createServer(async (req, res) => {
     const headers = { 'cache-control': 'no-store' };
-    const { pathname } = new URL(req.url, 'http://127.0.0.1');
     let file;
     try {
+      // Both can throw on a malformed request (`//`, a lone `%`): refused, not
+      // an unhandled rejection that ends the server.
+      const { pathname } = new URL(req.url, 'http://127.0.0.1');
       file = path.join(root, decodeURIComponent(pathname === '/' ? '/index.html' : pathname));
     } catch {
       res.writeHead(400, headers).end();

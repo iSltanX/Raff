@@ -45,3 +45,20 @@ test('every answer says no-store, and only the folder is served', async () => {
     rmSync(parent, { recursive: true, force: true });
   }
 });
+
+test('a request it cannot parse is refused, not the end of the server', async () => {
+  // `new URL('//', base)` throws; thrown in the handler, it took Node down.
+  const { request } = await import('node:http');
+  const server = previewServer(mkdtempSync(path.join(tmpdir(), 'raff-preview-')));
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const { port } = server.address();
+  try {
+    const status = await new Promise((resolve, reject) => {
+      request({ host: '127.0.0.1', port, path: '//' }, (res) => resolve(res.statusCode)).on('error', reject).end();
+    });
+    assert.equal(status, 400);
+    assert.equal((await fetch(`http://127.0.0.1:${port}/missing`)).status, 404, 'still serving');
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
