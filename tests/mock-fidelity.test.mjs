@@ -44,9 +44,12 @@ test('the update window opened from the menu checks once, as in the app', async 
   // check to claim; the second claim (the event after the load) finds none.
   assert.equal(await mockInvoke('consume_update_intent'), true);
   assert.equal(await mockInvoke('consume_update_intent'), false);
-  // «التحقق» in Settings or About found a version: one more check to claim.
+  // «التحقق» in Settings or About found a version: the window is handed
+  // that version, once, instead of asking again (022 ج2).
+  await mockInvoke('check_for_update');
   await mockInvoke('open_updates');
-  assert.equal(await mockInvoke('consume_update_intent'), true);
+  const found = await mockInvoke('consume_update_intent');
+  assert.equal(found.status, 'available');
   assert.equal(await mockInvoke('consume_update_intent'), false);
 });
 

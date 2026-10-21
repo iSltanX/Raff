@@ -55,6 +55,9 @@ let deleteSequence = 0;
 // leaves one check for the window to claim before opening it (`updater.rs`):
 // a freshly loaded update page always finds one.
 let updateIntent = true;
+// Set once the mock has "checked": `open_updates` then hands the window what
+// was found, as Rust does.
+let updateFound = false;
 
 const listeners = new Map();
 
@@ -311,6 +314,7 @@ function answer(cmd, args) {
     // Design-review sample: shows the richest "update available" state. Events
     // don't fire outside Tauri, so download resolves straight to "installed".
     case 'check_for_update':
+      updateFound = true;
       return Promise.resolve({
         status: 'available',
         currentVersion: '6.0.1',
@@ -321,12 +325,14 @@ function answer(cmd, args) {
     case 'download_and_install_update':
     case 'restart_to_update':
       return Promise.resolve(null);
+    // As in Rust: what a check found is handed to the window, not asked again.
     case 'open_updates':
-      updateIntent = true;
+      updateIntent = updateFound ? 'found' : true;
       return Promise.resolve(null);
     case 'consume_update_intent': {
       const claimed = updateIntent;
       updateIntent = false;
+      if (claimed === 'found') return mockInvoke('check_for_update');
       return Promise.resolve(claimed);
     }
 

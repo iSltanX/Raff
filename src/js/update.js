@@ -200,7 +200,11 @@ retryBtn.addEventListener('click', () => {
 // simply left on screen instead of starting a new check.
 async function claimMenuIntent() {
   try {
-    if (await api.consumeUpdateIntent()) flow.checkIfIdle();
+    const intent = await api.consumeUpdateIntent();
+    // `true`: check. An object: the version Settings or About just found,
+    // shown as it is rather than asked for again (audit 022 ج2).
+    if (intent === true) flow.checkIfIdle();
+    else if (intent && typeof intent === 'object') flow.showFound(intent);
   } catch (err) {
     console.error('raff: update-intent claim failed', err);
   }

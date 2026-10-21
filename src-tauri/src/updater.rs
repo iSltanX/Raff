@@ -15,7 +15,6 @@
 //! state, no real benefit — so we use the recommended combined call and expose
 //! the *phases* through distinct progress events instead of splitting commands.
 
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, MutexGuard};
 
 use serde::Serialize;
@@ -409,13 +408,37 @@ pub async fn restart_to_update(window: tauri::WebviewWindow, app: AppHandle) -> 
 // (already-open window) — so the request is never lost and the check never
 // runs twice.
 
-/// Set while a menu-driven "check for updates" is pending delivery to the
-/// update window. Cleared by the first `consume_update_intent` caller.
-static PENDING_MENU_CHECK: AtomicBool = AtomicBool::new(false);
+/// What the update window is asked to do when it next looks: check, or show
+/// a version Settings or About already found (audit 022 ج2).
+enum Intent {
+    Check,
+    Show(UpdateCheck),
+}
+
+/// Set while a request is pending delivery to the update window. Taken by the
+/// first `consume_update_intent` caller.
+static PENDING_INTENT: Mutex<Option<Intent>> = Mutex::new(None);
+
+fn set_intent(intent: Intent) {
+    *PENDING_INTENT.lock().unwrap_or_else(|p| p.into_inner()) = Some(intent);
+}
+
+/// What `consume_update_intent` answers: `true` to check, `false` for
+/// nothing, or the found version itself to show.
+#[derive(Serialize, Debug)]
+#[serde(untagged)]
+pub enum Claimed {
+    Flag(bool),
+    Found(UpdateCheck),
+}
 
 /// Tray menu handler: route the request to the standalone update window.
 pub fn request_check_from_menu(app: &AppHandle) {
-    PENDING_MENU_CHECK.store(true, Ordering::SeqCst);
+    set_intent(Intent::Check);
+    show_update_window(app);
+}
+
+fn show_update_window(app: &AppHandle) {
     // Create-or-focus the update window (existing helper; never duplicates).
     crate::commands::open_update_window(app);
     // Covers the already-open case (a live listener receives this). For a
@@ -425,23 +448,40 @@ pub fn request_check_from_menu(app: &AppHandle) {
 }
 
 /// «التحقق» in Settings or About found a newer version: open the same update
-/// window the menu opens, so the user can install it from there.
+/// window the menu opens, so the user can install it from there — showing the
+/// version that check is holding. Asking the server again would have dropped
+/// it (a fresh check clears `pending`) for the same answer, or a different one
+/// than the user was just shown. With nothing held, the window checks.
 #[tauri::command]
 pub fn open_updates(app: AppHandle) {
-    request_check_from_menu(&app);
+    let held = {
+        let state = app.state::<UpdaterState>();
+        let inner = state.lock();
+        inner.pending.as_ref().map(UpdateCheck::available_from)
+    };
+    set_intent(held.map_or(Intent::Check, Intent::Show));
+    show_update_window(&app);
 }
 
 /// Claimed once by the update window (on load, and on `raff://open-updates`).
 /// Returns true to exactly one caller; every later caller gets false, so the
 /// menu can never trigger two checks.
 #[tauri::command]
-pub fn consume_update_intent(window: tauri::WebviewWindow) -> Result<bool, String> {
+pub fn consume_update_intent(window: tauri::WebviewWindow) -> Result<Claimed, String> {
     crate::access::require(&window, "consume_update_intent")?;
     Ok(take_update_intent())
 }
 
-fn take_update_intent() -> bool {
-    PENDING_MENU_CHECK.swap(false, Ordering::SeqCst)
+fn take_update_intent() -> Claimed {
+    match PENDING_INTENT
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .take()
+    {
+        None => Claimed::Flag(false),
+        Some(Intent::Check) => Claimed::Flag(true),
+        Some(Intent::Show(found)) => Claimed::Found(found),
+    }
 }
 
 #[cfg(test)]
@@ -518,10 +558,23 @@ mod tests {
     fn menu_intent_is_consumed_once() {
         // A menu click sets the flag; exactly one claimer sees it, so the tray
         // entry point can never trigger two checks for one click.
-        PENDING_MENU_CHECK.store(true, Ordering::SeqCst);
-        assert!(take_update_intent());
-        assert!(!take_update_intent());
-        assert!(!take_update_intent());
+        let claim = || serde_json::to_value(take_update_intent()).unwrap();
+        set_intent(Intent::Check);
+        assert_eq!(claim(), serde_json::json!(true));
+        assert_eq!(claim(), serde_json::json!(false));
+        assert_eq!(claim(), serde_json::json!(false));
+
+        // What Settings found is handed over as it is, once (022 ج2).
+        set_intent(Intent::Show(UpdateCheck::Available {
+            current_version: "6.0.1".into(),
+            version: "6.1.0".into(),
+            date: None,
+            notes: None,
+        }));
+        let found = claim();
+        assert_eq!(found["status"], "available");
+        assert_eq!(found["version"], "6.1.0");
+        assert_eq!(claim(), serde_json::json!(false));
     }
 
     #[test]
