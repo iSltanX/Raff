@@ -35,26 +35,109 @@ function contrast(a, b) {
   return (hi + 0.05) / (lo + 0.05);
 }
 
-test('the «قريب ومرتب» palette is the only palette, in both appearances', () => {
-  // Approved at Gate 1 (2026-10-01): neutral greys, one olive sage, clear ink.
-  // Figma «Raff · Theme» holds the same values; changing one is a design
-  // decision, made in Figma first.
+test('the «نجدي · طين وقرميد» palette is the only palette, in both appearances', () => {
+  // Approved with the full redesign (2026-10-21): warm sand surfaces, one clay
+  // for what is pressed or selected and for the mark's card, crimson danger.
+  // Figma XCNmucSuAe007qWHnOXQpW «Color» holds the same values; changing one is
+  // a design decision, made in Figma first.
   const tokens = read('src/tokens.css');
-  assert.equal(token(tokens, ':root', '--ink'), '#1a1a1a');
-  assert.equal(token(tokens, ':root', '--bg-canvas'), '#f3f3f3');
-  assert.equal(token(tokens, ':root', '--bg-window'), '#fafafa');
-  assert.equal(token(tokens, ':root', '--accent'), '#56644c');
-  assert.equal(token(tokens, ':root', '--brand-sage'), '#86947b');
-  assert.equal(token(tokens, ':root', '--line-strong'), '#d9d9d9');
-  assert.equal(token(tokens, ":root[data-appearance='dark']", '--ink'), '#f3f3f3');
-  assert.equal(token(tokens, ":root[data-appearance='dark']", '--bg-window'), '#1f1f1f');
+  assert.equal(token(tokens, ':root', '--ink'), '#1f1915');
+  assert.equal(token(tokens, ':root', '--bg-canvas'), '#f5f1ea');
+  assert.equal(token(tokens, ':root', '--bg-window'), '#fcfaf7');
+  assert.equal(token(tokens, ':root', '--accent'), '#a84a24');
+  assert.equal(token(tokens, ':root', '--brand-accent'), '#c25a2f');
+  assert.equal(token(tokens, ':root', '--danger'), '#b4233f');
+  assert.equal(token(tokens, ':root', '--line-strong'), '#e2dbd0');
+  assert.equal(token(tokens, ":root[data-appearance='dark']", '--ink'), '#f5f1ea');
+  assert.equal(token(tokens, ":root[data-appearance='dark']", '--bg-window'), '#221e1b');
+  assert.equal(token(tokens, ":root[data-appearance='dark']", '--accent'), '#ef9d79');
 
   for (const file of [...CSS, ...HTML]) {
     const text = read(`src/${file}`).toLowerCase();
-    assert.doesNotMatch(text, /#c4704b|#d4855a|#a85a3a|terracotta/u, `${file} carries no previous-identity colour`);
+    assert.doesNotMatch(
+      text,
+      /#c4704b|#d4855a|#a85a3a|terracotta|#56644c|#86947b|--brand-sage/u,
+      `${file} carries no previous-identity colour`
+    );
   }
   for (const file of CSS.slice(1)) {
     assert.doesNotMatch(read(`src/${file}`), /--(?:color|metric|figma)-/u, `${file} uses the current token names`);
+  }
+});
+
+test('the design is flat: no shadow, gradient or frosted glass anywhere', () => {
+  // «لا تستخدم هذه الأنماط»: layers part by tone and a 1px line. A ring drawn
+  // with box-shadow (no offset, no blur) is a line, and a gradient between two
+  // identical stops is a solid overlay; nothing else passes.
+  for (const file of CSS) {
+    const css = read(`src/${file}`).replace(/\/\*[\s\S]*?\*\//gu, '');
+    assert.doesNotMatch(css, /--shadow-|backdrop-filter|drop-shadow|text-shadow/u, file);
+    for (const [, value] of css.matchAll(/box-shadow:\s*([^;]+);/gu)) {
+      for (const layer of value.split(/,(?![^(]*\))/u).map((v) => v.trim())) {
+        assert.match(layer, /^(?:none|(?:inset\s+)?0(?:px)?\s+0(?:px)?\s+0(?:px)?\s+[\d.]+px\s+\S.*)$/u, `${file}: box-shadow ${layer}`);
+      }
+    }
+    for (const [, a, b] of css.matchAll(/linear-gradient\(([^,()]+(?:\([^)]*\))?),\s*([^,()]+(?:\([^)]*\))?)\)/gu)) {
+      assert.equal(a.trim(), b.trim(), `${file}: a gradient between different colours`);
+    }
+    assert.doesNotMatch(css, /(?:radial|conic)-gradient/u, file);
+  }
+});
+
+test('every window draws its own thin, flat scroll bar', () => {
+  // Settings loads tokens.css but not controls.css; with the bar defined only
+  // in controls, its pages showed the system's wide grey bar (live review).
+  const tokens = read('src/tokens.css');
+  assert.match(tokens, /::-webkit-scrollbar\s*\{[^}]*width:\s*8px;/u);
+  assert.match(tokens, /::-webkit-scrollbar-thumb\s*\{[^}]*background:\s*var\(--line-strong\) padding-box;/u);
+  for (const file of HTML) {
+    assert.match(read(`src/${file}`), /href="tokens\.css"/u, `${file} loads tokens.css`);
+  }
+});
+
+test('findings of the independent UI review stay fixed', () => {
+  // The stale-hotkey warning is a .callout: Settings must load controls.css.
+  assert.match(read('src/settings.html'), /href="controls\.css"/u);
+  // «مثبّت» shows four row actions (move ↑↓, pin, delete): 4 × 28 + 3 × 2.
+  assert.match(read('src/panel.css'), /\.row\.has-reorder \.row-time\s*\{[^}]*min-width:\s*118px;/u);
+  assert.match(read('src/js/panel.js'), /row\.classList\.add\('has-reorder'\)/u);
+  // Reduced motion: an install with no progress must not read as a fixed 30%.
+  assert.match(
+    read('src/update.css'),
+    /@media \(prefers-reduced-motion: reduce\)\s*\{\s*\.update-bar\.indeterminate \.update-bar-fill\s*\{[^}]*width:\s*100%;[^}]*animation:\s*none;/u
+  );
+  // A settings page that takes the focus shows it.
+  assert.match(read('src/settings.css'), /\.settings-page:focus-visible\s*\{[^}]*outline:\s*2px solid var\(--focus\);/u);
+});
+
+test('the preview geometry agrees across Rust, CSS and the browser mock', () => {
+  // 340pt preview + 16pt gap = the 356pt the window widens by; the panel
+  // keeps its 460, so the preview starts 476 from the panel's own edge.
+  const extra = Number(read('src-tauri/src/panel.rs').match(/const PREVIEW_EXTRA: f64 = ([\d.]+);/u)[1]);
+  const css = read('src/panel.css');
+  const width = Number(block(css, '.preview-pane').match(/width:\s*(\d+)px;/u)[1]);
+  const offset = Number(css.match(/html\[data-preview='left'\] \.preview-pane\s*\{\s*right:\s*(\d+)px;/u)[1]);
+  const panel = Number(css.match(/html\[data-preview\] \.panel\s*\{[^}]*width:\s*(\d+)px;/u)[1]);
+  assert.equal(panel, 460);
+  assert.equal(extra, width + 16, 'the window widens by the preview and its gap');
+  assert.equal(offset, panel + 16, 'the preview sits one gap beyond the panel');
+  assert.match(read('src/js/mock.js'), new RegExp(`innerWidth >= ${panel + extra}`, 'u'));
+});
+
+test('the toast action stays legible on its washed button in both appearances', () => {
+  const tokens = read('src/tokens.css');
+  const rgba = (value) => {
+    if (value.startsWith('#')) return [1, 3, 5].map((i) => parseInt(value.slice(i, i + 2), 16)).concat(1);
+    return value.match(/[\d.]+/gu).map(Number);
+  };
+  const toHex = (rgb) => `#${rgb.map((c) => Math.round(c).toString(16).padStart(2, '0')).join('')}`;
+  for (const scope of [':root', ":root[data-appearance='dark']"]) {
+    const pick = (name) => token(tokens, scope, name) ?? token(tokens, ':root', name);
+    const [r, g, b, a] = rgba(pick('--inverse-wash'));
+    const base = rgba(pick('--bg-inverse'));
+    const button = toHex([r, g, b].map((c, i) => c * a + base[i] * (1 - a)));
+    const ratio = contrast(pick('--accent-on-inverse'), button);
+    assert.ok(ratio >= 4.5, `${scope}: ${ratio.toFixed(2)}:1`);
   }
 });
 
@@ -79,11 +162,19 @@ test('reading text keeps AA contrast on its surfaces in Light and Dark', () => {
   }
 });
 
-test('type is Cairo and Almarai only', () => {
-  const faces = [...read('src/tokens.css').matchAll(/font-family:\s*'([^']+)'/gu)].map((m) => m[1]);
-  assert.deepEqual([...new Set(faces)].sort(), ['Almarai', 'Cairo']);
+test('type is Cairo, Almarai, Inter and JetBrains Mono, one role each', () => {
+  const tokens = read('src/tokens.css');
+  const faces = [...tokens.matchAll(/font-family:\s*'([^']+)'/gu)].map((m) => m[1]);
+  assert.deepEqual([...new Set(faces)].sort(), ['Almarai', 'Cairo', 'Inter', 'JetBrains Mono']);
   const fonts = readdirSync(path.join(project, 'src/fonts')).filter((f) => f.endsWith('.ttf'));
-  assert.ok(fonts.every((f) => /^(Cairo|Almarai)-/u.test(f)), fonts.join(', '));
+  assert.ok(fonts.every((f) => /^(Cairo|Almarai|Inter|JetBrainsMono)-/u.test(f)), fonts.join(', '));
+  for (const face of tokens.matchAll(/url\('(fonts\/[^']+)'\)/gu)) {
+    assert.ok(existsSync(path.join(project, 'src', face[1])), face[1]);
+  }
+  assert.match(token(tokens, ':root', '--font-heading'), /^'Cairo'/u);
+  assert.match(token(tokens, ':root', '--font-ui'), /^'Almarai'/u);
+  assert.match(token(tokens, ':root', '--font-latin'), /^'Inter'/u);
+  assert.match(token(tokens, ':root', '--font-mono'), /^'JetBrains Mono'/u);
 });
 
 test('every icon and brand asset the UI references exists', () => {
@@ -122,8 +213,10 @@ test('panel window geometry agrees across config, native code and CSS', () => {
   const panel = config.app.windows.find((w) => w.label === 'panel');
   assert.equal(panel.width, 460);
   assert.equal(panel.height, 540);
+  // Flat: an opaque surface with rounded corners, no native material or shadow.
   assert.equal(panel.transparent, true);
-  assert.deepEqual(panel.windowEffects, { effects: ['popover'], state: 'active', radius: 16 });
+  assert.equal(panel.shadow, false);
+  assert.equal(panel.windowEffects, undefined);
 
   const rust = read('src-tauri/src/panel.rs');
   assert.match(rust, /const PANEL_WIDTH: f64 = 460\.0;/u);
@@ -189,7 +282,7 @@ test('the menu-bar glyph is an 18pt template drawn natively', () => {
   assert.equal(png.readUInt32BE(20), 36);
 });
 
-test('the app icon keeps transparent corners and one artwork for every appearance', () => {
+test('the app icon keeps transparent corners and its two Icon Composer layers', () => {
   const png = readFileSync(path.join(project, 'src/assets/app-icon/raff-app-icon-1024.png'));
   assert.equal(png.readUInt32BE(16), 1024);
   assert.equal(png[25], 6, 'RGBA master');

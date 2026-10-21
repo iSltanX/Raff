@@ -155,7 +155,9 @@ define_class!(
         #[unsafe(method(restartApp:))]
         fn restart_app(&self, _sender: Option<&AnyObject>) {
             if let Some(app) = APP.get() {
-                app.restart();
+                if let Err(err) = crate::relaunch(app, false) {
+                    eprintln!("raff: restart from the menu failed: {err}");
+                }
             }
         }
 

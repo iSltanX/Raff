@@ -17,7 +17,7 @@ mod storage;
 mod tray;
 mod updater;
 
-use std::sync::atomic::{AtomicBool, AtomicI64};
+use std::sync::atomic::AtomicBool;
 use std::sync::{Mutex, MutexGuard};
 use std::time::{Duration, SystemTime};
 
@@ -26,8 +26,9 @@ use tauri_plugin_autostart::MacosLauncher;
 
 pub struct AppState {
     pub store: Mutex<storage::Store>,
-    /// Pasteboard change count produced by our own writes; the monitor skips it.
-    pub skip_change_count: AtomicI64,
+    /// رفّ's own pasteboard writes, which the monitor skips, and the gate a
+    /// write and a poll both pass through.
+    pub own_writes: monitor::OwnWrites,
     /// pid of the app that was frontmost when the panel opened (focus restore).
     pub previous_app: Mutex<Option<i32>>,
     /// False once the capture loop has given up. `capture_enabled` is a
@@ -182,6 +183,29 @@ pub fn lock_previous_app(previous_app: &Mutex<Option<i32>>) -> MutexGuard<'_, Op
         .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
+/// Starts رفّ again — the one path every restart takes: the update window,
+/// «إعادة تشغيل رفّ» in the panel and Settings, and the menu item.
+///
+/// Not `AppHandle::restart`: that spawns the new process *before* this one
+/// exits, so the new process meets the still-held single-instance socket,
+/// forwards its argv and exits — and then this one exits too, leaving nothing
+/// running. The detached relauncher (`macos::spawn_relauncher`) waits for this
+/// pid to be gone first. `reopen_settings` brings Settings back in the new
+/// process.
+pub fn relaunch(app: &tauri::AppHandle, reopen_settings: bool) -> Result<(), String> {
+    let handle = app.clone();
+    let Some(bundle) = macos::app_bundle_path() else {
+        // Dev mode has no packaged bundle for LaunchServices.
+        return app
+            .run_on_main_thread(move || handle.restart())
+            .map_err(|err| format!("تعذّر جدولة إعادة تشغيل Raff: {err}"));
+    };
+    // Do not exit unless the detached relauncher really exists.
+    macos::spawn_relauncher(&bundle, std::process::id(), reopen_settings)?;
+    app.run_on_main_thread(move || handle.exit(0))
+        .map_err(|err| format!("تعذّر جدولة إعادة تشغيل Raff: {err}"))
+}
+
 /// Debug builds only: `RAFF_DATA_DIR` points the store somewhere else, so a
 /// development run never reads or writes the installed رفّ's history.
 fn dev_data_dir() -> Option<std::path::PathBuf> {
@@ -200,7 +224,21 @@ fn dev_isolated() -> bool {
 
 fn main() {
     startup_trace::init();
+    // Before anything can reach the pasteboard (ت٤٨).
+    let inert_clipboard = macos::decide_clipboard() == macos::Clipboard::Inert;
+    if inert_clipboard {
+        startup_trace::mark("CLIPBOARD_INERT");
+        eprintln!("raff: a test run — the clipboard is never read, written or pasted");
+    }
     let mut builder = tauri::Builder::default();
+    if inert_clipboard {
+        // The pages too: WebKit's own copy, cut and paste, in every window.
+        builder = builder.plugin(
+            tauri::plugin::Builder::<tauri::Wry>::new("raff-inert-clipboard")
+                .js_init_script(include_str!("inert_clipboard.js").to_string())
+                .build(),
+        );
+    }
     if !dev_isolated() {
         // Must be the first plugin: a second launch exits immediately and this
         // callback runs in the surviving instance instead (no duplicate tray,
@@ -208,7 +246,9 @@ fn main() {
         // `raff --settings` surfaces the settings window; any other relaunch
         // surfaces the panel.
         builder = builder.plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
-            eprintln!("raff: relaunch forwarded, argv: {argv:?}");
+            // The arguments are not logged: nothing a launch was handed belongs
+            // in a log that ships in the release build.
+            eprintln!("raff: relaunch forwarded");
             startup_trace::mark("SINGLE_INSTANCE_FORWARD");
             if argv.iter().any(|a| a == "--settings") {
                 commands::open_settings_window(app);
@@ -246,6 +286,8 @@ fn main() {
             commands::update_settings,
             commands::get_image,
             commands::hide_panel,
+            commands::panel_preview_side,
+            commands::set_panel_preview,
             commands::show_panel,
             commands::open_settings,
             commands::open_about,
@@ -273,33 +315,44 @@ fn main() {
             updater::consume_update_intent,
             updater::open_updates,
         ])
-        .on_window_event(|window, event| match event {
-            tauri::WindowEvent::Moved(_) if window.label() == panel::PANEL_LABEL => {
-                panel::remember_position(window.app_handle());
-            }
-            // The update window is a singleton the tray reopens repeatedly —
-            // hide instead of destroy so its in-progress state (or a staged
-            // "restart" prompt) survives being closed and reshown, exactly
-            // like the requirement to show the current operation on reopen.
-            tauri::WindowEvent::CloseRequested { api, .. } if window.label() == "update" => {
-                api.prevent_close();
-                let _ = window.hide();
-            }
-            // A report is forgotten with its window: the frozen payload, its
-            // key and the image never outlive what the user was looking at.
-            tauri::WindowEvent::Destroyed if window.label() == "report" => report::reset(),
-            // Closing the welcome is an answer too: it does not come back on
-            // every launch. «تم» marks it the same way, before closing.
-            tauri::WindowEvent::Destroyed if window.label() == "firstrun" => {
-                let state = window.state::<AppState>();
-                let mut store = lock_store(&state.store);
-                if !store.settings.first_run_shown {
-                    if let Err(err) = store.mark_first_run_shown_persisted() {
-                        eprintln!("raff: could not record the welcome as shown: {err}");
+        .on_window_event(|window, event| {
+            // Any رفّ window but the panel leaving the screen: closed, or the
+            // update window hidden in its place (ت٤٧).
+            let leaves = window.label() != panel::PANEL_LABEL
+                && (matches!(event, tauri::WindowEvent::Destroyed)
+                    || (window.label() == "update"
+                        && matches!(event, tauri::WindowEvent::CloseRequested { .. })));
+            match event {
+                tauri::WindowEvent::Moved(_) if window.label() == panel::PANEL_LABEL => {
+                    panel::remember_position(window.app_handle());
+                }
+                // The update window is a singleton the tray reopens repeatedly —
+                // hide instead of destroy so its in-progress state (or a staged
+                // "restart" prompt) survives being closed and reshown, exactly
+                // like the requirement to show the current operation on reopen.
+                tauri::WindowEvent::CloseRequested { api, .. } if window.label() == "update" => {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+                // A report is forgotten with its window: the frozen payload, its
+                // key and the image never outlive what the user was looking at.
+                tauri::WindowEvent::Destroyed if window.label() == "report" => report::reset(),
+                // Closing the welcome is an answer too: it does not come back on
+                // every launch. «تم» marks it the same way, before closing.
+                tauri::WindowEvent::Destroyed if window.label() == "firstrun" => {
+                    let state = window.state::<AppState>();
+                    let mut store = lock_store(&state.store);
+                    if !store.settings.first_run_shown {
+                        if let Err(err) = store.mark_first_run_shown_persisted() {
+                            eprintln!("raff: could not record the welcome as shown: {err}");
+                        }
                     }
                 }
+                _ => {}
             }
-            _ => {}
+            if leaves {
+                panel::after_window_closed();
+            }
         })
         .setup(|app| {
             startup_trace::mark("setup_enter");
@@ -326,7 +379,7 @@ fn main() {
             startup_trace::mark("theme_applied");
             app.manage(AppState {
                 store: Mutex::new(store),
-                skip_change_count: AtomicI64::new(-1),
+                own_writes: monitor::OwnWrites::new(),
                 previous_app: Mutex::new(None),
                 capture_alive: AtomicBool::new(true),
                 pause: Mutex::new(Pause::default()),

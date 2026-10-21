@@ -1,7 +1,8 @@
-// The dark panel is glass. Over a bright desktop it composites to about
-// #505050, and that is the background its row text has to stay legible on
-// (audit P4: `.row-time` measured 3.08:1, link titles 3.58:1). The ratio is
-// computed from the tokens themselves, so changing either side re-checks it.
+// The panel is opaque: flat, not frosted (Najdi redesign, 2026-10-21). Its
+// rows are read on --bg-glass itself and, once selected, on --bg-selected — in
+// both appearances. The ratios are computed from the tokens, so changing
+// either side re-checks them. (Audit P4 measured the old dark glass over a
+// white desktop: `.row-time` 3.08:1, link titles 3.58:1.)
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -13,25 +14,20 @@ const read = (file) => readFileSync(path.join(here, '..', file), 'utf8');
 const tokens = read('src/tokens.css');
 const panel = read('src/panel.css');
 
+const LIGHT = ':root';
 const DARK = ":root[data-appearance='dark']";
 
-function darkToken(name) {
-  const block = tokens.slice(tokens.indexOf(`${DARK} {`));
+function token(scope, name) {
+  const start = tokens.indexOf(`${scope} {`);
+  const block = tokens.slice(start, tokens.indexOf('\n}', start));
   const match = block.match(new RegExp(`${name}:\\s*([^;]+);`, 'u'));
-  assert.ok(match, `${name} is defined for the dark appearance`);
-  return match[1].trim();
+  return match?.[1].trim() ?? (scope === DARK ? token(LIGHT, name) : undefined);
 }
 
-function rgba(value) {
-  if (value.startsWith('#')) {
-    const hex = value.slice(1);
-    return [0, 2, 4].map((at) => parseInt(hex.slice(at, at + 2), 16)).concat(1);
-  }
-  const [r, g, b, a = 1] = value.match(/[\d.]+/gu).map(Number);
-  return [r, g, b, a];
-}
-
-const over = ([r, g, b, a], [br, bg, bb]) => [r * a + br * (1 - a), g * a + bg * (1 - a), b * a + bb * (1 - a)];
+const hex = (value) => {
+  assert.match(value, /^#[0-9a-f]{6}$/u, `${value} is an opaque colour`);
+  return [1, 3, 5].map((at) => parseInt(value.slice(at, at + 2), 16));
+};
 const channel = (v) => ((v /= 255) <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
 const luminance = ([r, g, b]) => 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
 const contrast = (a, b) => {
@@ -39,25 +35,35 @@ const contrast = (a, b) => {
   return (hi + 0.05) / (lo + 0.05);
 };
 
-/** The colour a dark-appearance rule for `selector` in panel.css resolves to. */
-function darkColor(selector) {
-  const rule = panel.match(new RegExp(`${DARK.replace(/[[\]]/gu, '\\$&')} ${selector.replace(/\./gu, '\\.')}\\s*\\{([^}]*)\\}`, 'u'));
-  assert.ok(rule, `panel.css gives ${selector} its own dark colour`);
-  const token = rule[1].match(/color:\s*var\((--[\w-]+)\)/u);
-  assert.ok(token, `${selector} takes its dark colour from a token`);
-  return rgba(darkToken(token[1]));
+/** The token a colour rule for `selector` resolves to in that appearance. */
+function colorToken(scope, selector) {
+  const escaped = selector.replace(/[.[\]]/gu, '\\$&');
+  if (scope === DARK) {
+    const own = panel.match(new RegExp(`${DARK.replace(/[[\]]/gu, '\\$&')} ${escaped}\\s*\\{([^}]*)\\}`, 'u'));
+    const name = own?.[1].match(/color:\s*var\((--[\w-]+)\)/u)?.[1];
+    if (name) return name;
+  }
+  const rules = [...panel.matchAll(new RegExp(`(?:^|\\n)${escaped}\\s*\\{([^}]*)\\}`, 'gu'))];
+  const name = rules.map((r) => r[1].match(/(?:^|\s)color:\s*var\((--[\w-]+)\)/u)?.[1]).find(Boolean);
+  assert.ok(name, `${selector} takes its colour from a token`);
+  return name;
 }
 
-const WHITE = [255, 255, 255];
-const worstBackground = over(rgba(darkToken('--bg-glass')), WHITE);
-
-test('the worst dark background is the glass over a white desktop (#505050)', () => {
-  assert.deepEqual(worstBackground.map(Math.round), [80, 80, 80]);
+test('the panel surface is opaque in both appearances', () => {
+  for (const scope of [LIGHT, DARK]) hex(token(scope, '--bg-glass'));
+  const config = JSON.parse(read('src-tauri/tauri.conf.json'));
+  const window = config.app.windows.find((w) => w.label === 'panel');
+  assert.equal(window.windowEffects, undefined, 'no native frosted material under the panel');
 });
 
 for (const selector of ['.row-time', '.preview-title.is-link']) {
-  test(`dark ${selector} clears 4.5:1 on that background`, () => {
-    const ratio = contrast(over(darkColor(selector), worstBackground), worstBackground);
-    assert.ok(ratio >= 4.5, `${selector}: ${ratio.toFixed(2)}:1`);
+  test(`${selector} clears 4.5:1 on the panel and on a selected row`, () => {
+    for (const scope of [LIGHT, DARK]) {
+      const ink = hex(token(scope, colorToken(scope, selector)));
+      for (const surface of ['--bg-glass', '--bg-selected']) {
+        const ratio = contrast(ink, hex(token(scope, surface)));
+        assert.ok(ratio >= 4.5, `${scope} ${selector} on ${surface}: ${ratio.toFixed(2)}:1`);
+      }
+    }
   });
 }

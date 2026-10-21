@@ -2,13 +2,13 @@
   "fill-specializations": [
     {
       "value": {
-        "solid": "srgb:0.92549,0.92549,0.92549,1.00000"
+        "solid": "srgb:0.96078,0.94510,0.91765,1.00000"
       }
     },
     {
       "appearance": "dark",
       "value": {
-        "solid": "srgb:0.92549,0.92549,0.92549,1.00000"
+        "solid": "srgb:0.13333,0.11765,0.10588,1.00000"
       }
     }
   ],
@@ -20,13 +20,19 @@
           "fill-specializations": [
             {
               "value": {
-                "solid": "srgb:0.52549,0.58039,0.48235,1.00000"
+                "solid": "srgb:0.76078,0.35294,0.18431,1.00000"
               }
             },
             {
               "appearance": "dark",
               "value": {
-                "solid": "srgb:0.52549,0.58039,0.48235,1.00000"
+                "solid": "srgb:0.93725,0.61569,0.47451,1.00000"
+              }
+            },
+            {
+              "appearance": "tinted",
+              "value": {
+                "solid": "srgb:1.00000,1.00000,1.00000,1.00000"
               }
             }
           ],
@@ -35,7 +41,7 @@
           "image-name": "recent.png",
           "name": "recent",
           "position": {
-            "scale": 1.0,
+            "scale": 1,
             "translation-in-points": [
               0,
               0
@@ -46,13 +52,19 @@
           "fill-specializations": [
             {
               "value": {
-                "solid": "srgb:0.10196,0.10196,0.10196,1.00000"
+                "solid": "srgb:0.12157,0.09804,0.08235,1.00000"
               }
             },
             {
               "appearance": "dark",
               "value": {
-                "solid": "srgb:0.10196,0.10196,0.10196,1.00000"
+                "solid": "srgb:0.96078,0.94510,0.91765,1.00000"
+              }
+            },
+            {
+              "appearance": "tinted",
+              "value": {
+                "solid": "srgb:1.00000,1.00000,1.00000,1.00000"
               }
             }
           ],
@@ -61,7 +73,7 @@
           "image-name": "shelf.png",
           "name": "shelf",
           "position": {
-            "scale": 1.0,
+            "scale": 1,
             "translation-in-points": [
               0,
               0
@@ -71,12 +83,12 @@
       ],
       "shadow": {
         "kind": "neutral",
-        "opacity": 0.45
+        "opacity": 0
       },
       "specular": false,
       "translucency": {
         "enabled": false,
-        "value": 0.0
+        "value": 0
       }
     }
   ],

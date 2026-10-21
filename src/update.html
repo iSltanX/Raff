@@ -9,17 +9,24 @@
   <link rel="stylesheet" href="update.css" />
 </head>
 <body>
+  <!-- The overlay title bar's strip, where macOS would let the window be dragged. -->
+  <div class="title-drag" data-tauri-drag-region aria-hidden="true"></div>
+  <!-- Figma «08 · نوافذ أخرى» 45:6180, Update 360×280: the icon and a
+       two-line head, the progress bar, then the actions at the row's end. -->
   <main class="update-window" id="update-window" aria-busy="true">
-    <img class="update-icon" src="assets/app-icon.png" alt="أيقونة رفّ" width="56" height="56" />
-    <div class="update-app-name">رفّ</div>
-
-    <div
-      class="update-status"
-      id="u-status"
-      role="status"
-      aria-live="polite"
-      aria-atomic="true"
-    >جارٍ التحقق من وجود تحديثات…</div>
+    <div class="update-head">
+      <img class="update-icon" src="assets/app-icon.png" alt="أيقونة رفّ" width="48" height="48" />
+      <div class="update-text">
+        <div
+          class="update-status"
+          id="u-status"
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+        >جارٍ التحقق من وجود تحديثات…</div>
+        <div class="update-sub" id="u-sub">يتصل رفّ بإصدارات المستودع فقط.</div>
+      </div>
+    </div>
 
     <div class="update-available" id="u-available" hidden>
       <div class="update-new-version" id="u-new-version"></div>
@@ -41,6 +48,7 @@
     <div class="update-actions">
       <!-- RTL: the primary action ends the row (leftmost), as everywhere. -->
       <button type="button" class="btn btn-quiet" id="u-ok" hidden>حسنًا</button>
+      <button type="button" class="btn btn-quiet" id="u-later" hidden>لاحقًا</button>
       <button type="button" class="btn" id="u-retry" hidden>إعادة المحاولة</button>
       <button type="button" class="btn btn-primary" id="u-download" hidden>تنزيل وتثبيت</button>
       <button type="button" class="btn btn-primary" id="u-restart" hidden>إعادة التشغيل</button>

@@ -3,6 +3,8 @@
 // `src/js/panel.js` is a long-lived singleton in production (the webview is
 // never destroyed — Rust just orders the NSPanel in and out) and ES modules
 // are cached per process, so a module can only be mounted once per test file.
+// `mountPanel` enforces that: a second call throws instead of returning a
+// fresh DOM the cached module never draws into.
 // Each recovery scenario that needs a *fresh* first load therefore lives in
 // its own file, and they share this harness instead of duplicating it.
 //
@@ -16,6 +18,15 @@ import { JSDOM, VirtualConsole } from 'jsdom';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const indexHtml = readFileSync(path.join(here, '../../src/index.html'), 'utf8');
+const panelSource = readFileSync(path.join(here, '../../src/js/panel.js'), 'utf8');
+
+/** The commands the app registers (`generate_handler!` in main.rs). Tauri
+ *  rejects any other name, and so does the fake. */
+export const REGISTERED_COMMANDS = (() => {
+  const main = readFileSync(path.join(here, '../../src-tauri/src/main.rs'), 'utf8');
+  const list = main.match(/generate_handler!\[([^\]]*)\]/u)[1];
+  return new Set([...list.matchAll(/\w+::(\w+)/gu)].map((m) => m[1]));
+})();
 
 const now = Date.now();
 
@@ -41,6 +52,20 @@ export function sampleItem(id, overrides = {}) {
   };
 }
 
+/** What Rust follows with `raff://changed` once it succeeds (read from Rust
+ *  by `change-event-parity.test.mjs`). A paste or copy announces only the use
+ *  it counted, so it is handled where it is answered. */
+const ANNOUNCES = new Set([
+  'toggle_pin',
+  'delete_item',
+  'undo_delete',
+  'reorder_pinned',
+  'update_settings',
+  'clear_history',
+  'clear_learning',
+  'resume_capture',
+]);
+
 export function emptyState() {
   return { pinned: [], history: [], settings: null, axTrusted: true };
 }
@@ -54,6 +79,8 @@ export function createFakeTauri(initialState, { failTimes = 0 } = {}) {
   let searchResults = [];
   /** Commands forced to reject, and with what — for the error-wording suite. */
   const forcedFailures = new Map();
+  /** Commands answered by the test instead of the fake store. */
+  const overrides = new Map();
   let state = structuredClone(initialState);
   let remainingFailures = failTimes;
   const listeners = new Map();
@@ -70,110 +97,156 @@ export function createFakeTauri(initialState, { failTimes = 0 } = {}) {
     for (const handler of [...(listeners.get(event) ?? [])]) handler({ event, payload });
   };
 
+  /** `count_use`: a use is counted, and announced, with learning on and a
+   *  row to count it on. */
+  const countUse = (id, counter) => {
+    if (state.settings?.learningEnabled === false) return;
+    const item = [...state.pinned, ...state.history].find((row) => row.id === id);
+    if (!item) return;
+    item[counter] = (item[counter] ?? 0) + 1;
+    item.lastUsedAt = Math.max(Date.now(), (item.lastUsedAt ?? 0) + 1);
+    notify('raff://changed');
+  };
+
+  const answer = (cmd, args) => {
+    if (forcedFailures.has(cmd)) {
+      return Promise.reject(forcedFailures.get(cmd));
+    }
+    if (overrides.has(cmd)) {
+      return Promise.resolve(overrides.get(cmd)(args, state));
+    }
+    if (cmd === 'get_state') {
+      getStateCalls++;
+      if (remainingFailures === Infinity || remainingFailures > 0) {
+        if (remainingFailures !== Infinity) remainingFailures--;
+        return Promise.reject(new Error('IPC unavailable'));
+      }
+      return Promise.resolve(structuredClone(state));
+    }
+    if (cmd === 'get_image') return Promise.resolve('data:image/png;base64,AAAA');
+    if (
+      cmd === 'open_settings' ||
+      cmd === 'open_about' ||
+      cmd === 'open_repository' ||
+      cmd === 'hide_panel'
+    ) {
+      return Promise.resolve(null);
+    }
+    if (cmd === 'copy_item') {
+      countUse(args?.id, 'copyCount');
+      return Promise.resolve(null);
+    }
+    if (cmd === 'paste_item') {
+      countUse(args?.id, 'pasteCount');
+      return Promise.resolve(Boolean(state.axTrusted));
+    }
+    // The panel's own fallback toast asks separately why a paste didn't
+    // happen, so this must mirror `axTrusted` independently of paste_item.
+    if (cmd === 'ax_status') return Promise.resolve(Boolean(state.axTrusted));
+    if (cmd === 'request_accessibility' || cmd === 'open_accessibility_settings') {
+      return Promise.resolve(cmd === 'request_accessibility' ? Boolean(state.axTrusted) : null);
+    }
+    if (cmd === 'toggle_pin') {
+      const id = args?.id;
+      const desired = args?.isPinned;
+      const pinnedIndex = state.pinned.findIndex((item) => item.id === id);
+      let isPinned;
+      let removed = false;
+      let reason;
+      if (pinnedIndex >= 0 && desired === false) {
+        const [item] = state.pinned.splice(pinnedIndex, 1);
+        item.isPinned = false;
+        delete item.pinnedOrder;
+        // As the backend does: back to its place in time with its date.
+        // Older than every row in history, it is not taken back; into an
+        // empty history, it is.
+        const older =
+          state.history.length > 0 &&
+          state.history.every((other) => item.createdAt < other.createdAt);
+        // Past the retention period the age limit is what lets it go,
+        // whatever history holds — and the panel says so (ت٢٩).
+        const retentionDays = state.settings?.retentionDays ?? 0;
+        const pastRetention =
+          retentionDays > 0 && item.createdAt < Date.now() - retentionDays * 86_400_000;
+        if (pastRetention || older) {
+          removed = true;
+          reason = pastRetention ? 'retention' : 'olderThanHistory';
+        } else {
+          state.history.push(item);
+          state.history.sort((a, b) => b.createdAt - a.createdAt);
+        }
+        isPinned = false;
+      } else if (pinnedIndex < 0 && desired === true) {
+        const historyIndex = state.history.findIndex((item) => item.id === id);
+        if (historyIndex < 0) return Promise.reject(new Error('العنصر غير موجود'));
+        const [item] = state.history.splice(historyIndex, 1);
+        item.isPinned = true;
+        state.pinned.push(item);
+        isPinned = true;
+      } else {
+        isPinned = pinnedIndex >= 0;
+      }
+      return Promise.resolve(reason ? { isPinned, removed, reason } : { isPinned, removed });
+    }
+    if (cmd === 'delete_item') {
+      const id = args?.id;
+      deletedIds.push(id);
+      if (pendingDelete) {
+        committedDeleteTokens.push(pendingDelete.token);
+        pendingDelete = null;
+      }
+      const layer = state.pinned.some((item) => item.id === id) ? 'pinned' : 'history';
+      const index = state[layer].findIndex((item) => item.id === id);
+      if (index < 0) return Promise.reject(new Error('العنصر غير موجود'));
+      const [item] = state[layer].splice(index, 1);
+      const token = `delete-${++deleteSequence}`;
+      pendingDelete = { token, layer, index, item };
+      return Promise.resolve({ token });
+    }
+    if (cmd === 'undo_delete') {
+      if (pendingDelete?.token !== args?.token) {
+        return Promise.reject(new Error('انتهت مهلة التراجع عن الحذف'));
+      }
+      state[pendingDelete.layer].splice(pendingDelete.index, 0, pendingDelete.item);
+      pendingDelete = null;
+      return Promise.resolve(null);
+    }
+    if (cmd === 'commit_delete') {
+      if (pendingDelete && pendingDelete.token === args?.token) {
+        committedDeleteTokens.push(pendingDelete.token);
+        pendingDelete = null;
+      }
+      return Promise.resolve(null);
+    }
+    if (cmd === 'reorder_pinned') {
+      const byId = new Map(state.pinned.map((item) => [item.id, item]));
+      state.pinned = args.ids.map((id, order) => ({ ...byId.get(id), pinnedOrder: order }));
+      return Promise.resolve(null);
+    }
+    if (cmd === 'search_items') {
+      return Promise.resolve([...searchResults]);
+    }
+    // The preview widens the panel window towards whichever side has room
+    // (Rust measures the screen); `previewSide: null` stands for none.
+    if (cmd === 'panel_preview_side') {
+      return Promise.resolve(state.previewSide === undefined ? 'left' : state.previewSide);
+    }
+    if (cmd === 'set_panel_preview') return Promise.resolve(null);
+    if (!REGISTERED_COMMANDS.has(cmd)) return Promise.reject(`command ${cmd} not found`);
+    return Promise.resolve(null);
+  };
+
   const tauri = {
     core: {
       invoke: (cmd, args) => {
         invocations.push({ cmd, args: structuredClone(args) });
         invokeCounts.set(cmd, (invokeCounts.get(cmd) || 0) + 1);
-        if (forcedFailures.has(cmd)) {
-          return Promise.reject(forcedFailures.get(cmd));
-        }
-        if (cmd === 'get_state') {
-          getStateCalls++;
-          if (remainingFailures === Infinity || remainingFailures > 0) {
-            if (remainingFailures !== Infinity) remainingFailures--;
-            return Promise.reject(new Error('IPC unavailable'));
-          }
-          return Promise.resolve(structuredClone(state));
-        }
-        if (cmd === 'get_image') return Promise.resolve('data:image/png;base64,AAAA');
-        if (
-          cmd === 'open_settings' ||
-          cmd === 'open_about' ||
-          cmd === 'open_repository' ||
-          cmd === 'hide_panel' ||
-          cmd === 'copy_item'
-        ) {
-          return Promise.resolve(null);
-        }
-        if (cmd === 'paste_item') return Promise.resolve(Boolean(state.axTrusted));
-        // The panel's own fallback toast asks separately why a paste didn't
-        // happen, so this must mirror `axTrusted` independently of paste_item.
-        if (cmd === 'ax_status') return Promise.resolve(Boolean(state.axTrusted));
-        if (cmd === 'request_accessibility' || cmd === 'open_accessibility_settings') {
-          return Promise.resolve(cmd === 'request_accessibility' ? Boolean(state.axTrusted) : null);
-        }
-        if (cmd === 'toggle_pin') {
-          const id = args?.id;
-          const desired = args?.isPinned;
-          const pinnedIndex = state.pinned.findIndex((item) => item.id === id);
-          let isPinned;
-          if (pinnedIndex >= 0 && desired === false) {
-            const [item] = state.pinned.splice(pinnedIndex, 1);
-            item.isPinned = false;
-            state.history.push(item);
-            state.history.sort((a, b) => b.createdAt - a.createdAt);
-            isPinned = false;
-          } else if (pinnedIndex < 0 && desired === true) {
-            const historyIndex = state.history.findIndex((item) => item.id === id);
-            if (historyIndex < 0) return Promise.reject(new Error('العنصر غير موجود'));
-            const [item] = state.history.splice(historyIndex, 1);
-            item.isPinned = true;
-            state.pinned.push(item);
-            isPinned = true;
-          } else {
-            isPinned = pinnedIndex >= 0;
-          }
-          return Promise.resolve(isPinned).then((result) => {
-            notify('raff://changed');
-            return result;
-          });
-        }
-        if (cmd === 'delete_item') {
-          const id = args?.id;
-          deletedIds.push(id);
-          if (pendingDelete) {
-            committedDeleteTokens.push(pendingDelete.token);
-            pendingDelete = null;
-          }
-          const layer = state.pinned.some((item) => item.id === id) ? 'pinned' : 'history';
-          const index = state[layer].findIndex((item) => item.id === id);
-          if (index < 0) return Promise.reject(new Error('العنصر غير موجود'));
-          const [item] = state[layer].splice(index, 1);
-          const token = `delete-${++deleteSequence}`;
-          pendingDelete = { token, layer, index, item };
-          return Promise.resolve({ token }).then((result) => {
-            notify('raff://changed');
-            return result;
-          });
-        }
-        if (cmd === 'undo_delete') {
-          if (pendingDelete?.token !== args?.token) {
-            return Promise.reject(new Error('انتهت مهلة التراجع عن الحذف'));
-          }
-          state[pendingDelete.layer].splice(pendingDelete.index, 0, pendingDelete.item);
-          pendingDelete = null;
-          return Promise.resolve(null).then((result) => {
-            notify('raff://changed');
-            return result;
-          });
-        }
-        if (cmd === 'commit_delete') {
-          if (pendingDelete?.token === args?.token) {
-            committedDeleteTokens.push(pendingDelete.token);
-            pendingDelete = null;
-          }
-          return Promise.resolve(null);
-        }
-        if (cmd === 'reorder_pinned') {
-          const byId = new Map(state.pinned.map((item) => [item.id, item]));
-          state.pinned = args.ids.map((id, order) => ({ ...byId.get(id), pinnedOrder: order }));
-          return Promise.resolve(null);
-        }
-        if (cmd === 'search_items') {
-          return Promise.resolve([...searchResults]);
-        }
-        return Promise.resolve(null);
+        // As in the app: the change is announced before the answer arrives,
+        // and only for a command that succeeded.
+        return answer(cmd, args).then((result) => {
+          if (ANNOUNCES.has(cmd)) notify('raff://changed');
+          return result;
+        });
       },
     },
     event: {
@@ -194,6 +267,11 @@ export function createFakeTauri(initialState, { failTimes = 0 } = {}) {
     /** Ids `search_items` answers with — the rows whose hidden tail matched. */
     setSearchResults(ids) {
       searchResults = ids;
+    },
+    /** Answers `cmd` with `handler(args, state)` — for a backend outcome the
+     *  fake store does not model (an undo folded into a newer copy). */
+    respond(cmd, handler) {
+      overrides.set(cmd, handler);
     },
     /** Makes one command reject with exactly `reason`, as Rust would. */
     failCommand(cmd, reason) {
@@ -243,8 +321,10 @@ export function flush(times = 4) {
 
 export const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
-/** Long enough for both retry backoffs (250ms + 750ms) plus slack. */
-export const RETRIES_EXHAUSTED_MS = 1400;
+/** Long enough for every retry backoff in panel.js plus slack — read from
+ *  panel.js, so a change to the backoffs cannot outrun this wait. */
+export const RETRIES_EXHAUSTED_MS =
+  JSON.parse(panelSource.match(/const RETRY_DELAYS_MS = (\[[\d, ]*\]);/u)[1]).reduce((a, b) => a + b, 0) + 400;
 
 export function rowIds(dom) {
   return [...dom.window.document.querySelectorAll('.row')].map((r) => r.dataset.id);
@@ -340,7 +420,16 @@ export function activeFilter(dom) {
  * Boots the real panel module once, with `location.reload` stubbed so the
  * fallback path is observable instead of tearing the test env down.
  */
+let mounted = false;
+
 export async function mountPanel(initialState, options = {}) {
+  if (mounted) {
+    throw new Error(
+      'mountPanel: panel.js runs once per test file (ES modules are cached), so a second mount would ' +
+        'draw nothing — give this scenario its own file (see the header of panel-harness.mjs)'
+    );
+  }
+  mounted = true;
   // jsdom locks `location` and `location.reload` down, so rather than stubbing
   // the production call we observe it: jsdom reports an attempted reload as a
   // `jsdomError` on the virtual console. Nothing in `panel.js` is altered for

@@ -283,6 +283,10 @@ test('panel recovery: first load retries, then ⌘R re-initialises in place', as
       settings: null,
       axTrusted: true,
     });
+    // Leave the panel on another segment first, or «resets to الكل» holds
+    // whether or not the show path resets anything (mutation J3, 2026-10-21).
+    clickFilter(dom, 'image');
+    assert.equal(activeFilter(dom), 'image');
     fake.emit('panel://shown', null);
     await flush(6);
 
@@ -308,6 +312,17 @@ test('panel recovery: first load retries, then ⌘R re-initialises in place', as
 
     clickFilter(dom, 'all');
     assert.deepEqual(rowIds(dom), ['txt', 'code', 'url', 'img', 'pin-old'], 'back to everything');
+  });
+
+  await t.test('reopening returns the list to its newest item', async () => {
+    // Without this, a panel left scrolled half-way down opens there again,
+    // away from what was just copied (mutation J5, 2026-10-21).
+    const list = dom.window.document.getElementById('list');
+    list.scrollTop = 200;
+    assert.equal(list.scrollTop, 200, 'the scroll position can be staged');
+    fake.emit('panel://shown', null);
+    await flush(6);
+    assert.equal(list.scrollTop, 0);
   });
 
   await t.test('the active segment is the only one marked selected', () => {
@@ -339,10 +354,12 @@ test('panel recovery: first load retries, then ⌘R re-initialises in place', as
     clickFilter(dom, 'image');
     assert.deepEqual(rowIds(dom), []);
     assert.match(listText(dom), /لا نتائج/);
+    // A search glass since the Najdi redesign (Figma 40:1823) — still never
+    // the shelf illustration, which belongs to a genuinely empty collection.
     assert.equal(
-      dom.window.document.querySelector('.state-view.is-no-results .state-art'),
+      dom.window.document.querySelector('.state-view.is-no-results .brand-art'),
       null,
-      'search-empty is textual and never borrows the shelf illustration'
+      'search-empty never borrows the shelf illustration'
     );
     assert.doesNotMatch(listText(dom), EMPTY_SHELF_HEADLINE, 'a narrowed list is not an empty shelf');
     assert.doesNotMatch(listText(dom), FAILURE_HEADLINE, 'and never the failure state');

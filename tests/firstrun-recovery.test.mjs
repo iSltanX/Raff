@@ -75,6 +75,13 @@ test('first-run permission polling backs off and recovers without unhandled reje
 
   await import('../src/js/firstrun.js?firstrun-recovery');
 
+  // The splash lifts on a timer of its own (firstrun-splash.test.mjs); the
+  // permission watcher is what is under test here.
+  const splashDelay = Number(dom.window.document.getElementById('splash').dataset.duration);
+  assert.deepEqual(timers.snapshot().map((timer) => timer.delay), [splashDelay, 0]);
+  await timers.runNext();
+  assert.ok(dom.window.document.getElementById('splash').classList.contains('is-done'));
+
   assert.deepEqual(timers.snapshot().map((timer) => timer.delay), [0]);
   await timers.runNext();
   assert.equal(checks, 1);

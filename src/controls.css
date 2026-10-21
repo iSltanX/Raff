@@ -1,21 +1,22 @@
 /* Shared controls: buttons, keycaps, callouts, scroll panes. Colour only via
-   tokens. Figma «05 — Components & States»: Button 254:138, Keycap 254:71,
-   Callout 259:260. */
+   tokens. Flat: a fill and at most a 1px line, never a shadow. Figma
+   XCNmucSuAe007qWHnOXQpW «Components / Actions» (Button 29:198), «Items &
+   Data» (Keycap 34:147), «Feedback & States» (Callout 36:430). */
 
 .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: var(--space-6);
+  gap: var(--space-8);
   min-width: 64px;
   min-height: 28px;
   padding: 0 var(--space-16);
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
   background: var(--bg-raised);
-  box-shadow: var(--shadow-control);
-  font-weight: 500;
+  font-weight: 700;
   font-size: var(--text-body);
+  line-height: var(--line-tight);
   white-space: nowrap;
   transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
 }
@@ -32,7 +33,6 @@
 .btn-primary {
   border-color: transparent;
   background: var(--accent);
-  box-shadow: none;
   color: var(--on-accent);
 }
 
@@ -44,7 +44,6 @@
 .btn-quiet {
   border-color: transparent;
   background: transparent;
-  box-shadow: none;
 }
 
 .btn-quiet:hover:not(:disabled) {
@@ -62,20 +61,21 @@
 .btn-danger-fill {
   border-color: transparent;
   background: var(--danger);
-  box-shadow: none;
   color: var(--on-danger);
 }
 
-.btn-danger-fill:hover:not(:disabled),
-.btn-danger-fill:active:not(:disabled) {
-  background: var(--danger);
+.btn-danger-fill:hover:not(:disabled) {
+  background: linear-gradient(var(--bg-hover), var(--bg-hover)), var(--danger);
 }
 
-/* Disabled is a state of its own, not a faded enabled button: a pale sage
+.btn-danger-fill:active:not(:disabled) {
+  background: linear-gradient(var(--bg-pressed), var(--bg-pressed)), var(--danger);
+}
+
+/* Disabled is a state of its own, not a faded enabled button: a pale clay
    fill in Dark otherwise still reads as pressable. */
 .btn:disabled {
   border-color: transparent;
-  box-shadow: none;
   color: var(--ink-disabled);
 }
 
@@ -113,17 +113,31 @@
   }
 }
 
+/* A link that acts in the app: clay words, no box. */
+.link-btn {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-size: var(--text-small);
+  font-weight: 700;
+  color: var(--accent-ink);
+}
+
+.link-btn:hover {
+  text-decoration: underline;
+}
+
 kbd {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   min-width: 20px;
-  height: 18px;
-  padding: 0 var(--space-6);
+  height: 20px;
+  padding: 0 var(--space-4);
   border-radius: var(--radius-xs);
   background: var(--bg-sunken);
   font-size: var(--text-caption);
-  font-weight: 700;
+  font-weight: 600;
   line-height: 1;
   color: var(--ink-2);
   direction: ltr;
@@ -154,7 +168,7 @@ kbd {
 
 .callout-title {
   font-size: var(--text-small);
-  font-weight: 600;
+  font-weight: 700;
   color: var(--ink);
 }
 
@@ -174,17 +188,18 @@ kbd {
 .callout[data-tone='danger'] .callout-icon { color: var(--danger); }
 .callout[data-tone='danger'] .callout-title { color: var(--danger-ink); }
 
+/* The webview covers the native overlay title bar, so a window with no title
+   of its own (the welcome, the update) marks the strip to drag it by. The
+   traffic lights stay above it. */
+.title-drag {
+  position: fixed;
+  inset: 0 0 auto;
+  z-index: 3;
+  height: 28px;
+}
+
 .scroll-pane {
   overflow-y: auto;
   overscroll-behavior: contain;
 }
 
-::-webkit-scrollbar {
-  width: 8px;
-}
-
-::-webkit-scrollbar-thumb {
-  border: 2px solid transparent;
-  border-radius: var(--space-8);
-  background: var(--line-strong) padding-box;
-}

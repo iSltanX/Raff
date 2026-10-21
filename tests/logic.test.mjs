@@ -9,6 +9,7 @@ import {
   metaLine,
   hotkeyDisplay,
   hotkeyFromEvent,
+  hotkeyRefusal,
 } from '../src/js/logic.js';
 
 test('arabicDigits converts Western digits', () => {
@@ -105,3 +106,16 @@ test('hotkeyFromEvent builds accelerators and rejects invalid combos', () => {
   assert.equal(hotkeyFromEvent({ code: 'KeyV' }), null); // no modifier
   assert.equal(hotkeyFromEvent({ metaKey: true, code: 'MetaLeft' }), null); // modifier only
 });
+
+test('hotkeyRefusal: ⇧ alone and the shortcuts every app uses cannot be global', () => {
+  for (const accel of ['shift+a', 'shift+space', 'shift+5', 'shift+F6']) {
+    assert.equal(hotkeyRefusal(accel), 'needs-modifier', accel);
+  }
+  for (const key of ['c', 'v', 'x', 'a', 'z', 'q', 'w']) {
+    assert.equal(hotkeyRefusal(`super+${key}`), 'shared', `⌘${key}`);
+  }
+  for (const accel of ['shift+super+v', 'alt+super+v', 'ctrl+v', 'alt+5', 'super+k', 'super+F6', 'ctrl+shift+a']) {
+    assert.equal(hotkeyRefusal(accel), null, accel);
+  }
+});
+

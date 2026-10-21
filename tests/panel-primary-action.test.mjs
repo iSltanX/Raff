@@ -10,8 +10,8 @@
 //   * losing Accessibility permission degrades to copy-only, it never fails
 //
 // Clipboard retention and duplicate-history suppression are enforced on the
-// Rust side (paste.rs never restores the previous pasteboard, and stamps
-// `skip_change_count` so the monitor ignores our own write); this file covers
+// Rust side (paste.rs never restores the previous pasteboard, and records
+// its write through `OwnWrites` so the monitor ignores it); this file covers
 // the parts the frontend owns.
 
 import { test } from 'node:test';

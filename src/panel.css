@@ -1,5 +1,6 @@
-/* The floating panel — 460 × 540, glass over the native popover material.
-   Figma «06 — Product UI · Panel» (262:26, 265:532, 266:1178, 284:1830). */
+/* The floating panel — 460 × 540, flat and opaque on the desktop: a sand
+   surface with a 1px edge, no material behind it and no shadow under it.
+   Figma XCNmucSuAe007qWHnOXQpW «02 · مساحة العمل» and «Components». */
 
 html,
 body {
@@ -54,7 +55,7 @@ body {
   border: 0;
   outline: 0;
   background: transparent;
-  font-size: 14px;
+  font-size: var(--text-body);
   color: var(--ink);
   -webkit-user-select: text;
   user-select: text;
@@ -86,8 +87,8 @@ body {
 }
 
 .icon-btn {
-  width: 30px;
-  height: 30px;
+  width: 32px;
+  height: 32px;
   border-radius: var(--radius-md);
   transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
 }
@@ -111,13 +112,14 @@ body {
 }
 
 .segment {
-  height: 26px;
+  height: 28px;
   padding: 0 var(--space-12);
   border: 0;
   border-radius: var(--radius-full);
   background: transparent;
   font-size: var(--text-small);
-  font-weight: 500;
+  font-weight: 700;
+  line-height: var(--line-tight);
   color: var(--ink-2);
   transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
 }
@@ -130,7 +132,6 @@ body {
 .segment.is-active {
   background: var(--accent-soft);
   color: var(--accent-ink);
-  font-weight: 600;
 }
 
 .segment:focus-visible {
@@ -145,13 +146,13 @@ body {
   display: flex;
   align-items: center;
   gap: var(--space-8);
-  min-height: 32px;
-  margin: 0 var(--space-8) var(--space-6);
-  padding: var(--space-4) var(--space-8) var(--space-4) var(--space-6);
+  min-height: 36px;
+  margin: 0 var(--space-8) var(--space-8);
+  padding: var(--space-4) var(--space-8);
   border-radius: var(--radius-md);
   background: var(--bg-sunken);
   font-size: var(--text-small);
-  font-weight: 600;
+  font-weight: 700;
   color: var(--ink);
 }
 
@@ -166,14 +167,24 @@ body {
 
 .capture-strip-action {
   flex: none;
-  height: 22px;
+  height: 24px;
   padding: 0 var(--space-8);
   border: 0;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   background: var(--bg-raised);
+  /* A line, so the button holds its edge on the tinted strip. */
+  box-shadow: inset 0 0 0 1px var(--line);
   font-size: var(--text-caption);
-  font-weight: 600;
+  font-weight: 700;
   color: inherit;
+}
+
+.capture-strip-action:hover:not(:disabled) {
+  background: linear-gradient(var(--bg-hover), var(--bg-hover)), var(--bg-raised);
+}
+
+.capture-strip-action:disabled {
+  color: var(--ink-disabled);
 }
 
 .capture-strip[data-tone='warning'] { background: var(--warning-soft); color: var(--warning-ink); }
@@ -197,7 +208,7 @@ body {
   align-items: center;
   gap: var(--space-12);
   min-height: 44px;
-  padding: var(--space-6) var(--space-8);
+  padding: var(--space-4) var(--space-8);
   border-radius: var(--radius-md);
 }
 
@@ -227,8 +238,8 @@ body {
   position: relative;
   display: grid;
   place-items: center;
-  width: 30px;
-  height: 30px;
+  width: 32px;
+  height: 32px;
   flex: none;
   border-radius: var(--radius-md);
   background: var(--bg-sunken);
@@ -253,7 +264,9 @@ body {
   height: auto;
   border-radius: var(--radius-md);
   background: var(--accent);
-  font-size: var(--text-small);
+  font-family: var(--font-latin);
+  font-size: var(--text-body);
+  font-weight: 500;
   color: var(--on-accent);
 }
 
@@ -282,7 +295,6 @@ body {
 }
 
 .preview-title.is-latin,
-.preview-title.is-code,
 .preview-title.is-link {
   font-family: var(--font-latin);
 }
@@ -293,6 +305,7 @@ body {
 }
 
 .preview-title.is-code {
+  font-family: var(--font-mono);
   font-size: var(--text-small);
   color: var(--ink-2);
 }
@@ -307,14 +320,8 @@ body {
   transition: opacity var(--t-fast) var(--ease);
 }
 
-/* The dark panel is glass: over a bright desktop it composites to about
-   #505050, the worst background these rows are read on. There --ink-3 falls to
-   3.1:1 and --accent-ink to 3.6:1; the next step up in each clears 4.5:1
-   (WCAG 1.4.3) — 5.0:1 and 4.9:1. */
-:root[data-appearance='dark'] .row-time {
-  color: var(--ink-2);
-}
-
+/* Links read in the lighter clay on the dark panel (Figma text/link). The
+   panel is opaque now, so time and links are read on --bg-glass itself. */
 :root[data-appearance='dark'] .preview-title.is-link {
   color: var(--accent-hover);
 }
@@ -325,9 +332,9 @@ body {
   height: 40px;
   flex: none;
   overflow: hidden;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   background: var(--bg-sunken);
-  box-shadow: inset 0 0 0 0.5px var(--line);
+  box-shadow: inset 0 0 0 1px var(--line);
 }
 
 .preview-thumb img {
@@ -363,7 +370,8 @@ body {
   min-width: 0;
 }
 
-/* A file that is gone says so where the picture would be. */
+/* A file that is gone, or a picture too large to preview, says so where the
+   picture would be. */
 .preview-missing {
   display: none;
   font-size: var(--text-caption);
@@ -371,7 +379,8 @@ body {
 }
 
 /* Set from JS: WebKit 15 (macOS 12) has no :has(). */
-.row.is-image-missing .preview-missing {
+.row.is-image-missing .preview-missing,
+.row.is-preview-unavailable .preview-missing {
   display: inline;
 }
 
@@ -390,6 +399,10 @@ body {
   transition: opacity var(--t-fast) var(--ease);
 }
 
+.row.has-reorder .row-time {
+  min-width: 118px;
+}
+
 .row:hover .row-actions,
 .row.selected .row-actions,
 .row:focus-within .row-actions {
@@ -406,10 +419,10 @@ body {
 .row-action {
   display: grid;
   place-items: center;
-  width: 26px;
-  height: 26px;
+  width: 28px;
+  height: 28px;
   border: 0;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--ink-2);
 }
@@ -435,8 +448,8 @@ body {
 /* Pinned: a ringed badge on the kind well's outer corner. */
 .row-pin-flag {
   position: absolute;
-  inset-inline-start: 31px;
-  top: 1px;
+  inset-inline-start: 33px;
+  top: 0;
   display: grid;
   place-items: center;
   width: 14px;
@@ -459,7 +472,7 @@ body {
   color: var(--ink-3);
 }
 
-/* ─── States (Figma State View 260:277) ───────────────────────────────── */
+/* ─── States (Figma State View 36:540, «03 · الحالات الفارغة» 40:1823) ── */
 
 .state-view {
   display: flex;
@@ -508,43 +521,28 @@ body {
   inset: 12px;
 }
 
-.mark-base,
-.mark-card {
-  display: block;
-  -webkit-mask: center / contain no-repeat;
-  mask: center / contain no-repeat;
-}
-
-.mark-base {
-  background: var(--brand-ink);
-  -webkit-mask-image: url('assets/brand/mark-base.svg');
-  mask-image: url('assets/brand/mark-base.svg');
-}
-
-.mark-card {
-  background: var(--brand-sage);
-  -webkit-mask-image: url('assets/brand/mark-card.svg');
-  mask-image: url('assets/brand/mark-card.svg');
-}
-
 .state-text {
   display: grid;
   gap: var(--space-4);
 }
 
 .state-title {
+  font-family: var(--font-heading);
   font-size: var(--text-title);
-  font-weight: 700;
+  font-weight: 600;
+  line-height: var(--line-title);
 }
 
 .state-sub {
   max-width: 300px;
   font-size: var(--text-small);
+  line-height: var(--line-body);
   color: var(--ink-2);
 }
 
 .state-hint {
   font-size: var(--text-caption);
+  line-height: var(--line-tight);
   color: var(--ink-3);
 }
 
@@ -568,7 +566,7 @@ body {
 .skeleton-preview {
   display: grid;
   flex: 1;
-  gap: var(--space-6);
+  gap: var(--space-8);
 }
 
 .skeleton-block {
@@ -579,8 +577,8 @@ body {
 }
 
 .skeleton-kind-icon {
-  width: 30px;
-  height: 30px;
+  width: 32px;
+  height: 32px;
   border-radius: var(--radius-md);
 }
 
@@ -600,8 +598,9 @@ body {
   }
 }
 
-/* ─── Feedback (Figma Toast 259:230) ──────────────────────────────────── */
-/* A dark surface in both appearances: no bright flash over a dark panel. */
+/* ─── Feedback (Figma «Toast») ────────────────────────────────────────── */
+/* A dark surface in both appearances: no bright flash over a dark panel.
+   Flat: it parts from the list by tone alone. */
 
 .panel-feedback {
   position: absolute;
@@ -618,11 +617,10 @@ body {
   align-items: center;
   gap: var(--space-8);
   max-width: 100%;
-  min-height: 38px;
-  padding: var(--space-6) var(--space-12) var(--space-6) var(--space-8);
+  min-height: 40px;
+  padding: var(--space-8) var(--space-12) var(--space-8) var(--space-8);
   border-radius: var(--radius-lg);
   background: var(--bg-inverse);
-  box-shadow: var(--shadow-float);
   font-size: var(--text-small);
   color: var(--ink-inverse);
   pointer-events: auto;
@@ -659,13 +657,22 @@ body {
 }
 
 .toast-btn {
-  height: 26px;
+  height: 28px;
   padding: 0 var(--space-12);
   border: 0;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   background: var(--inverse-wash);
-  font-weight: 600;
+  font-weight: 700;
   color: var(--accent-on-inverse);
+}
+
+.toast-btn:hover {
+  background: linear-gradient(var(--inverse-wash), var(--inverse-wash)), var(--inverse-wash);
+}
+
+/* In Dark the toast is one step from the panel's tone: a line keeps it apart. */
+:root[data-appearance='dark'] .toast {
+  box-shadow: inset 0 0 0 1px var(--line-edge);
 }
 
 @keyframes toast-in {
@@ -675,7 +682,7 @@ body {
   }
 }
 
-/* ─── Footer (Figma Panel Footer 261:385) ─────────────────────────────── */
+/* ─── Footer (Figma «Panel Footer») ───────────────────────────────────── */
 
 .panel-footer {
   display: flex;
@@ -692,13 +699,23 @@ body {
   height: 16px;
   flex: none;
   order: 2;
-  opacity: 0.85;
 }
 
 .footer-mark .mark-base,
 .footer-mark .mark-card {
   position: absolute;
   inset: 0;
+}
+
+/* At 16 px the large drawing's gaps melt; the footer uses the pixel-grid one. */
+.footer-mark .mark-base {
+  -webkit-mask-image: url('assets/brand/mark-micro-base.svg');
+  mask-image: url('assets/brand/mark-micro-base.svg');
+}
+
+.footer-mark .mark-card {
+  -webkit-mask-image: url('assets/brand/mark-micro-card.svg');
+  mask-image: url('assets/brand/mark-micro-card.svg');
 }
 
 .footer-shortcuts {
@@ -712,8 +729,289 @@ body {
 .shortcut-hint {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-6);
+  gap: var(--space-4);
   flex: none;
   font-size: var(--text-caption);
   color: var(--ink-3);
+}
+
+/* ─── Images: a grid of cards (Figma Item Card 35:301, panel 39:1073) ──── */
+
+.items-list.is-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 136px);
+  align-content: start;
+  justify-content: center;
+  gap: var(--space-12);
+  padding: var(--space-4) var(--space-8) var(--space-8);
+}
+
+.items-list.is-grid .results-end {
+  grid-column: 1 / -1;
+}
+
+.row.is-card {
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-4);
+  min-height: 0;
+  padding: var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--bg-raised);
+}
+
+.row.is-card:hover {
+  background: linear-gradient(var(--bg-hover), var(--bg-hover)), var(--bg-raised);
+}
+
+/* Selected: the clay wash and a 2px clay edge (border + ring, no blur). */
+.row.is-card.selected {
+  border-color: var(--accent);
+  background: var(--bg-selected);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.row.is-card.selected::after {
+  display: none;
+}
+
+.card-media {
+  position: relative;
+  height: 84px;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  background: var(--bg-sunken);
+}
+
+.card-media .preview-thumb {
+  width: 100%;
+  height: 100%;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.card-media .row-index {
+  inset: var(--space-4) auto auto var(--space-4);
+  width: 24px;
+  height: 24px;
+}
+
+.card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 24px;
+  padding: 0 var(--space-4);
+}
+
+/* A missing file says so over the placeholder (set from JS, no :has()). */
+.card-media .preview-missing {
+  position: absolute;
+  inset: auto 0 var(--space-8);
+  text-align: center;
+}
+
+.card-foot .row-kind {
+  order: 0;
+  width: 16px;
+  height: 16px;
+  background: transparent;
+  color: var(--ink-2);
+}
+
+.row.is-card.selected .card-foot .row-kind {
+  background: transparent;
+  color: var(--accent-ink);
+}
+
+.card-foot .row-time,
+.row.is-card:hover .row-time,
+.row.is-card.selected .row-time {
+  min-width: 0;
+  opacity: 1;
+}
+
+.row.is-card .row-pin-flag {
+  inset-inline-start: var(--space-8);
+  top: var(--space-8);
+}
+
+/* ─── Preview beside the panel (Figma «05 · التفاصيل» 45:5325) ──────────── */
+/* The window widens 356pt towards the preview (340 + a 16 gap); the panel is
+   pinned to its own edge first, so it never moves. The gap is transparent. */
+
+html[data-preview] .panel {
+  position: fixed;
+  top: 0;
+  width: 460px;
+}
+
+html[data-preview='left'] .panel {
+  right: 0;
+}
+
+html[data-preview='right'] .panel {
+  left: 0;
+}
+
+.preview-pane {
+  position: fixed;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
+  width: 340px;
+  height: 100vh;
+  padding: var(--space-16);
+  border-radius: var(--radius-xl);
+  background: var(--bg-window);
+  box-shadow: inset 0 0 0 1px var(--line-edge);
+}
+
+.preview-pane[hidden] {
+  display: none;
+}
+
+html[data-preview='left'] .preview-pane {
+  right: 476px;
+}
+
+html[data-preview='right'] .preview-pane {
+  left: 476px;
+}
+
+.preview-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  min-height: 20px;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 var(--space-8);
+  border-radius: var(--radius-full);
+  background: var(--bg-sunken);
+  font-size: var(--text-caption);
+  font-weight: 700;
+  line-height: var(--line-tight);
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+
+.badge[hidden] {
+  display: none;
+}
+
+.preview-kind {
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+}
+
+.preview-when {
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--text-caption);
+  line-height: var(--line-tight);
+  color: var(--ink-3);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.preview-body {
+  flex: 0 1 auto;
+  min-height: 0;
+  padding: var(--space-16);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--bg-raised);
+}
+
+.preview-text {
+  font-size: var(--text-body);
+  line-height: var(--line-body);
+  white-space: pre-wrap;
+  word-break: break-word; /* Safari 15.0–15.3 */
+  overflow-wrap: anywhere;
+  unicode-bidi: plaintext;
+  text-align: start;
+}
+
+.preview-text.is-link {
+  font-family: var(--font-latin);
+  color: var(--accent-ink);
+}
+
+:root[data-appearance='dark'] .preview-text.is-link {
+  color: var(--accent-hover);
+}
+
+.preview-text.is-code {
+  font-family: var(--font-mono);
+  font-size: var(--text-small);
+  color: var(--ink-2);
+}
+
+.preview-picture {
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  background: var(--bg-sunken);
+}
+
+.preview-picture img {
+  display: block;
+  width: 100%;
+  /* A tall picture (a phone screenshot) fits beside the notes unscrolled. */
+  max-height: 272px;
+  object-fit: contain;
+}
+
+.preview-missing-note {
+  margin: 0;
+  padding: var(--space-24) var(--space-12);
+  font-size: var(--text-small);
+  text-align: center;
+  color: var(--ink-3);
+}
+
+.preview-pane[data-type='image'] .preview-body {
+  padding: var(--space-12);
+}
+
+.preview-notes {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.preview-notes p {
+  margin: 0;
+  font-size: var(--text-caption);
+  line-height: var(--line-tight);
+  color: var(--ink-3);
+}
+
+.preview-actions {
+  display: grid;
+  gap: var(--space-8);
+  margin-top: auto;
+}
+
+.preview-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-8);
+}
+
+.preview-actions .btn {
+  min-width: 0;
+  width: 100%;
+  padding-inline: var(--space-12);
+}
+
+.btn-keys {
+  font-family: var(--font-latin);
+  font-weight: 600;
 }

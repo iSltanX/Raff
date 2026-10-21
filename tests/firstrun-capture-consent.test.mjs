@@ -116,6 +116,12 @@ test('first run: accepting capture also lands on the completion state', async (t
   await flush();
 
   await t.test('accepting saves nothing — capture is already the default', () => {
+    // Only meaningful if this window's calls land here at all: an empty log
+    // would also say "nothing saved" (audit 025).
+    assert.ok(
+      calls.some((call) => call.command === 'get_settings'),
+      'this window read its settings through its own bridge'
+    );
     assert.equal(
       calls.filter((call) => call.command === 'update_settings').length,
       0,

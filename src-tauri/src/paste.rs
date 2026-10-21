@@ -2,14 +2,13 @@
 //! item to the pasteboard, then synthesize ⌘V (Accessibility permitting).
 //! Without the permission the item still lands on the clipboard.
 
-use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 use base64::Engine;
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_nspanel::ManagerExt;
 
-use crate::storage::{now_ms, ItemKind};
+use crate::storage::{ItemKind, Usage};
 use crate::{macos, panel, AppState};
 
 /// How long we give macOS to move focus back before synthesizing ⌘V.
@@ -17,27 +16,33 @@ const ACTIVATE_DELAY_MS: u64 = 150;
 
 /// Writes an item to the pasteboard. `plain` drops rich representations
 /// ("لصق كنص عادي"). Returns false when the id is unknown.
+///
+/// Blocking: it reads the image file and may wait for a poll to finish its
+/// read (`OwnWrites`), so it is only called from commands off the main thread.
 pub fn write_item_to_clipboard(app: &AppHandle, id: &str, plain: bool) -> bool {
     let state = app.state::<AppState>();
-    let (kind, text, html, rtf, png) = {
+    let (kind, text, html, rtf, image) = {
         let store = crate::lock_store(&state.store);
         let Some(item) = store.find(id) else {
             return false;
         };
-        let png = item
+        let image = item
             .image_file
             .as_ref()
-            .and_then(|f| std::fs::read(store.images_dir().join(f)).ok());
+            .and_then(|f| crate::storage::image_path(&store.images_dir(), f));
         if plain {
-            (item.kind, item.text.clone(), None, None, png)
+            (item.kind, item.text.clone(), None, None, image)
         } else {
             let rtf = item
                 .rtf
                 .as_ref()
                 .and_then(|b| base64::engine::general_purpose::STANDARD.decode(b).ok());
-            (item.kind, item.text.clone(), item.html.clone(), rtf, png)
+            (item.kind, item.text.clone(), item.html.clone(), rtf, image)
         }
     };
+    // Read with the store lock released: a large picture is tens of
+    // milliseconds every capture and panel refresh would otherwise wait out.
+    let png = image.and_then(|path| std::fs::read(path).ok());
 
     // Never turn a missing image file into a successful copy of its Arabic
     // metadata label. The user asked to copy the image itself.
@@ -46,18 +51,17 @@ pub fn write_item_to_clipboard(app: &AppHandle, id: &str, plain: bool) -> bool {
     }
 
     let is_image = png.is_some();
-    let Some(new_count) = macos::write_clip(
-        if is_image { None } else { Some(&text) },
-        html.as_deref(),
-        rtf.as_deref(),
-        png.as_deref(),
-    ) else {
-        return false;
-    };
     state
-        .skip_change_count
-        .store(new_count as i64, Ordering::SeqCst);
-    true
+        .own_writes
+        .write(|| {
+            macos::write_clip(
+                if is_image { None } else { Some(&text) },
+                html.as_deref(),
+                rtf.as_deref(),
+                png.as_deref(),
+            )
+        })
+        .is_some()
 }
 
 /// Full paste: clipboard write + focus restore + ⌘V + silent learning signals.
@@ -65,6 +69,10 @@ pub fn write_item_to_clipboard(app: &AppHandle, id: &str, plain: bool) -> bool {
 /// fallback, using a fresh Accessibility check instead of stale panel state.
 pub async fn paste_item(app: &AppHandle, id: &str, plain: bool) -> Result<bool, String> {
     crate::startup_trace::mark("PASTE row_click_invoke");
+    // Before anything moves: no hide, no other app brought forward (ت٤٨).
+    if macos::clipboard_inert() {
+        return Err(crate::commands::err::CLIPBOARD_OFF.into());
+    }
     if !write_item_to_clipboard(app, id, plain) {
         crate::startup_trace::mark("PASTE write_item_to_clipboard FAILED (unknown id)");
         return Err(crate::commands::err::NOT_FOUND.into());
@@ -187,7 +195,7 @@ fn paste_confirmed(
 }
 
 fn bump_paste_signals(app: &AppHandle, id: &str) {
-    bump_signals(app, id, |item| item.paste_count += 1);
+    bump_signals(app, id, Usage::Paste);
 }
 
 /// Copying through رفّ (panel ⌘C, tray item click) is a usage signal exactly
@@ -201,33 +209,21 @@ fn paste_failed(detail: impl std::fmt::Display) -> String {
 }
 
 pub fn bump_copy_signals(app: &AppHandle, id: &str) {
-    bump_signals(app, id, |item| item.copy_count += 1);
+    bump_signals(app, id, Usage::Copy);
 }
 
-fn bump_signals(app: &AppHandle, id: &str, bump: impl Fn(&mut crate::storage::ClipItem)) {
+fn bump_signals(app: &AppHandle, id: &str, usage: Usage) {
     let state = app.state::<AppState>();
     let mut store = crate::lock_store(&state.store);
     if let Err(err) = store.finish_pending_pin() {
         eprintln!("raff: usage signal deferred: {err}");
         return;
     }
-    if !store.settings.learning_enabled {
-        return;
-    }
-    let mut pinned_touched = false;
-    let mut found = false;
-    if let Some(item) = store.find_mut(id) {
-        bump(item);
-        item.last_used_at = now_ms();
-        pinned_touched = item.is_pinned;
-        found = true;
-    }
-    if !found {
-        return;
-    }
     // Not written here: a counter bump is not worth rewriting a layer. The
     // flusher in `monitor` writes it once the user pauses.
-    store.mark_signals_dirty(pinned_touched);
+    if !store.count_use(id, usage) {
+        return;
+    }
     drop(store);
     let _ = app.emit("raff://changed", ());
 }

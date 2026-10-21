@@ -32,3 +32,28 @@ test('no surface claims رفّ never uses the network', () => {
 test('the clipboard promise itself is still made', () => {
   present(read('README.md'), /ما تنسخه لا يغادر جهازك/u, 'README');
 });
+
+test('nothing a launch was handed is logged', () => {
+  // A relaunch forwards its arguments to the running رفّ; the log line that
+  // records it says so without them (audit 2026-10-21 §٤-هـ). Release builds
+  // keep stderr, so it is held to the same rule as clipboard content.
+  const main = readFileSync(new URL('../src-tauri/src/main.rs', import.meta.url), 'utf8');
+  for (const line of main.split('\n').filter((l) => /eprintln!/u.test(l))) {
+    assert.doesNotMatch(line, /argv|args|_cwd/u, line.trim());
+  }
+});
+
+test('the policy says capture starts before the welcome asks', () => {
+  // Capture defaults to on and the monitor starts before the welcome window
+  // opens (ق٢١، إ٣). While both hold, PRIVACY.md has to say so, and that «أوقفه»
+  // stops what follows without erasing what came before (Sultan, 2026-10-21).
+  const storage = read('src-tauri/src/storage.rs');
+  const main = read('src-tauri/src/main.rs');
+  const started = main.indexOf('monitor::start(');
+  const welcome = main.indexOf('if open_welcome', started);
+  const startsBefore = started >= 0 && welcome > started && /capture_enabled: true/u.test(storage);
+  assert.ok(startsBefore, 'the behaviour this sentence describes changed: update PRIVACY.md with it');
+  const privacy = read('PRIVACY.md');
+  present(privacy, /يبدأ رفّ الحفظ عند أول تشغيل، قبل أن تجيب سؤال الترحيب/u, 'PRIVACY.md');
+  present(privacy, /«أوقفه» يوقف الحفظ مما بعده، ولا يمسح ما نُسخ قبله/u, 'PRIVACY.md');
+});

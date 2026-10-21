@@ -5,6 +5,7 @@
   "identifier": "com.raff.app",
   "build": {
     "beforeBuildCommand": "npm run build:frontend",
+    "beforeDevCommand": { "script": "npm run build:frontend", "wait": true },
     "frontendDist": "../dist"
   },
   "app": {
@@ -23,18 +24,11 @@
         "closable": false,
         "decorations": false,
         "transparent": true,
-        "shadow": true,
+        "shadow": false,
         "visible": false,
         "alwaysOnTop": true,
         "skipTaskbar": true,
-        "acceptFirstMouse": true,
-        "windowEffects": {
-          "effects": [
-            "popover"
-          ],
-          "state": "active",
-          "radius": 16
-        }
+        "acceptFirstMouse": true
       }
     ],
     "security": {

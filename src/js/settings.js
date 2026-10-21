@@ -4,13 +4,15 @@
 // preferences toolbar, one page at a time, grouped cards.
 
 import { api, on } from './store.js';
-import { arabicDigits, metaLine, hotkeyDisplay, hotkeyFromEvent } from './logic.js';
-import { ALERT, CAPTURE_OFF, CLEAR, PAUSE, createIcon } from './icons.js';
+import { arabicDigits, metaLine, hotkeyDisplay, hotkeyFromEvent, hotkeyRefusal } from './logic.js';
+import { ALERT, CAPTURE_OFF, CLEAR, KEYBOARD, PAUSE, createIcon } from './icons.js';
 
 // The native WKWebView menu is English ("Reload") — never shown in Raff.
 window.addEventListener('contextmenu', (e) => e.preventDefault());
 
 let settings = null;
+/** The hotkey badge is waiting for a combination (see the recorder below). */
+let recording = false;
 
 const el = (id) => document.getElementById(id);
 const hotkeyChip = el('hotkey-chip');
@@ -63,6 +65,7 @@ function activateSettingsTab(tab, { focus = false } = {}) {
   }
 
   rememberTabId(tab.id);
+  stopRecording();
   if (focus) tab.focus();
 }
 
@@ -145,11 +148,11 @@ diagnosticsBtn.addEventListener('click', async () => {
     diagnosticsTimer = window.setTimeout(() => showDiagnosticsStatus(''), 4000);
   }
 });
-el('confirm-icon').replaceChildren(createIcon(ALERT));
 
 // ─── Load / sync ──────────────────────────────────────────────────────────
 
 let unreadableSettingsShown = false;
+let staleHotkeyShown = false;
 
 async function load() {
   const state = await api.getSettings();
@@ -160,8 +163,17 @@ async function load() {
     ? `الإصدار \u2066${version}\u2069` // as the About window (Figma 269:593)
     : '';
 
-  hotkeyChip.textContent = hotkeyDisplay(settings.hotkey);
-  hotkeySub.textContent = HOTKEY_HINT;
+  // Every capture reloads these: a badge still recording and a reason still
+  // being shown keep what they say.
+  if (!recording) hotkeyChip.textContent = hotkeyDisplay(settings.hotkey);
+  if (!hotkeySub.classList.contains('error')) showHotkeyHint();
+  // A hotkey saved before its kind was refused: said once, opened to, and
+  // left for the user to change (ت٣١).
+  const stale = renderHotkeyWarning(settings.hotkey);
+  if (stale && !staleHotkeyShown && !state.unreadableSettings) {
+    staleHotkeyShown = true;
+    activateSettingsTab(el('settings-tab-general'));
+  }
   setChecked('launch-toggle', settings.launchAtLogin);
   setChecked('capture-toggle', settings.captureEnabled);
   // The switch is the request; this row is the outcome — the same status, in
@@ -376,7 +388,7 @@ async function commitSettingsPatch(patch) {
 
   if (!failure) return true;
   if ('hotkey' in resolvedPatch) {
-    flashHotkeyError(String(failure));
+    flashHotkeyError(HOTKEY_ERRORS[String(failure)] ?? 'تعذّر حفظ الاختصار. حاول مرة أخرى.');
   } else {
     showDataStatus('تعذّر حفظ التغيير. حاول مرة أخرى.', { error: true, duration: 6000 });
   }
@@ -392,15 +404,23 @@ function save(patch) {
   return queued;
 }
 
-// Surfaces the backend's Arabic error (e.g. «اختصار غير صالح») instead of
-// silently reverting the badge.
+// What the backend can say about a hotkey, and what رفّ says about it. Its
+// own text never reaches the window: a failed write carries a local path and
+// an English system error (live UI audit, issue 2).
+const HOTKEY_ERRORS = {
+  'raff/hotkey-needs-modifier': 'أضف ⌘ أو ⌥ أو ⌃ إلى الاختصار.',
+  'raff/hotkey-shared': 'هذا الاختصار تستعمله كل التطبيقات. اختر غيره.',
+  'raff/hotkey-unavailable': 'تعذّر تسجيل هذا الاختصار. اختر غيره.',
+};
+
+// Says why a hotkey was refused instead of silently reverting the badge.
 let hotkeyErrorTimer = null;
 function flashHotkeyError(message) {
   hotkeySub.textContent = message;
   hotkeySub.classList.add('error');
   clearTimeout(hotkeyErrorTimer);
   hotkeyErrorTimer = setTimeout(() => {
-    hotkeySub.classList.remove('error');
+    showHotkeyHint();
     void load().catch((err) => {
       console.error('raff: hotkey error re-sync failed', err);
       showDataStatus('تعذّرت مزامنة الإعدادات. أعد فتح النافذة للمحاولة مرة أخرى.', {
@@ -409,6 +429,40 @@ function flashHotkeyError(message) {
       });
     });
   }, 4000);
+}
+
+el('hotkey-warning-icon').replaceChildren(createIcon(KEYBOARD));
+el('hotkey-warning-action').addEventListener('click', () => hotkeyChip.click());
+
+/**
+ * Says when the saved hotkey is one رفّ now refuses, and returns whether it
+ * is. It still works, and still takes that command from every app; it is not
+ * changed here, and the backend only checks a hotkey that changes, so every
+ * other setting keeps saving (ت٢٢، ت٣١).
+ */
+function renderHotkeyWarning(accel) {
+  const box = el('hotkey-warning');
+  const refusal = hotkeyRefusal(accel);
+  box.hidden = !refusal;
+  hotkeyChip.classList.toggle('is-refused', Boolean(refusal));
+  if (!refusal) return false;
+  const keys = `\u2066${hotkeyDisplay(accel)}\u2069`;
+  const why =
+    refusal === 'shared'
+      ? `كل التطبيقات تستعمل ${keys}، ورفّ يأخذه منها ما دام يعمل.`
+      : `الاختصار ${keys} بلا ⌘ أو ⌥ أو ⌃، فيأخذ حرفًا من كل كتابة.`;
+  const text = `${why} لم يُغيَّر تلقائيًا، وبقية إعداداتك تُحفظ كالمعتاد.`;
+  const line = el('hotkey-warning-text');
+  if (line.textContent !== text) line.textContent = text;
+  return true;
+}
+
+/** The line under the badge back to its hint — written only if it changed,
+ *  since it is a live region and the same words would be read again. */
+function showHotkeyHint() {
+  clearTimeout(hotkeyErrorTimer);
+  hotkeySub.classList.remove('error');
+  if (hotkeySub.textContent !== HOTKEY_HINT) hotkeySub.textContent = HOTKEY_HINT;
 }
 
 // ─── Switches, checkbox, pop-up button ────────────────────────────────────
@@ -476,13 +530,27 @@ appearanceGroup.addEventListener('keydown', (event) => {
 
 // ─── Hotkey recorder — Hotkey-Badge (2:8030) ──────────────────────────────
 
-let recording = false;
-
+// While it records, the window takes every key press. So recording lasts
+// only while the badge is what the user is working with: focus moving on,
+// a click anywhere else, another tab, or the window going behind another all
+// end it — left running, it took the keys from every field, and ⌘V pressed
+// to paste became the global shortcut (live UI audit, issue 1).
 hotkeyChip.addEventListener('click', () => {
   recording = true;
   hotkeyChip.classList.add('recording');
   hotkeyChip.textContent = 'اضغط الاختصار…';
+  showHotkeyHint(); // a reason from the last try no longer applies
+  hotkeyChip.focus({ preventScroll: true });
 });
+hotkeyChip.addEventListener('blur', () => stopRecording());
+document.addEventListener(
+  'mousedown',
+  (e) => {
+    if (recording && !hotkeyChip.contains(e.target)) stopRecording();
+  },
+  true
+);
+window.addEventListener('blur', () => stopRecording());
 
 window.addEventListener(
   'keydown',
@@ -497,12 +565,21 @@ window.addEventListener(
     const accel = hotkeyFromEvent(e);
     if (!accel) return; // modifier-only press — keep waiting
     stopRecording();
-    save({ hotkey: accel });
+    const refusal = hotkeyRefusal(accel);
+    if (refusal === 'needs-modifier') {
+      flashHotkeyError(HOTKEY_ERRORS['raff/hotkey-needs-modifier']);
+    } else if (refusal === 'shared') {
+      // Arabic first: the line is dir=auto, and a leading ⌘V would make it LTR.
+      flashHotkeyError(`كل التطبيقات تستعمل \u2066${hotkeyDisplay(accel)}\u2069. اختر غيره.`);
+    } else {
+      save({ hotkey: accel });
+    }
   },
   true
 );
 
 function stopRecording() {
+  if (!recording) return;
   recording = false;
   hotkeyChip.classList.remove('recording');
   hotkeyChip.textContent = hotkeyDisplay(settings.hotkey);
@@ -688,8 +765,11 @@ confirmButton('clear-learning', async () => {
         error: true,
         duration: 6000,
       });
+      return;
     }
   }
+  // Said either way: folded, the summary shows nothing that changed.
+  showDataStatus('تم مسح بيانات التعلّم.');
 }, 'تعذّر مسح بيانات التعلّم. لم تُحذف البيانات.');
 
 // ─── Confirmation dialog ──────────────────────────────────────────────────
@@ -753,15 +833,18 @@ confirmOverlay.addEventListener('mousedown', (e) => {
 
 let dataStatusTimer = null;
 
+// The line stays rendered and empties instead of hiding: a live region
+// unhidden and filled in one tick is often missed by VoiceOver (the rule the
+// other status lines here already follow). Empty, it takes no room the «تم»
+// button needs — that one sits at the end on its own margin.
 function showDataStatus(message, { error = false, duration = 4000 } = {}) {
-  dataStatus.textContent = message;
-  dataStatus.hidden = false;
   dataStatus.classList.toggle('is-error', error);
   dataStatus.setAttribute('role', error ? 'alert' : 'status');
   dataStatus.setAttribute('aria-live', error ? 'assertive' : 'polite');
+  dataStatus.textContent = message;
   clearTimeout(dataStatusTimer);
   dataStatusTimer = setTimeout(() => {
-    dataStatus.hidden = true;
+    dataStatus.textContent = '';
   }, duration);
 }
 
@@ -853,7 +936,9 @@ async function renderLearning() {
     const counts = document.createElement('span');
     counts.className = 'learn-counts';
     counts.textContent = `نسخ ${arabicDigits(item.copyCount)} • لصق ${arabicDigits(item.pasteCount)} • ${metaLine({ createdAt: item.lastUsedAt, sourceApp: '' })}`;
-    row.append(text, counts);
+    // The space is not laid out between flex items, but it keeps the clip
+    // and its counts two words for a screen reader and for copied text.
+    row.append(text, ' ', counts);
     view.append(row);
   }
 }

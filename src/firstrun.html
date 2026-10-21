@@ -9,10 +9,21 @@
   <link rel="stylesheet" href="firstrun.css" />
 </head>
 <body>
-  <!-- Figma «09 — Onboarding» 273:8. Five steps, each fits the 460×520
-       window. Nothing here closes by itself: the capture answer and the
-       optional permission are separate, and only «إنهاء»/«افتح رفّ الآن» end it. -->
+  <!-- The overlay title bar's strip, where macOS would let the window be dragged. -->
+  <div class="title-drag" data-tauri-drag-region aria-hidden="true"></div>
+  <!-- Figma XCNmucSuAe007qWHnOXQpW «01 · الترحيب» 42:4060. A splash, then
+       five steps, each fitting the 460×520 window. Nothing here closes by
+       itself: the capture answer and the optional permission are separate,
+       and only «إنهاء»/«افتح رفّ الآن» end it. -->
   <main class="firstrun" id="firstrun">
+    <!-- A curtain over step 1, not a step: it lifts by itself after
+         data-duration ms, or at once on any key or click. -->
+    <div class="splash" id="splash" data-duration="1400" aria-hidden="true">
+      <span class="mark splash-mark"><span class="mark-base"></span><span class="mark-card"></span></span>
+      <span class="splash-name">رفّ</span>
+      <span class="splash-tagline">كل ما نسخته، على رفٍّ قريب.</span>
+    </div>
+
     <section class="step" id="step-idea" data-step="1" aria-labelledby="idea-title">
       <img class="figure" id="figure" src="assets/app-icon.png" width="96" height="96" alt="" aria-hidden="true" />
       <h1 class="title" id="idea-title">رفّك القريب لكل ما نسخت</h1>
@@ -50,6 +61,7 @@
     <!-- The monitor already runs and capture defaults to on (kept at Gate 1);
          saying so, and offering the other answer, is what makes it a decision. -->
     <section class="step capture-consent" id="capture-consent" data-step="3" aria-labelledby="capture-consent-title" hidden>
+      <span class="mark step-mark" aria-hidden="true"><span class="mark-base"></span><span class="mark-card"></span></span>
       <h2 class="title" id="capture-consent-title">يلتقط رفّ ما تنسخه الآن</h2>
       <p class="body-text">
         كل ما تنسخه يُحفظ على جهازك وحده، ويُتجاهل تلقائيًا ما تعلّمه مديرات كلمات
@@ -103,7 +115,7 @@
     </section>
 
     <section class="step completion" id="completion" data-step="5" role="status" aria-live="polite" aria-atomic="true" hidden>
-      <img class="figure is-small" src="assets/app-icon.png" width="72" height="72" alt="" aria-hidden="true" />
+      <img class="figure" src="assets/app-icon.png" width="96" height="96" alt="" aria-hidden="true" />
       <h2 class="title">رفّ جاهز</h2>
       <p class="body-text" id="completion-text">
         انسخ أي شيء، ثم افتح رفّ بـ <kbd>⇧⌘V</kbd> أو من رمزه في شريط القوائم أعلى الشاشة.
@@ -119,7 +131,7 @@
       <div class="actions">
         <button class="btn btn-quiet" id="back" hidden>رجوع</button>
         <button class="btn" id="later" hidden>تخطَّ</button>
-        <button class="btn" id="open-settings" hidden>منح الإذن…</button>
+        <button class="btn btn-primary" id="open-settings" hidden>منح الإذن…</button>
         <button class="btn" id="finish" hidden>إنهاء</button>
         <button class="btn btn-primary" id="next">التالي</button>
         <button class="btn btn-primary" id="open-raff" hidden>افتح رفّ الآن</button>

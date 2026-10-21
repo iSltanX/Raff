@@ -7,6 +7,19 @@ export function arabicDigits(value) {
   return String(value).replace(/[0-9]/g, (d) => ARABIC_DIGITS[Number(d)]);
 }
 
+/**
+ * A count with its noun, as Arabic counts: one and two have their own forms,
+ * three to ten take the plural, eleven and up the singular accusative.
+ * `forms` = [one, two, three-to-ten, eleven-and-up], e.g.
+ * ['مرة', 'مرتين', 'مرات', 'مرة'] → «مرة»، «مرتين»، «٣ مرات»، «١١ مرة».
+ */
+export function arabicCount(n, [one, two, few, many]) {
+  if (n === 1) return one;
+  if (n === 2) return two;
+  const mod = n % 100;
+  return `${arabicDigits(n)} ${mod >= 3 && mod <= 10 ? few : many}`;
+}
+
 /** Strips Arabic diacritics (tashkeel) and tatweel, folds Arabic-Indic digits
  *  to Western, and folds the two spellings people actually disagree about —
  *  forgiving search in both directions.
@@ -121,4 +134,21 @@ export function hotkeyFromEvent(e) {
   if (!key) return null;
 
   return [...mods, key].join('+');
+}
+
+/**
+ * Why an accelerator cannot be رفّ's global shortcut, or null when it can.
+ *
+ * A global shortcut is taken from every app while رفّ runs. With no modifier
+ * but ⇧ it would take a capital letter from all typing; ⌘ with C, V, X, A, Z,
+ * Q or W, the edit and window commands every app relies on. The backend
+ * refuses the same ones (`hotkey_refusal` in commands.rs).
+ */
+const SHARED_HOTKEYS = new Set(['c', 'v', 'x', 'a', 'z', 'q', 'w'].map((key) => `super+${key}`));
+
+export function hotkeyRefusal(accel) {
+  const mods = String(accel).split('+').slice(0, -1);
+  if (!mods.some((mod) => mod !== 'shift')) return 'needs-modifier';
+  if (SHARED_HOTKEYS.has(accel)) return 'shared';
+  return null;
 }

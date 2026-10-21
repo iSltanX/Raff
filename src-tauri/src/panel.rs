@@ -6,6 +6,10 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use objc2::msg_send;
+use objc2::runtime::AnyObject;
+use objc2_foundation::{NSPoint, NSRect, NSSize};
+use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize};
 use tauri_nspanel::cocoa::appkit::NSWindowCollectionBehavior;
 use tauri_nspanel::{panel_delegate, ManagerExt, WebviewWindowExt};
@@ -23,6 +27,27 @@ const PANEL_EDGE_MARGIN: f64 = 12.0;
 const STYLE_MASK_NON_ACTIVATING_PANEL: i32 = 1 << 7;
 /// Just above NSMainMenuWindowLevel (24), like Spotlight.
 const PANEL_LEVEL: i32 = 25;
+/// The preview beside the panel (Figma «05 · التفاصيل» 45:5325): 340pt and a
+/// 16pt gap. The panel window widens by this much towards the preview, so the
+/// list never moves and hover, focus and keys stay in one page.
+const PREVIEW_EXTRA: f64 = 356.0;
+
+/// Where the preview opens: the reading end (left) when there is room.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum PreviewSide {
+    Left,
+    Right,
+}
+
+/// The side the window is widened to while the preview shows.
+static PREVIEW: Mutex<Option<PreviewSide>> = Mutex::new(None);
+
+fn preview_open() -> Option<PreviewSide> {
+    *PREVIEW
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
 
 // Ignore startup movement events until the panel has received its deliberate
 // first position. A short generation-based debounce keeps live dragging fluid
@@ -100,6 +125,56 @@ fn clamp_origin(origin: (f64, f64), window: (f64, f64), area: Rect, margin: f64)
     (origin.0.clamp(min_x, max_x), origin.1.clamp(min_y, max_y))
 }
 
+/// The side with room for the preview beside `panel` (points), or none.
+fn preview_side_for(panel: Rect, visible: Rect, extra: f64, margin: f64) -> Option<PreviewSide> {
+    if panel.x - extra >= visible.x + margin {
+        Some(PreviewSide::Left)
+    } else if panel.x + panel.width + extra <= visible.x + visible.width - margin {
+        Some(PreviewSide::Right)
+    } else {
+        None
+    }
+}
+
+/// The window frame with the preview open on `side`: the panel stays put.
+fn widened(frame: Rect, side: PreviewSide, extra: f64) -> Rect {
+    match side {
+        PreviewSide::Left => Rect {
+            x: frame.x - extra,
+            width: frame.width + extra,
+            ..frame
+        },
+        PreviewSide::Right => Rect {
+            width: frame.width + extra,
+            ..frame
+        },
+    }
+}
+
+/// The panel's own frame again, from the widened one.
+fn narrowed(frame: Rect, side: PreviewSide, extra: f64) -> Rect {
+    match side {
+        PreviewSide::Left => Rect {
+            x: frame.x + extra,
+            width: frame.width - extra,
+            ..frame
+        },
+        PreviewSide::Right => Rect {
+            width: frame.width - extra,
+            ..frame
+        },
+    }
+}
+
+/// The x to remember for a window at `window_x` (physical px): the panel's,
+/// which starts `PREVIEW_EXTRA` further right while the preview is on its left.
+fn remembered_x(window_x: f64, preview: Option<PreviewSide>, scale: f64) -> f64 {
+    match preview {
+        Some(PreviewSide::Left) => window_x + PREVIEW_EXTRA * scale,
+        _ => window_x,
+    }
+}
+
 fn centered_origin(window: (f64, f64), area: Rect) -> (f64, f64) {
     (
         area.x + (area.width - window.0) / 2.0,
@@ -107,14 +182,146 @@ fn centered_origin(window: (f64, f64), area: Rect) -> (f64, f64) {
     )
 }
 
+/// Runs `work` on the main thread and waits for its answer. The preview's
+/// commands are synchronous, so Tauri already runs them on the main thread and
+/// `on_main` runs `work` inline; the timeout only bounds an off-main caller,
+/// whose `None` then reads as "no room" rather than a hang.
+fn on_main_sync<T: Send + 'static>(work: impl FnOnce() -> T + Send + 'static) -> Option<T> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    on_main(move || {
+        let _ = tx.send(work());
+    });
+    rx.recv_timeout(Duration::from_secs(2)).ok()
+}
+
+fn ns_window(window: &tauri::WebviewWindow) -> Option<*mut AnyObject> {
+    window
+        .ns_window()
+        .ok()
+        .map(|pointer| pointer as *mut AnyObject)
+        .filter(|pointer| !pointer.is_null())
+}
+
+fn rect_from(native: NSRect) -> Rect {
+    Rect {
+        x: native.origin.x,
+        y: native.origin.y,
+        width: native.size.width,
+        height: native.size.height,
+    }
+}
+
+/// The window's frame, in AppKit points. Only x and width ever change, so the
+/// bottom-left origin needs no conversion.
+fn native_frame(ns: *mut AnyObject) -> Rect {
+    // SAFETY: `ns` is the panel's live NSWindow, used on the main thread.
+    let frame: NSRect = unsafe { msg_send![&*ns, frame] };
+    rect_from(frame)
+}
+
+/// The visible frame of the window's screen — needed to widen, never to
+/// narrow back (a window between screens has none for a moment).
+fn native_visible_frame(ns: *mut AnyObject) -> Option<Rect> {
+    // SAFETY: as above.
+    unsafe {
+        let screen: *mut AnyObject = msg_send![&*ns, screen];
+        if screen.is_null() {
+            return None;
+        }
+        let visible: NSRect = msg_send![&*screen, visibleFrame];
+        Some(rect_from(visible))
+    }
+}
+
+/// One `setFrame:` — origin and width together — so the panel never jumps.
+fn set_native_frame(ns: *mut AnyObject, frame: Rect) {
+    let native = NSRect::new(
+        NSPoint::new(frame.x, frame.y),
+        NSSize::new(frame.width, frame.height),
+    );
+    // SAFETY: as above.
+    unsafe {
+        let _: () = msg_send![&*ns, setFrame: native, display: true];
+    }
+}
+
+/// The side with room for the preview beside the panel, or none. While it is
+/// open, the side it already has.
+pub fn preview_side(app: &AppHandle) -> Option<PreviewSide> {
+    let window = app.get_webview_window(PANEL_LABEL)?;
+    on_main_sync(move || {
+        // Hidden, the panel previews nothing: it is still under the pointer
+        // (transparent), and the window must not widen unseen.
+        if !SHOWN.load(Ordering::Acquire) {
+            return None;
+        }
+        if let Some(open) = preview_open() {
+            return Some(open);
+        }
+        let ns = ns_window(&window)?;
+        preview_side_for(
+            native_frame(ns),
+            native_visible_frame(ns)?,
+            PREVIEW_EXTRA,
+            PANEL_EDGE_MARGIN,
+        )
+    })
+    .flatten()
+}
+
+/// Widens the panel window towards `side` for the preview, or narrows it back.
+pub fn set_preview(app: &AppHandle, side: Option<PreviewSide>) {
+    let Some(window) = app.get_webview_window(PANEL_LABEL) else {
+        return;
+    };
+    let _ = on_main_sync(move || apply_preview(&window, side));
+}
+
+fn apply_preview(window: &tauri::WebviewWindow, side: Option<PreviewSide>) {
+    let current = preview_open();
+    if current == side || (side.is_some() && !SHOWN.load(Ordering::Acquire)) {
+        return;
+    }
+    let Some(ns) = ns_window(window) else {
+        return;
+    };
+    let frame = native_frame(ns);
+    let panel = match current {
+        Some(open) => narrowed(frame, open, PREVIEW_EXTRA),
+        None => frame,
+    };
+    let target = match side {
+        Some(open) => widened(panel, open, PREVIEW_EXTRA),
+        None => panel,
+    };
+    // Recorded before the frame changes: moving the window reaches
+    // `remember_position`, which must already know where the panel is.
+    *PREVIEW
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner()) = side;
+    set_native_frame(ns, target);
+}
+
+/// The panel closes with its preview; it always reopens at its own size.
+fn collapse_preview(app: &AppHandle) {
+    if preview_open().is_none() {
+        return;
+    }
+    if let Some(window) = app.get_webview_window(PANEL_LABEL) {
+        apply_preview(&window, None);
+    }
+}
+
 pub fn init(app: &AppHandle) -> tauri::Result<()> {
     let window = app
         .get_webview_window(PANEL_LABEL)
         .expect("panel window missing from tauri.conf.json");
 
-    // The native popover material (tauri.conf.json `windowEffects`, 16pt
-    // radius) sits under a translucent CSS surface of the same radius.
+    // Flat: no native material and no window shadow (tauri.conf.json). The
+    // window is transparent only so the opaque CSS surface keeps its 16pt
+    // corners; a 1px line, not a shadow, separates it from what is behind.
     let panel = window.to_panel()?;
+    guard_key_status();
     panel.set_level(PANEL_LEVEL);
     panel.set_style_mask(STYLE_MASK_NON_ACTIVATING_PANEL);
     panel.set_collection_behaviour(
@@ -132,7 +339,12 @@ pub fn init(app: &AppHandle) -> tauri::Result<()> {
     delegate.set_listener(Box::new(move |delegate_name: String| {
         match delegate_name.as_str() {
             "window_did_resign_key" => {
-                LAST_RESIGN_HIDE_MS.store(now_ms(), Ordering::Release);
+                let stamp = resign_stamp(
+                    SHOWN.load(Ordering::Acquire),
+                    now_ms(),
+                    LAST_RESIGN_HIDE_MS.load(Ordering::Acquire),
+                );
+                LAST_RESIGN_HIDE_MS.store(stamp, Ordering::Release);
                 hide(&handle);
             }
             // Once a Tauri window becomes NSPanel, Tao's ordinary Moved event is
@@ -165,12 +377,76 @@ pub fn init(app: &AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
+/// Whether the panel may take the key: only while it is shown (ت٤٧).
+fn accepts_key(shown: bool) -> bool {
+    shown
+}
+
+/// Hidden, the panel stays ordered in (see `init`), and `RawNSPanel` answers
+/// `canBecomeKeyWindow` with YES whatever its state. So when another رفّ
+/// window closed, AppKit handed the invisible panel the key, and what the
+/// user typed next went into its search field. Its answer now follows
+/// `SHOWN`. Only that class changes: its own method is replaced, never one
+/// it inherits from NSPanel or NSWindow. Installing twice is harmless.
+fn guard_key_status() {
+    use objc2::runtime::{AnyClass, Bool, Imp, Sel};
+
+    extern "C-unwind" fn can_become_key(_this: &AnyObject, _cmd: Sel) -> Bool {
+        Bool::new(accepts_key(SHOWN.load(Ordering::Acquire)))
+    }
+    let selector = objc2::sel!(canBecomeKeyWindow);
+    let Some(class) = AnyClass::get(c"RawNSPanel") else {
+        eprintln!("raff: RawNSPanel is not defined; the hidden panel can take the key");
+        return;
+    };
+    let methods = class.instance_methods();
+    let Some(method) = methods.iter().find(|method| method.name() == selector) else {
+        eprintln!("raff: RawNSPanel has no canBecomeKeyWindow of its own; left as it is");
+        return;
+    };
+    // SAFETY: the replacement has the replaced method's signature,
+    // `- (BOOL)canBecomeKeyWindow` — (id, SEL) -> BOOL — and reads only an
+    // atomic, so any thread AppKit asks from is fine.
+    unsafe {
+        let imp: Imp = std::mem::transmute::<extern "C-unwind" fn(&AnyObject, Sel) -> Bool, Imp>(
+            can_become_key,
+        );
+        method.set_implementation(imp);
+    }
+}
+
+/// Whether, after a رفّ window other than the panel closed, the app the user
+/// came from should take the front back: رفّ is still the active app, no
+/// window of it has the key, and the panel is not open. Typing would
+/// otherwise go nowhere (ت٤٧).
+fn should_hand_back(app_active: bool, has_key_window: bool, panel_shown: bool) -> bool {
+    app_active && !has_key_window && !panel_shown
+}
+
+/// Called when a رفّ window other than the panel leaves the screen. AppKit
+/// gives the key to another رفّ window if one is left; the panel no longer
+/// takes it while hidden. With none left, the app the user was in takes the
+/// front back, so the next keystroke lands where they can see it.
+pub fn after_window_closed() {
+    // The next turn of the main queue: the close has finished by then, and
+    // AppKit has picked the next key window, if any.
+    macos::dispatch_to_main(|| {
+        let (active, has_key_window) = macos::app_focus();
+        if should_hand_back(active, has_key_window, SHOWN.load(Ordering::Acquire)) {
+            crate::startup_trace::mark("FOCUS_HANDED_BACK");
+            macos::hand_focus_back();
+        }
+    });
+}
+
 /// Presents the (already ordered-in) panel and gives it keyboard focus.
 fn present(panel: &tauri_nspanel::raw_nspanel::RawNSPanel) {
+    // Before `show`, which makes the panel key: it may take the key only
+    // while shown (`guard_key_status`).
+    SHOWN.store(true, Ordering::Release);
     panel.set_ignore_mouse_events(false);
     panel.set_alpha_value(1.0);
     panel.show();
-    SHOWN.store(true, Ordering::Release);
 }
 
 /// Hides the panel without ordering it out: transparent, click-through, and
@@ -199,6 +475,7 @@ pub fn show(app: &AppHandle) {
             *crate::lock_previous_app(&state.previous_app) = Some(front.pid);
         }
 
+        collapse_preview(&handle);
         if let Some(window) = handle.get_webview_window(PANEL_LABEL) {
             restore_or_center(&handle, &window);
             PLACEMENT_READY.store(true, Ordering::Release);
@@ -240,12 +517,21 @@ pub fn remember_position(app: &AppHandle) {
     }
 }
 
+/// Hides a shown panel and tells its page. The page cannot tell a concealed
+/// panel from a blurred one by itself, so without `panel://hidden` it kept
+/// fetching and rebuilding the list on every copy, for nobody (F-HIDDEN).
+fn hide_shown(handle: &AppHandle, panel: &tauri_nspanel::raw_nspanel::RawNSPanel) {
+    collapse_preview(handle);
+    conceal(panel);
+    let _ = handle.emit_to(PANEL_LABEL, "panel://hidden", ());
+}
+
 pub fn hide(app: &AppHandle) {
     let handle = app.clone();
     on_main(move || {
         if let Ok(panel) = handle.get_webview_panel(PANEL_LABEL) {
             if SHOWN.load(Ordering::Acquire) {
-                conceal(&panel);
+                hide_shown(&handle, &panel);
             }
         }
     });
@@ -259,7 +545,7 @@ pub fn toggle(app: &AppHandle) {
             Err(_) => return show(&handle),
         };
         if SHOWN.load(Ordering::Acquire) {
-            conceal(&panel);
+            hide_shown(&handle, &panel);
             return;
         }
         // The panel is already hidden. If that happened moments ago because
@@ -271,6 +557,19 @@ pub fn toggle(app: &AppHandle) {
             show(&handle);
         }
     });
+}
+
+/// When the panel resigns key status, the moment to remember — only if that
+/// resignation hid a visible panel. Hidden, it used to become key when
+/// another رفّ window closed and lose it to the very click on the icon; that
+/// click closed nothing and must open the panel. It no longer takes the key
+/// while hidden (`guard_key_status`); the stamp stays the second guard.
+fn resign_stamp(shown: bool, now_ms: u64, previous_ms: u64) -> u64 {
+    if shown {
+        now_ms
+    } else {
+        previous_ms
+    }
 }
 
 fn was_just_dismissed_by_resign(now_ms: u64, last_resign_hide_ms: u64) -> bool {
@@ -374,7 +673,7 @@ fn constrain_and_save(app: &AppHandle) {
     let state = app.state::<AppState>();
     let store = crate::lock_store(&state.store);
     store.save_panel_placement(PanelPlacement {
-        x: corrected.x as f64,
+        x: remembered_x(corrected.x as f64, preview_open(), monitor.scale_factor()),
         y: corrected.y as f64,
     });
 }
@@ -382,6 +681,68 @@ fn constrain_and_save(app: &AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ت٤٧ ─────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn the_hidden_panel_cannot_take_the_key() {
+        use objc2::runtime::{AnyClass, Bool};
+        use tauri_nspanel::objc_foundation::INSObject;
+        // `to_panel` defines the class the same way, on first use.
+        let _ = tauri_nspanel::raw_nspanel::RawNSPanel::class();
+        let window = AnyClass::get(c"NSWindow").unwrap();
+        let window_answer = window
+            .instance_method(objc2::sel!(canBecomeKeyWindow))
+            .unwrap()
+            .implementation();
+        guard_key_status();
+        guard_key_status(); // installing twice changes nothing
+
+        let class = AnyClass::get(c"RawNSPanel").unwrap();
+        // Never initialised: only its answer is asked, which reads no state.
+        let panel: *mut AnyObject = unsafe { msg_send![class, alloc] };
+        let asks = |shown: bool| {
+            SHOWN.store(shown, Ordering::Release);
+            let answer: Bool = unsafe { msg_send![panel, canBecomeKeyWindow] };
+            answer.as_bool()
+        };
+        assert!(!asks(false), "hidden, it does not take the key");
+        assert!(asks(true), "shown, it does");
+        SHOWN.store(false, Ordering::Release);
+        // Runtime IMPs, not Rust functions: their addresses are the identity.
+        let window_answer_now = window
+            .instance_method(objc2::sel!(canBecomeKeyWindow))
+            .unwrap()
+            .implementation();
+        assert!(
+            std::ptr::fn_addr_eq(window_answer_now, window_answer),
+            "no other window class is touched"
+        );
+    }
+
+    #[test]
+    fn the_key_follows_whether_the_panel_is_shown() {
+        assert!(accepts_key(true));
+        assert!(!accepts_key(false));
+    }
+
+    #[test]
+    fn rff_steps_aside_only_when_nothing_of_it_is_left_to_type_into() {
+        // (active, a window has the key, panel shown) → hand back
+        assert!(
+            should_hand_back(true, false, false),
+            "active, nothing to type into"
+        );
+        assert!(
+            !should_hand_back(true, true, false),
+            "another رفّ window took the key"
+        );
+        assert!(!should_hand_back(true, false, true), "the panel is open");
+        assert!(
+            !should_hand_back(false, false, false),
+            "the front is already elsewhere"
+        );
+    }
 
     #[test]
     fn centers_first_position_in_visible_area() {
@@ -450,6 +811,110 @@ mod tests {
     #[test]
     fn reopen_proceeds_for_an_unrelated_click_long_after_any_resign() {
         assert!(!was_just_dismissed_by_resign(50_000, 900));
+    }
+
+    // The preview (Figma «05 · التفاصيل» 45:5325) opens at the reading end —
+    // the left — when there is room, otherwise on the right, otherwise not.
+    #[test]
+    fn the_preview_prefers_the_left_and_falls_back_to_the_right() {
+        let visible = Rect {
+            x: 0.0,
+            y: 0.0,
+            width: 1440.0,
+            height: 875.0,
+        };
+        let centred = Rect {
+            x: 490.0,
+            y: 167.0,
+            width: 460.0,
+            height: 540.0,
+        };
+        assert_eq!(
+            preview_side_for(centred, visible, PREVIEW_EXTRA, 12.0),
+            Some(PreviewSide::Left)
+        );
+        let at_left_edge = Rect { x: 12.0, ..centred };
+        assert_eq!(
+            preview_side_for(at_left_edge, visible, PREVIEW_EXTRA, 12.0),
+            Some(PreviewSide::Right)
+        );
+        let narrow = Rect {
+            x: 0.0,
+            y: 0.0,
+            width: 800.0,
+            height: 875.0,
+        };
+        let middle = Rect {
+            x: 170.0,
+            ..centred
+        };
+        assert_eq!(preview_side_for(middle, narrow, PREVIEW_EXTRA, 12.0), None);
+    }
+
+    #[test]
+    fn widening_keeps_the_panel_where_it_is() {
+        let frame = Rect {
+            x: 490.0,
+            y: 167.0,
+            width: 460.0,
+            height: 540.0,
+        };
+        let left = widened(frame, PreviewSide::Left, PREVIEW_EXTRA);
+        assert_eq!(
+            left,
+            Rect {
+                x: 134.0,
+                y: 167.0,
+                width: 816.0,
+                height: 540.0
+            }
+        );
+        assert_eq!(
+            left.x + left.width,
+            frame.x + frame.width,
+            "the panel's right edge stays put"
+        );
+        let right = widened(frame, PreviewSide::Right, PREVIEW_EXTRA);
+        assert_eq!(
+            right,
+            Rect {
+                width: 816.0,
+                ..frame
+            }
+        );
+        for side in [PreviewSide::Left, PreviewSide::Right] {
+            assert_eq!(
+                narrowed(widened(frame, side, PREVIEW_EXTRA), side, PREVIEW_EXTRA),
+                frame
+            );
+        }
+    }
+
+    // Dragged while the preview is open, the window starts left of the panel;
+    // the place to remember is the panel's own.
+    #[test]
+    fn the_remembered_place_is_the_panel_not_the_widened_window() {
+        assert_eq!(remembered_x(268.0, Some(PreviewSide::Left), 2.0), 980.0);
+        assert_eq!(remembered_x(980.0, Some(PreviewSide::Right), 2.0), 980.0);
+        assert_eq!(remembered_x(980.0, None, 2.0), 980.0);
+    }
+
+    // The guard exists for the click that closes an OPEN panel. A panel that
+    // was already hidden and merely lost key status (it can become key while
+    // invisible, e.g. when Settings closes) closed nothing — the next click
+    // on the icon must open it (live review, 2026-10-21).
+    #[test]
+    fn only_a_visible_panel_resigning_arms_the_reopen_guard() {
+        assert_eq!(resign_stamp(true, 5_000, 900), 5_000);
+        assert_eq!(resign_stamp(false, 5_000, 900), 900);
+        assert!(!was_just_dismissed_by_resign(
+            5_010,
+            resign_stamp(false, 5_000, 0)
+        ));
+        assert!(was_just_dismissed_by_resign(
+            5_010,
+            resign_stamp(true, 5_000, 0)
+        ));
     }
 
     #[test]

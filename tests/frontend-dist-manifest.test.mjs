@@ -1,13 +1,34 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { readdirSync, readFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const project = path.join(here, '..');
-const dist = path.join(project, 'dist');
+const projectDist = path.join(project, 'dist');
+
+// The suite builds into a directory of its own: `dist/` is what `tauri build`
+// packages, and a test run must not delete or rewrite it (audit 025).
+function buildInto(t) {
+  const dist = mkdtempSync(path.join(tmpdir(), 'raff-dist-'));
+  t.after(() => rmSync(dist, { recursive: true, force: true }));
+  execFileSync(process.execPath, ['scripts/build-frontend.mjs', `--out=${dist}`], {
+    cwd: project,
+    stdio: 'pipe',
+  });
+  return dist;
+}
+
+/** What `dist/` is right now: absent, or its manifest's identity and bytes. */
+function projectDistSnapshot() {
+  const manifest = path.join(projectDist, 'asset-manifest.json');
+  if (!existsSync(manifest)) return { exists: existsSync(projectDist) };
+  const { ino, mtimeMs } = statSync(manifest);
+  return { exists: true, ino, mtimeMs, bytes: readFileSync(manifest, 'utf8') };
+}
 
 function filesUnder(dir, relative = '') {
   return readdirSync(path.join(dir, relative), { withFileTypes: true }).flatMap((entry) => {
@@ -16,11 +37,8 @@ function filesUnder(dir, relative = '') {
   });
 }
 
-test('frontend distribution contains exactly the production allowlist', () => {
-  execFileSync(process.execPath, ['scripts/build-frontend.mjs'], {
-    cwd: project,
-    stdio: 'pipe',
-  });
+test('frontend distribution contains exactly the production allowlist', (t) => {
+  const dist = buildInto(t);
 
   const manifest = JSON.parse(readFileSync(path.join(dist, 'asset-manifest.json'), 'utf8'));
   const actual = filesUnder(dist)
@@ -41,6 +59,41 @@ test('frontend distribution contains exactly the production allowlist', () => {
       /(?:-figma(?:@\d+x)?\.(?:png|svg)$|empty-shelf-product|showcase|design-review)/iu
     );
   }
+});
+
+test('a test build leaves the project dist/ exactly as it was', (t) => {
+  const before = projectDistSnapshot();
+  buildInto(t);
+  assert.deepEqual(projectDistSnapshot(), before);
+});
+
+test('the build refuses an output directory that already holds files', (t) => {
+  // It writes into the directory and never empties it: a mistyped path must
+  // not become a deletion.
+  const occupied = mkdtempSync(path.join(tmpdir(), 'raff-dist-occupied-'));
+  t.after(() => rmSync(occupied, { recursive: true, force: true }));
+  writeFileSync(path.join(occupied, 'keep.txt'), 'mine');
+
+  assert.throws(() =>
+    execFileSync(process.execPath, ['scripts/build-frontend.mjs', `--out=${occupied}`], {
+      cwd: project,
+      stdio: 'pipe',
+    })
+  );
+  assert.deepEqual(readdirSync(occupied), ['keep.txt']);
+  assert.equal(readFileSync(path.join(occupied, 'keep.txt'), 'utf8'), 'mine');
+});
+
+test('an argument the build does not understand stops it before dist/ is touched', () => {
+  const before = projectDistSnapshot();
+  for (const args of [['--out', tmpdir()], ['--out'], ['--outdir=x']]) {
+    assert.throws(
+      () => execFileSync(process.execPath, ['scripts/build-frontend.mjs', ...args], { cwd: project, stdio: 'pipe' }),
+      undefined,
+      args.join(' ')
+    );
+  }
+  assert.deepEqual(projectDistSnapshot(), before);
 });
 
 test('Tauri packages the generated frontend instead of the design source tree', () => {

@@ -22,6 +22,21 @@ pub mod err {
     pub const NOT_FOUND: &str = "raff/not-found";
     pub const SAVE_FAILED: &str = "raff/save-failed";
     pub const PASTE_FAILED: &str = "raff/paste-failed";
+    /// A shortcut with no modifier but ⇧.
+    pub const HOTKEY_NEEDS_MODIFIER: &str = "raff/hotkey-needs-modifier";
+    /// ⌘C, ⌘V, ⌘X, ⌘A, ⌘Z, ⌘Q or ⌘W.
+    pub const HOTKEY_SHARED: &str = "raff/hotkey-shared";
+    /// macOS would not register it.
+    pub const HOTKEY_UNAVAILABLE: &str = "raff/hotkey-unavailable";
+    /// The deleted item would leave history the moment it came back.
+    pub const UNDO_NO_ROOM: &str = crate::storage::UNDO_NO_ROOM;
+    /// The same, because it is past the retention period.
+    pub const UNDO_RETENTION: &str = crate::storage::UNDO_RETENTION;
+    /// A test run of رفّ: it has no clipboard to copy to or paste from (ت٤٨).
+    pub const CLIPBOARD_OFF: &str = "raff/clipboard-off";
+    /// The picture is there — it still pastes — but no thumbnail exists and
+    /// the original is too large to send to the panel.
+    pub const PREVIEW_TOO_LARGE: &str = "raff/preview-too-large";
 }
 
 /// Keeps the detail where it is useful — the process log — and hands the
@@ -192,9 +207,15 @@ pub async fn paste_item(app: AppHandle, id: String, plain: bool) -> Result<bool,
     result
 }
 
+/// Async, like `paste_item`: the write can wait out a poll's read and reads
+/// the picture file, neither of which belongs on the main thread.
 #[tauri::command]
-pub fn copy_item(app: AppHandle, id: String) -> Result<(), String> {
+pub async fn copy_item(app: AppHandle, id: String) -> Result<(), String> {
     let began = std::time::Instant::now();
+    if macos::clipboard_inert() {
+        crate::diagnostics::record("copy", "clipboard-off", began);
+        return Err(err::CLIPBOARD_OFF.into());
+    }
     if paste::write_item_to_clipboard(&app, &id, false) {
         paste::bump_copy_signals(&app, &id);
         crate::diagnostics::record("copy", "ok", began);
@@ -223,21 +244,43 @@ pub fn reorder_pinned(
     Ok(())
 }
 
-#[tauri::command]
+/// Where a pin change left the row. `removed` is an unpin that history did
+/// not take back, and `reason` says why — past the retention period, older
+/// than all of history, or let go by its limit — so the panel can say it.
+#[derive(Serialize, Debug, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PinDto {
+    pub is_pinned: bool,
+    pub removed: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<crate::storage::UnpinRemoval>,
+}
+
+fn set_pin(store: &mut Store, id: &str, is_pinned: bool) -> Result<PinDto, String> {
+    let is_pinned = store
+        .set_pin_persisted(id, is_pinned)
+        .map_err(save_failed)?;
+    let removed = store.find(id).is_none();
+    Ok(PinDto {
+        is_pinned,
+        removed,
+        reason: if removed { store.unpin_removal() } else { None },
+    })
+}
+
+/// Off the main thread, like `delete_item`: a pin writes its journal and two
+/// layers before it returns (F-MAINTHREAD-COST). The panel sends its changes
+/// one at a time, so this does not reorder them.
+#[tauri::command(async)]
 pub fn toggle_pin(
     app: AppHandle,
-    state: State<AppState>,
+    state: State<'_, AppState>,
     id: String,
     is_pinned: bool,
-) -> Result<bool, String> {
-    let is_pinned = {
-        let mut store = crate::lock_store(&state.store);
-        store
-            .set_pin_persisted(&id, is_pinned)
-            .map_err(save_failed)?
-    };
+) -> Result<PinDto, String> {
+    let outcome = set_pin(&mut crate::lock_store(&state.store), &id, is_pinned)?;
     notify(&app);
-    Ok(is_pinned)
+    Ok(outcome)
 }
 
 #[derive(Serialize)]
@@ -246,10 +289,13 @@ pub struct DeleteReceiptDto {
     pub token: String,
 }
 
-#[tauri::command]
+/// Off the main thread: the journal is flushed to the device and the layer
+/// rewritten before this returns — tens of milliseconds on a large history,
+/// during which the main thread would draw nothing (F-MAINTHREAD-COST).
+#[tauri::command(async)]
 pub fn delete_item(
     app: AppHandle,
-    state: State<AppState>,
+    state: State<'_, AppState>,
     id: String,
 ) -> Result<DeleteReceiptDto, String> {
     let token = {
@@ -260,18 +306,30 @@ pub fn delete_item(
     Ok(DeleteReceiptDto { token })
 }
 
-#[tauri::command]
-pub fn undo_delete(app: AppHandle, state: State<AppState>, token: String) -> Result<(), String> {
+/// Off the main thread, like `delete_item`: it rewrites the layer.
+#[tauri::command(async)]
+pub fn undo_delete(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    token: String,
+) -> Result<(), String> {
     {
         let mut store = crate::lock_store(&state.store);
-        store.undo_delete(&token).map_err(save_failed)?;
+        store.undo_delete(&token).map_err(|e| {
+            if e == err::UNDO_NO_ROOM || e == err::UNDO_RETENTION {
+                e
+            } else {
+                save_failed(e)
+            }
+        })?;
     }
     notify(&app);
     Ok(())
 }
 
-#[tauri::command]
-pub fn commit_delete(state: State<AppState>, token: String) -> Result<(), String> {
+/// Off the main thread, like `delete_item`: it deletes files and the journal.
+#[tauri::command(async)]
+pub fn commit_delete(state: State<'_, AppState>, token: String) -> Result<(), String> {
     let mut store = crate::lock_store(&state.store);
     store.commit_delete(&token).map_err(save_failed)
 }
@@ -280,7 +338,7 @@ pub fn commit_delete(state: State<AppState>, token: String) -> Result<(), String
 pub fn clear_history(app: AppHandle, state: State<AppState>) -> Result<(), String> {
     {
         let mut store = crate::lock_store(&state.store);
-        store.clear_history_persisted()?;
+        store.clear_history_persisted().map_err(save_failed)?;
     }
     notify(&app);
     Ok(())
@@ -290,7 +348,7 @@ pub fn clear_history(app: AppHandle, state: State<AppState>) -> Result<(), Strin
 pub fn clear_learning(app: AppHandle, state: State<AppState>) -> Result<(), String> {
     {
         let mut store = crate::lock_store(&state.store);
-        store.clear_learning_persisted()?;
+        store.clear_learning_persisted().map_err(save_failed)?;
     }
     notify(&app);
     Ok(())
@@ -353,10 +411,16 @@ pub fn update_settings(
     // Hotkey first: if the new accelerator cannot be registered, fail without
     // persisting anything — and re-register the old one, because registration
     // starts with unregister_all (the app must never lose its entry point).
+    // Only a shortcut being changed is weighed: one saved before these rules
+    // must not stand in the way of every other setting.
     if settings.hotkey != old.hotkey {
+        if let Some(refusal) = hotkey_refusal(&settings.hotkey) {
+            return Err(refusal.into());
+        }
         if let Err(err) = register_hotkey(&app, &settings.hotkey) {
+            eprintln!("raff: could not register {}: {err}", settings.hotkey);
             let _ = register_hotkey(&app, &old.hotkey);
-            return Err(err);
+            return Err(err::HOTKEY_UNAVAILABLE.into());
         }
     }
 
@@ -380,7 +444,9 @@ pub fn update_settings(
     // Persist only after fallible system integration succeeds. If storage
     // fails, restore both external side effects so Settings cannot claim a
     // configuration macOS or the next launch will not actually honor.
-    let persisted = crate::lock_store(&state.store).update_settings_persisted(settings.clone());
+    let persisted = crate::lock_store(&state.store)
+        .update_settings_persisted(settings.clone())
+        .map_err(save_failed);
     if let Err(err) = persisted {
         if autostart_changed {
             let autolaunch = app.autolaunch();
@@ -421,10 +487,51 @@ pub fn resume_capture() {
     crate::tray::resume_capture();
 }
 
-/// «إعادة تشغيل رفّ» — the remedy when the capture loop has stopped.
+/// «إعادة تشغيل رفّ» — the remedy when the capture loop has stopped. Asked
+/// from Settings, the new process brings Settings back; from the panel, رفّ
+/// simply returns to the menu bar.
 #[tauri::command]
-pub fn restart_app(app: AppHandle) {
-    app.restart();
+pub fn restart_app(app: AppHandle, window: tauri::WebviewWindow) -> Result<(), String> {
+    crate::relaunch(&app, window.label() == "settings")
+}
+
+/// Why `accel` cannot be رفّ's global shortcut, or `None` when it can.
+///
+/// A global shortcut is taken from every app on the Mac while رفّ runs. With
+/// no modifier but ⇧ it would take a capital letter from all typing; ⌘ with C,
+/// V, X, A, Z, Q or W, the edit and window commands every app relies on. The
+/// recorder's own ⌘V — pressed to paste into a field — became the shortcut
+/// that way (live UI audit, issue 1). The panel refuses the same ones
+/// (`hotkeyRefusal` in logic.js).
+fn hotkey_refusal(accel: &str) -> Option<&'static str> {
+    let parts: Vec<String> = accel
+        .split('+')
+        .map(|part| part.trim().to_ascii_lowercase())
+        .collect();
+    let (key, mods) = parts.split_last()?;
+    let key = key
+        .strip_prefix("key")
+        .filter(|letter| letter.len() == 1)
+        .unwrap_or(key);
+    let has = |names: &[&str]| mods.iter().any(|m| names.contains(&m.as_str()));
+    let command = has(&[
+        "super",
+        "cmd",
+        "command",
+        "meta",
+        "cmdorctrl",
+        "cmdorcontrol",
+        "commandorctrl",
+        "commandorcontrol",
+    ]);
+    let other = has(&["ctrl", "control", "alt", "option"]);
+    if !command && !other {
+        return Some(err::HOTKEY_NEEDS_MODIFIER);
+    }
+    if command && !other && !has(&["shift"]) && ["c", "v", "x", "a", "z", "q", "w"].contains(&key) {
+        return Some(err::HOTKEY_SHARED);
+    }
+    None
 }
 
 fn validate_settings(settings: &Settings) -> Result<(), String> {
@@ -450,27 +557,90 @@ fn validate_settings(settings: &Settings) -> Result<(), String> {
     Ok(())
 }
 
-#[tauri::command]
-pub fn get_image(state: State<AppState>, id: String) -> Option<String> {
-    let store = crate::lock_store(&state.store);
-    image_data_url(&store, &id)
+/// No picture crosses the bridge past this size, for the list or the preview:
+/// a data URL is one string that the main thread evaluates, so a large
+/// screenshot would stall it — and the list keeps what it gets for the whole
+/// session.
+const PREVIEW_IMAGE_MAX_BYTES: u64 = 4 * 1024 * 1024;
+
+/// `full` is the preview's request for the original picture. Off the main
+/// thread (`async`), and the files are read with the store lock released:
+/// reading and encoding a few megabytes would otherwise hold up every capture
+/// and panel refresh, and on the main thread the menu-bar icon and every
+/// window.
+///
+/// `Ok(None)`: nothing to show — no such image, or its file is gone.
+/// `Err(PREVIEW_TOO_LARGE)`: the original is there, too large to send, and has
+/// no thumbnail; the item still pastes.
+#[tauri::command(async)]
+pub fn get_image(
+    state: State<'_, AppState>,
+    id: String,
+    full: Option<bool>,
+) -> Result<Option<String>, String> {
+    let files = ImageFiles::of(&crate::lock_store(&state.store), &id);
+    files.map_or(Ok(None), |files| files.data_url(full.unwrap_or(false)))
 }
 
-/// Prefer the compact preview, but recover from an interrupted/failed
-/// thumbnail write by reading the original image. Older history files can
-/// legitimately contain a stale `thumbFile`, so fallback happens on read
-/// failure rather than only when the field is absent.
-fn image_data_url(store: &Store, id: &str) -> Option<String> {
-    let item = store.find(id)?;
-    let bytes = item
-        .thumb_file
-        .iter()
-        .chain(item.image_file.iter())
-        .find_map(|file| std::fs::read(store.images_dir().join(file)).ok())?;
-    Some(format!(
-        "data:image/png;base64,{}",
-        base64::engine::general_purpose::STANDARD.encode(bytes)
-    ))
+/// Where an image item's picture and thumbnail are, taken under the lock.
+/// Every name goes through `image_path` (005): one outside images/ is `None`.
+struct ImageFiles {
+    original: Option<std::path::PathBuf>,
+    thumbnail: Option<std::path::PathBuf>,
+}
+
+impl ImageFiles {
+    fn of(store: &Store, id: &str) -> Option<Self> {
+        let item = store.find(id)?;
+        let dir = store.images_dir();
+        let path = |file: &Option<String>| {
+            file.as_ref()
+                .and_then(|f| crate::storage::image_path(&dir, f))
+        };
+        Some(Self {
+            original: path(&item.image_file),
+            thumbnail: path(&item.thumb_file),
+        })
+    }
+
+    /// The thumbnail first, the original only while it fits the limit — or,
+    /// with `full`, the other way round. Older history files can legitimately
+    /// name a `thumbFile` that is gone, so the fallback is decided by what
+    /// reads, not by which names are recorded.
+    fn data_url(&self, full: bool) -> Result<Option<String>, String> {
+        let size = |p: &std::path::PathBuf| std::fs::metadata(p).ok().map(|m| m.len());
+        let small = self
+            .original
+            .as_ref()
+            .filter(|p| size(p).is_some_and(|n| n <= PREVIEW_IMAGE_MAX_BYTES));
+        let order = if full {
+            [small, self.thumbnail.as_ref()]
+        } else {
+            [self.thumbnail.as_ref(), small]
+        };
+        if let Some(bytes) = order
+            .into_iter()
+            .flatten()
+            .find_map(|p| std::fs::read(p).ok())
+        {
+            return Ok(Some(format!(
+                "data:image/png;base64,{}",
+                base64::engine::general_purpose::STANDARD.encode(bytes)
+            )));
+        }
+        // Nothing sendable. A picture that is there but too large is not a
+        // missing file: it pastes, and the panel says something else.
+        let too_large = self
+            .original
+            .as_ref()
+            .and_then(size)
+            .is_some_and(|n| n > PREVIEW_IMAGE_MAX_BYTES);
+        if too_large {
+            Err(err::PREVIEW_TOO_LARGE.into())
+        } else {
+            Ok(None)
+        }
+    }
 }
 
 /// Opens the shelf, for the first-run window's "open رفّ now".
@@ -486,6 +656,19 @@ pub fn show_panel(app: AppHandle) {
 #[tauri::command]
 pub fn hide_panel(app: AppHandle) {
     panel::hide(&app);
+}
+
+/// The side of the panel with room for the preview, or none (Figma
+/// «05 · التفاصيل» 45:5325).
+#[tauri::command]
+pub fn panel_preview_side(app: AppHandle) -> Option<panel::PreviewSide> {
+    panel::preview_side(&app)
+}
+
+/// Widens the panel window for the preview on `side`, or narrows it back.
+#[tauri::command]
+pub fn set_panel_preview(app: AppHandle, side: Option<panel::PreviewSide>) {
+    panel::set_preview(&app, side);
 }
 
 #[tauri::command]
@@ -518,7 +701,9 @@ pub fn open_accessibility_settings() {
 pub fn firstrun_done(app: AppHandle, state: State<AppState>) -> Result<(), String> {
     {
         let mut store = crate::lock_store(&state.store);
-        store.mark_first_run_shown_persisted()?;
+        store
+            .mark_first_run_shown_persisted()
+            .map_err(save_failed)?;
     }
     if let Some(w) = app.get_webview_window("firstrun") {
         w.close().map_err(|err| err.to_string())?;
@@ -853,6 +1038,87 @@ mod tests {
     }
 
     #[test]
+    fn an_unpin_says_whether_history_took_the_row_back() {
+        let dir = std::env::temp_dir().join(format!("raff-pin-dto-{}", uuid::Uuid::new_v4()));
+        let mut store = Store::load(dir);
+        for text in [
+            "\u{0623}\u{0642}\u{062f}\u{0645}",
+            "\u{0623}\u{062d}\u{062f}\u{062b}",
+        ] {
+            store.capture(
+                ItemKind::Text,
+                text.into(),
+                None,
+                None,
+                None,
+                None,
+                None,
+                ("Notes".into(), "com.apple.Notes".into()),
+            );
+        }
+        let (newer, older) = (store.history[0].id.clone(), store.history[1].id.clone());
+
+        let pinned = set_pin(&mut store, &newer, true).unwrap();
+        assert_eq!(
+            pinned,
+            PinDto {
+                is_pinned: true,
+                removed: false,
+                reason: None,
+            }
+        );
+        assert_eq!(
+            set_pin(&mut store, &newer, false).unwrap(),
+            PinDto {
+                is_pinned: false,
+                removed: false,
+                reason: None,
+            },
+            "newer than the history it returns to: taken back"
+        );
+
+        set_pin(&mut store, &older, true).unwrap();
+        store.find_mut(&older).unwrap().created_at = 1;
+        assert_eq!(
+            set_pin(&mut store, &older, false).unwrap(),
+            PinDto {
+                is_pinned: false,
+                removed: true,
+                reason: Some(crate::storage::UnpinRemoval::OlderThanHistory),
+            },
+            "older than all of it: gone"
+        );
+        assert_eq!(
+            serde_json::to_value(PinDto {
+                is_pinned: false,
+                removed: false,
+                reason: None,
+            })
+            .unwrap(),
+            serde_json::json!({ "isPinned": false, "removed": false }),
+            "no reason on the wire when there is none"
+        );
+        for (reason, word) in [
+            (crate::storage::UnpinRemoval::Retention, "retention"),
+            (
+                crate::storage::UnpinRemoval::OlderThanHistory,
+                "olderThanHistory",
+            ),
+            (crate::storage::UnpinRemoval::Limit, "limit"),
+        ] {
+            assert_eq!(
+                serde_json::to_value(PinDto {
+                    is_pinned: false,
+                    removed: true,
+                    reason: Some(reason),
+                })
+                .unwrap(),
+                serde_json::json!({ "isPinned": false, "removed": true, "reason": word })
+            );
+        }
+    }
+
+    #[test]
     fn search_folds_spelling_the_same_way_the_panel_does() {
         let mut store = Store::load(
             std::env::temp_dir().join(format!("raff-search-test-{}", uuid::Uuid::new_v4())),
@@ -874,6 +1140,17 @@ mod tests {
             "a query written with bare alef still finds it"
         );
         assert!(ids_matching(&store, "\u{0645}\u{062f}\u{0631}\u{0633}\u{0647}").is_empty());
+    }
+
+    fn image_data_url(store: &Store, id: &str, full: bool) -> Result<Option<String>, String> {
+        ImageFiles::of(store, id).map_or(Ok(None), |files| files.data_url(full))
+    }
+
+    fn data_url_of(bytes: &[u8]) -> Result<Option<String>, String> {
+        Ok(Some(format!(
+            "data:image/png;base64,{}",
+            base64::engine::general_purpose::STANDARD.encode(bytes)
+        )))
     }
 
     fn image_store(original: &[u8], thumb: Option<(&str, &[u8])>) -> (Store, String) {
@@ -900,21 +1177,70 @@ mod tests {
     #[test]
     fn get_image_prefers_the_persisted_thumbnail() {
         let (store, id) = image_store(b"original", Some(("preview.thumb.png", b"thumbnail")));
-        let expected = base64::engine::general_purpose::STANDARD.encode(b"thumbnail");
         assert_eq!(
-            image_data_url(&store, &id),
-            Some(format!("data:image/png;base64,{expected}"))
+            image_data_url(&store, &id, false),
+            data_url_of(b"thumbnail")
         );
+    }
+
+    // The preview beside the panel is 308pt wide: it asks for the original,
+    // which beats a 128×80 thumbnail — up to a size a data URL can carry.
+    #[test]
+    fn the_preview_gets_the_original_picture_up_to_its_limit() {
+        let (store, id) = image_store(b"original", Some(("preview.thumb.png", b"thumbnail")));
+        assert_eq!(image_data_url(&store, &id, true), data_url_of(b"original"));
+
+        let huge = vec![0u8; PREVIEW_IMAGE_MAX_BYTES as usize + 1];
+        let (store, id) = image_store(&huge, Some(("preview.thumb.png", b"thumbnail")));
+        assert_eq!(
+            image_data_url(&store, &id, true),
+            data_url_of(b"thumbnail"),
+            "too large for the bridge: the thumbnail instead"
+        );
+
+        let (store, id) = image_store(&huge, None);
+        assert_eq!(
+            image_data_url(&store, &id, true),
+            Err(err::PREVIEW_TOO_LARGE.into()),
+            "and with no thumbnail, no picture rather than the oversized original"
+        );
+    }
+
+    /// F-THUMB-FALLBACK (audit 2026-10-21): the list's own request, with the
+    /// recorded thumbnail gone, used to send the original whatever its size —
+    /// the 64 MiB case was an 89-million-character string across the bridge.
+    /// Now nothing is sent, and the answer says why: the picture is there, it
+    /// is the preview that is not — the file is neither missing nor touched.
+    #[test]
+    fn a_card_never_gets_an_original_past_the_limit() {
+        let huge = vec![0u8; PREVIEW_IMAGE_MAX_BYTES as usize + 1];
+        let (store, id) = image_store(&huge, None);
+        assert_eq!(
+            image_data_url(&store, &id, false),
+            Err(err::PREVIEW_TOO_LARGE.into())
+        );
+        let original = store.images_dir().join("original.png");
+        assert_eq!(std::fs::read(original).unwrap().len(), huge.len());
+
+        let at_limit = vec![0u8; PREVIEW_IMAGE_MAX_BYTES as usize];
+        let (store, id) = image_store(&at_limit, None);
+        assert_eq!(image_data_url(&store, &id, false), data_url_of(&at_limit));
     }
 
     #[test]
     fn get_image_falls_back_when_the_recorded_thumbnail_is_missing() {
         let (store, id) = image_store(b"original", None);
-        let expected = base64::engine::general_purpose::STANDARD.encode(b"original");
-        assert_eq!(
-            image_data_url(&store, &id),
-            Some(format!("data:image/png;base64,{expected}"))
-        );
+        assert_eq!(image_data_url(&store, &id, false), data_url_of(b"original"));
+    }
+
+    /// A missing file is told apart from a picture too large to send.
+    #[test]
+    fn a_missing_picture_is_nothing_not_too_large() {
+        let (store, id) = image_store(b"original", None);
+        std::fs::remove_file(store.images_dir().join("original.png")).unwrap();
+        assert_eq!(image_data_url(&store, &id, false), Ok(None));
+        assert_eq!(image_data_url(&store, &id, true), Ok(None));
+        assert_eq!(image_data_url(&store, "no-such-id", false), Ok(None));
     }
 }
 
@@ -925,6 +1251,44 @@ mod audit_tests {
 
     fn valid() -> Settings {
         Settings::default()
+    }
+
+    #[test]
+    fn a_global_shortcut_needs_more_than_shift_and_leaves_every_app_its_edits() {
+        for accel in ["shift+a", "shift+space", "shift+5", "Shift+F6", "a"] {
+            assert_eq!(
+                hotkey_refusal(accel),
+                Some(err::HOTKEY_NEEDS_MODIFIER),
+                "{accel}"
+            );
+        }
+        for accel in [
+            "super+c",
+            "super+v",
+            "super+x",
+            "super+a",
+            "super+z",
+            "super+q",
+            "super+w",
+            "Cmd+V",
+            "command+KeyV",
+            "CmdOrCtrl+Q",
+            "CommandOrCtrl+V",
+            "CmdOrControl+X",
+        ] {
+            assert_eq!(hotkey_refusal(accel), Some(err::HOTKEY_SHARED), "{accel}");
+        }
+        for accel in [
+            "shift+super+v",
+            "alt+super+v",
+            "ctrl+v",
+            "alt+5",
+            "super+k",
+            "super+F6",
+            "ctrl+shift+a",
+        ] {
+            assert_eq!(hotkey_refusal(accel), None, "{accel}");
+        }
     }
 
     #[test]

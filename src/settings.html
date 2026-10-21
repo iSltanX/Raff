@@ -5,6 +5,7 @@
   <title>إعدادات رفّ</title>
   <script src="theme.js"></script>
   <link rel="stylesheet" href="tokens.css" />
+  <link rel="stylesheet" href="controls.css" />
   <link rel="stylesheet" href="settings.css" />
 </head>
 <body>
@@ -142,6 +143,15 @@
                 </div>
               </div>
             </div>
+            <!-- A hotkey saved before its kind was refused (ت٢٢، ت٣١). -->
+            <div class="callout hotkey-warning" id="hotkey-warning" data-tone="warning" role="status" hidden>
+              <span class="callout-icon" id="hotkey-warning-icon" aria-hidden="true"></span>
+              <div class="callout-body">
+                <span class="callout-title">اختصارك المحفوظ لم يعد مقبولًا</span>
+                <p class="callout-text" id="hotkey-warning-text" dir="auto"></p>
+                <button type="button" class="push-btn" id="hotkey-warning-action">تغيير الاختصار</button>
+              </div>
+            </div>
           </div>
           <div class="settings-group">
             <h3 class="group-title">المظهر</h3>
@@ -222,7 +232,7 @@
                 </div>
                 <div class="row-label">
                   <span class="label-title" id="history-limit-label" dir="auto">عدد العناصر المحفوظة</span>
-                  <span class="label-sub" dir="auto">تُحذف الأقدم تلقائيًا، وتبقى المثبّتة.</span>
+                  <span class="label-sub" dir="auto">عند امتلاء السجل بنسخ أو بإلغاء تثبيت، يُحذف أقدم عنصر غير مثبّت.</span>
                 </div>
               </div>
               <!-- The count answers "how many"; this answers "how long what I
@@ -238,7 +248,7 @@
                 </div>
                 <div class="row-label">
                   <span class="label-title" id="retention-label" dir="auto">مدة الاحتفاظ</span>
-                  <span class="label-sub" dir="auto">يُحذف غير المثبّت بعد هذه المدة، ولو لم تفتح رفّ.</span>
+                  <span class="label-sub" dir="auto">تُحسب من وقت النسخ، ثم يُحذف غير المثبّت ولو لم تفتح رفّ.</span>
                 </div>
               </div>
               <div class="row">
@@ -532,7 +542,6 @@
         aria-live="polite"
         aria-atomic="true"
         dir="auto"
-        hidden
       ></span>
       <button type="button" class="push-btn is-preferred" id="done-btn">تم</button>
     </footer>
@@ -546,7 +555,7 @@
       aria-labelledby="confirm-title"
       aria-describedby="confirm-text"
     >
-      <span class="confirm-icon" id="confirm-icon" aria-hidden="true"></span>
+      <img class="confirm-icon" id="confirm-icon" src="assets/app-icon.png" width="48" height="48" alt="" aria-hidden="true" />
       <div class="confirm-title" id="confirm-title">مسح سجل الحافظة؟</div>
       <p class="confirm-text" id="confirm-text">
         ستُحذف كل العناصر غير المثبّتة نهائيًا من هذا الجهاز، وتبقى المثبّتة.

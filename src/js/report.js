@@ -108,14 +108,31 @@ for (const button of Object.values(buttons)) button.dataset.baseClass = button.c
  * in reading order with the primary last, so it ends the row (the left edge
  * in RTL) and Tab meets the buttons in the order the eye does.
  */
-function showButtons(visible, { primary = null } = {}) {
+function showButtons(visible, { primary = null, secondary = null } = {}) {
   const lead = primary ?? visible.find((name) => buttons[name].dataset.baseClass.includes('btn-primary'));
   for (const [name, button] of Object.entries(buttons)) {
     button.hidden = !visible.includes(name);
-    if (primary === null) button.className = button.dataset.baseClass;
+    if (name === secondary) button.className = 'btn';
+    else if (primary === null) button.className = button.dataset.baseClass;
     else button.className = name === primary ? 'btn btn-primary' : button.dataset.baseClass.replace('btn-primary', '').trim();
   }
-  for (const name of [...visible.filter((n) => n !== lead), lead]) footer.append(buttons[name]);
+  const order = [...visible.filter((n) => n !== lead && n !== secondary), ...(secondary ? [secondary] : []), ...(lead ? [lead] : [])];
+  for (const name of order) footer.append(buttons[name]);
+}
+
+/**
+ * The actions after a send that did not land, ordered by what can be done
+ * (ت٣٠): one leads at the end of the row, at most one beside it, and
+ * «إغلاق» quiet at its start. Copying the report is offered inside the box,
+ * unless copying is itself the way forward. «رجوع للتعديل» keeps everything
+ * the user wrote and chose.
+ */
+function showResultActions(lead, second = null) {
+  const visible = ['cancel', second, lead].filter(Boolean);
+  showButtons(visible, { primary: lead, secondary: second });
+  buttons.cancel.textContent = 'إغلاق';
+  buttons.back.textContent = 'رجوع للتعديل';
+  el('copy-inline').hidden = visible.includes('copy');
 }
 
 // The line stays rendered: a live region unhidden and filled in the same
@@ -385,6 +402,8 @@ function startRateLimitCountdown(seconds) {
       clearInterval(retryTimer);
       retryBlockedUntil = 0;
       buttons.retry.disabled = false;
+      // The wait is over: sending again leads, editing stays beside it.
+      if (!views.result.hidden) showResultActions('retry', 'back');
       text.textContent = 'يمكنك الإرسال الآن.';
       return;
     }
@@ -421,9 +440,8 @@ function renderOutcome(outcome) {
       `${detail} إعادة الإرسال لن تغيّر النتيجة.`,
       withLatin('يمكنك نسخ البلاغ ولصقه في مسألة على ', 'github.com/iSltanX/Raff', ' — ما تكتبه هناك علني.')
     );
-    showButtons(['cancel', 'copy', 'back'], { primary: fixable ? 'back' : 'copy' });
-    buttons.back.textContent = 'رجوع للتعديل';
-    buttons.cancel.textContent = 'إغلاق';
+    if (fixable) showResultActions('back');
+    else showResultActions('copy', 'back');
     focusResult();
     return;
   }
@@ -431,16 +449,17 @@ function renderOutcome(outcome) {
     showProblem('warning', CLOCK, 'بلغتَ حد الإرسال مؤقتًا', '', [
       'الحد مشترك بين تطبيقات الصانع للحماية من الإغراق. إغلاق النافذة يتجاهل البلاغ؛ انسخه إن أردت الاحتفاظ به.',
     ]);
-    showButtons(['cancel', 'copy', 'retry'], { primary: 'retry' });
-    buttons.cancel.textContent = 'إغلاق';
+    // Nothing to send until the wait is over: editing is what can be done.
+    showResultActions(null, 'back');
     startRateLimitCountdown(outcome.retryAfterS);
     focusResult();
     return;
   }
   const why = { timeout: 'انتهت المهلة قبل أن يرد الخادم.', network: 'لا اتصال بالخادم.', server: 'تعذّر على الخادم استلامه الآن.' }[outcome.reason] ?? '';
-  showProblem('danger', ALERT, 'تعذّر الإرسال', `${why} أعد المحاولة؛ إن كان البلاغ قد وصل فلن يتكرر.`);
-  showButtons(['cancel', 'copy', 'retry'], { primary: 'retry' });
-  buttons.cancel.textContent = 'إغلاق';
+  showProblem('danger', ALERT, 'تعذّر الإرسال', `${why} أعد المحاولة؛ إن كان البلاغ قد وصل فلن يتكرر.`, [
+    'وما تعدّله ثم ترسله يُرسَل بلاغًا جديدًا.',
+  ]);
+  showResultActions('retry', 'back');
   focusResult();
 }
 
@@ -450,7 +469,7 @@ async function send() {
     renderOutcome(await api.reportSend());
   } catch (err) {
     showProblem('danger', ALERT, 'تعذّر الإرسال', message(err));
-    showButtons(['cancel', 'copy', 'back'], { primary: 'back' });
+    showResultActions('back');
     focusResult();
   } finally {
     setBusy(false);
@@ -470,14 +489,17 @@ async function send() {
 buttons.send.addEventListener('click', () => void send());
 buttons.retry.addEventListener('click', () => void send());
 
-buttons.copy.addEventListener('click', async () => {
+async function copyReport() {
   try {
     await api.reportCopy();
     setStatus('نُسخ البلاغ إلى حافظتك (الصورة بنوعها وحجمها فقط).');
   } catch (err) {
     setStatus(message(err), { error: true });
   }
-});
+}
+
+buttons.copy.addEventListener('click', () => void copyReport());
+el('copy-inline').addEventListener('click', () => void copyReport());
 
 el('copy-number').addEventListener('click', async (e) => {
   const button = e.currentTarget;
@@ -495,6 +517,8 @@ el('copy-number').addEventListener('click', async (e) => {
 
 buttons.back.addEventListener('click', () => {
   clearInterval(retryTimer);
+  retryBlockedUntil = 0;
+  el('copy-inline').hidden = true;
   showView('compose');
   showButtons(['cancel', 'next']);
   buttons.back.textContent = 'رجوع';

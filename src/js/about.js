@@ -44,8 +44,9 @@ window.addEventListener('keydown', (e) => {
 
 async function loadVersion() {
   try {
-    const state = await api.getState();
-    const version = state?.version;
+    // The settings payload carries the version; the state would bring every
+    // clip along with it.
+    const { version } = (await api.getSettings()) ?? {};
     if (!version) return; // no version, no line — never a fake number
     versionEl.textContent = `الإصدار \u2066${version}\u2069`;
   } catch {
@@ -72,8 +73,12 @@ el('report-btn').addEventListener('click', () => {
 
 // The line stays rendered (its room is reserved): a live region unhidden and
 // filled in the same tick is often missed by VoiceOver.
-function setStatus(text) {
+// Its tone repeats what the words say (Figma 45:6180): success, danger, or
+// none while checking.
+function setStatus(text, tone = '') {
   statusEl.textContent = text;
+  if (tone) statusEl.dataset.tone = tone;
+  else delete statusEl.dataset.tone;
   shellEl.classList.toggle('has-status', Boolean(text));
 }
 
@@ -87,15 +92,15 @@ updateBtn.addEventListener('click', async () => {
   try {
     const result = await api.checkForUpdate();
     if (result?.status === 'available' && result.version) {
-      setStatus(`يتوفّر إصدار جديد: ${arabicDigits(result.version)}`);
+      setStatus(`يتوفّر إصدار جديد: ${arabicDigits(result.version)}`, 'accent');
       api.openUpdates?.().catch(() => {});
     } else if (result?.status === 'upToDate') {
-      setStatus(UP_TO_DATE);
+      setStatus(UP_TO_DATE, 'success');
     } else {
-      setStatus(CHECK_FAILED);
+      setStatus(CHECK_FAILED, 'danger');
     }
   } catch {
-    setStatus(CHECK_FAILED);
+    setStatus(CHECK_FAILED, 'danger');
   } finally {
     checking = false;
     updateBtn.disabled = false;

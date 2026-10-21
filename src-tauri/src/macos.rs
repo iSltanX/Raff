@@ -11,7 +11,7 @@ use objc2::rc::Retained;
 use objc2::runtime::AnyObject;
 use objc2::{define_class, msg_send, sel, AnyThread};
 use objc2_app_kit::{
-    NSApplicationActivationOptions, NSModalResponseOK, NSOpenPanel, NSPasteboard,
+    NSApplication, NSApplicationActivationOptions, NSModalResponseOK, NSOpenPanel, NSPasteboard,
     NSRunningApplication, NSWorkspace, NSWorkspaceApplicationKey,
     NSWorkspaceDidActivateApplicationNotification,
 };
@@ -97,12 +97,146 @@ pub struct FrontApp {
     pub bundle_id: String,
 }
 
+/// Whether this process may touch the system clipboard at all (ت٤٨).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Clipboard {
+    Real,
+    /// Never read, never written, no ⌘V sent: a test run of رفّ.
+    Inert,
+}
+
+/// Decided from what the process was launched as, never from its settings
+/// or anything after launch (ت٤٨). A test run of رفّ — isolated beside the
+/// installed one, or a probe build under its own `com.raff.app.*` identity —
+/// has an inert clipboard: the installed رفّ already records the real one,
+/// and a test must not read, overwrite or paste from the user's. The
+/// identity holds however the probe is opened (Finder, `open`, a relaunch),
+/// where an environment variable would not.
+pub fn clipboard_for(isolated: bool, bundle_id: Option<&str>) -> Clipboard {
+    let probe = bundle_id.is_some_and(|id| id.starts_with("com.raff.app."));
+    if isolated || probe {
+        Clipboard::Inert
+    } else {
+        Clipboard::Real
+    }
+}
+
+/// Whether this is a test run of رفّ, with no clipboard (ت٤٨).
+pub fn clipboard_inert() -> bool {
+    clipboard() == Clipboard::Inert
+}
+
+/// Decides, once and before anything can reach the pasteboard, whether this
+/// process may touch the clipboard. `main` calls it first; any earlier reach
+/// would decide it the same way.
+pub fn decide_clipboard() -> Clipboard {
+    clipboard()
+}
+
+fn clipboard() -> Clipboard {
+    #[cfg(test)]
+    if let Some(policy) = test_clipboard::policy() {
+        return policy;
+    }
+    static DECIDED: OnceLock<Clipboard> = OnceLock::new();
+    *DECIDED.get_or_init(|| {
+        let bundle = objc2_foundation::NSBundle::mainBundle()
+            .bundleIdentifier()
+            .map(|id| id.to_string());
+        clipboard_for(crate::dev_isolated(), bundle.as_deref())
+    })
+}
+
+/// The one way to the system pasteboard, and the gate on it.
+fn general_pasteboard() -> Option<Retained<NSPasteboard>> {
+    if clipboard() == Clipboard::Inert {
+        return None;
+    }
+    system_pasteboard()
+}
+
+#[cfg(not(test))]
+fn system_pasteboard() -> Option<Retained<NSPasteboard>> {
+    Some(NSPasteboard::generalPasteboard())
+}
+
+/// Tests can only ever reach a private pasteboard the test made, never the
+/// user's clipboard.
+#[cfg(test)]
+fn system_pasteboard() -> Option<Retained<NSPasteboard>> {
+    test_clipboard::pasteboard()
+}
+
+/// Tests only: a private pasteboard per test, a count of every time the
+/// code reached for a pasteboard, and of every ⌘V it would have sent.
+#[cfg(test)]
+pub(crate) mod test_clipboard {
+    use super::Clipboard;
+    use objc2::rc::Retained;
+    use objc2_app_kit::NSPasteboard;
+    use std::cell::{Cell, RefCell};
+
+    thread_local! {
+        static AFTER_WRITE: RefCell<Option<Box<dyn FnOnce()>>> = const { RefCell::new(None) };
+        static POLICY: Cell<Option<Clipboard>> = const { Cell::new(None) };
+        static PASTEBOARD: RefCell<Option<Retained<NSPasteboard>>> = const { RefCell::new(None) };
+        static TOUCHES: Cell<usize> = const { Cell::new(0) };
+        static CMD_V: Cell<usize> = const { Cell::new(0) };
+    }
+
+    pub(crate) fn policy() -> Option<Clipboard> {
+        POLICY.get()
+    }
+
+    pub(crate) fn pasteboard() -> Option<Retained<NSPasteboard>> {
+        TOUCHES.set(TOUCHES.get() + 1);
+        PASTEBOARD.with_borrow(Clone::clone)
+    }
+
+    /// Runs `f` inside the next `write_clip`, after its representations are
+    /// set and before it returns: another app writing at that moment.
+    pub(crate) fn after_write(f: impl FnOnce() + 'static) {
+        AFTER_WRITE.set(Some(Box::new(f)));
+    }
+
+    pub(crate) fn run_after_write() {
+        if let Some(f) = AFTER_WRITE.take() {
+            f();
+        }
+    }
+
+    pub(crate) fn note_cmd_v() {
+        CMD_V.set(CMD_V.get() + 1);
+    }
+
+    /// Runs `body` as a process under `policy`, with a private pasteboard
+    /// made for it and released after. Returns what it touched: pasteboard
+    /// reaches and ⌘V presses.
+    pub(crate) fn run(policy: Clipboard, body: impl FnOnce()) -> (usize, usize) {
+        let private = NSPasteboard::pasteboardWithUniqueName();
+        POLICY.set(Some(policy));
+        PASTEBOARD.set(Some(private.clone()));
+        TOUCHES.set(0);
+        CMD_V.set(0);
+        body();
+        let touched = (TOUCHES.get(), CMD_V.get());
+        POLICY.set(None);
+        PASTEBOARD.set(None);
+        // SAFETY: `releaseGlobally` takes no arguments and returns nothing; the
+        // binding crate does not generate it.
+        let _: () = unsafe { objc2::msg_send![&*private, releaseGlobally] };
+        touched
+    }
+}
+
 pub fn change_count() -> isize {
-    NSPasteboard::generalPasteboard().changeCount()
+    general_pasteboard().map_or(0, |pb| pb.changeCount())
 }
 
 pub fn has_concealed_type() -> bool {
-    let pb = NSPasteboard::generalPasteboard();
+    let Some(pb) = general_pasteboard() else {
+        return false;
+    };
     let Some(types) = pb.types() else {
         return false;
     };
@@ -112,7 +246,9 @@ pub fn has_concealed_type() -> bool {
 }
 
 pub fn read_clip() -> RawClip {
-    let pb = NSPasteboard::generalPasteboard();
+    let Some(pb) = general_pasteboard() else {
+        return RawClip::default();
+    };
     // Every representation is measured on the pasteboard's own object and only
     // then copied, so an oversized payload never enters this process.
     let capped_string_for = |t: &str, max: usize| {
@@ -153,16 +289,21 @@ pub fn read_clip() -> RawClip {
 }
 
 /// Writes the given representations to the general pasteboard and returns the
-/// new change count only when at least one requested representation was
-/// accepted (so callers never report copy/paste success for a rejected write).
+/// change count only when at least one requested representation was accepted
+/// (so callers never report copy/paste success for a rejected write).
+///
+/// The count is the one `clearContents` produced, not one read afterwards:
+/// setting representations does not move it, so a count read after the last
+/// one would name another app's write landing in between as رفّ's, and that
+/// copy would never be captured.
 pub fn write_clip(
     text: Option<&str>,
     html: Option<&str>,
     rtf: Option<&[u8]>,
     png: Option<&[u8]>,
 ) -> Option<isize> {
-    let pb = NSPasteboard::generalPasteboard();
-    pb.clearContents();
+    let pb = general_pasteboard()?;
+    let cleared = pb.clearContents();
     let mut accepted = false;
     if let Some(t) = text {
         accepted |= pb.setString_forType(&NSString::from_str(t), &NSString::from_str(TYPE_TEXT));
@@ -176,7 +317,9 @@ pub fn write_clip(
     if let Some(p) = png {
         accepted |= pb.setData_forType(Some(&NSData::with_bytes(p)), &NSString::from_str(TYPE_PNG));
     }
-    accepted.then(|| pb.changeCount())
+    #[cfg(test)]
+    test_clipboard::run_after_write();
+    accepted.then_some(cleared)
 }
 
 /// «اختر صورة…» in the report window: a native open panel limited to the
@@ -215,7 +358,9 @@ pub fn read_image_for_report() -> PastedImage {
     if has_concealed_type() {
         return PastedImage::Nothing;
     }
-    let pb = NSPasteboard::generalPasteboard();
+    let Some(pb) = general_pasteboard() else {
+        return PastedImage::Nothing;
+    };
     let is_file = pb
         .types()
         .is_some_and(|types| types.iter().any(|t| t.to_string() == TYPE_FILE_URL));
@@ -278,7 +423,64 @@ pub fn note_activation(app: FrontApp) {
     // in force, and dropping it would lose the answer for older windows.
     let keep_from = log.iter().rposition(|a| a.at <= cutoff).unwrap_or(0);
     log.drain(..keep_from);
+    remember_front(app.pid, is_regular_app(app.pid));
     log.push(Activation { at: now, app });
+}
+
+/// The last app other than رفّ to take the front: where the user was (ت٤٧).
+/// Kept apart from the activation log, which forgets after ten seconds.
+static LAST_OTHER_APP: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(0);
+
+/// Whether an app taking the front is one to give it back to later: not رفّ
+/// itself, and a regular app — an agent with no windows would leave the
+/// keyboard as dead as before.
+fn worth_returning_to(pid: i32, own: i32, regular: bool) -> bool {
+    pid > 0 && pid != own && regular
+}
+
+fn remember_front(pid: i32, regular: bool) {
+    if worth_returning_to(pid, std::process::id() as i32, regular) {
+        LAST_OTHER_APP.store(pid, std::sync::atomic::Ordering::Release);
+    }
+}
+
+fn is_regular_app(pid: i32) -> bool {
+    use objc2_app_kit::NSApplicationActivationPolicy;
+    pid > 0
+        && NSRunningApplication::runningApplicationWithProcessIdentifier(pid).is_some_and(|app| {
+            !app.isTerminated() && app.activationPolicy() == NSApplicationActivationPolicy::Regular
+        })
+}
+
+pub fn last_other_app() -> Option<i32> {
+    let pid = LAST_OTHER_APP.load(std::sync::atomic::Ordering::Acquire);
+    (pid > 0).then_some(pid)
+}
+
+/// Whether رفّ is the active app, and whether one of its windows has the
+/// key. Main thread; elsewhere it answers "nothing to do".
+pub fn app_focus() -> (bool, bool) {
+    let Some(mtm) = MainThreadMarker::new() else {
+        return (false, true);
+    };
+    let app = NSApplication::sharedApplication(mtm);
+    // SAFETY: `keyWindow` takes no arguments and returns an NSWindow or nil.
+    let key: *mut AnyObject = unsafe { msg_send![&*app, keyWindow] };
+    (app.isActive(), !key.is_null())
+}
+
+/// Gives the front back to the app the user was in before رفّ took it; when
+/// that app is gone, رفّ just steps aside and macOS picks the next one.
+/// Main thread.
+pub fn hand_focus_back() {
+    match last_other_app().filter(|pid| is_regular_app(*pid)) {
+        Some(pid) => activate_app(pid),
+        None => {
+            if let Some(mtm) = MainThreadMarker::new() {
+                NSApplication::sharedApplication(mtm).deactivate();
+            }
+        }
+    }
 }
 
 /// Snapshot of the activation log, oldest first.
@@ -443,6 +645,21 @@ pub fn activate_app(pid: i32) {
 /// Synthesizes ⌘V in the frontmost app. Requires the Accessibility permission;
 /// without it the events are silently dropped by macOS.
 pub fn send_cmd_v() -> bool {
+    if clipboard() == Clipboard::Inert {
+        return false;
+    }
+    post_cmd_v()
+}
+
+/// Tests never press keys in another app: the press is only counted.
+#[cfg(test)]
+fn post_cmd_v() -> bool {
+    test_clipboard::note_cmd_v();
+    true
+}
+
+#[cfg(not(test))]
+fn post_cmd_v() -> bool {
     use core_graphics::event::{CGEvent, CGEventFlags, CGEventTapLocation};
     use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
 
@@ -479,25 +696,39 @@ pub fn app_bundle_path() -> Option<std::path::PathBuf> {
 /// still holds the instance socket would make the new one forward its argv
 /// and exit (i.e. no relaunch at all). `open` without `-n` never creates a
 /// second process: if the cap is ever hit with the old instance alive, it
-/// merely activates it — no duplicate tray, no relaunch loop. `--settings`
-/// is forwarded so the fresh instance reopens the settings surface.
-pub fn spawn_relauncher(bundle: &std::path::Path, pid: u32) -> Result<(), String> {
+/// merely activates it — no duplicate tray, no relaunch loop. With
+/// `reopen_settings`, `--settings` is forwarded so the fresh instance reopens
+/// the settings surface.
+pub fn spawn_relauncher(
+    bundle: &std::path::Path,
+    pid: u32,
+    reopen_settings: bool,
+) -> Result<(), String> {
     use std::process::{Command, Stdio};
-    // The bundle path travels as "$0" (never interpolated into the script).
-    let script = format!(
-        "i=0; while kill -0 {pid} 2>/dev/null && [ $i -lt 200 ]; do sleep 0.1; i=$((i+1)); done; \
-         exec /usr/bin/open \"$0\" --args --settings"
-    );
     Command::new("/bin/sh")
         .arg("-c")
-        .arg(script)
+        .arg(relauncher_script(pid, reopen_settings))
         .arg(bundle)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()
         .map(|_| ())
-        .map_err(|err| format!("تعذّر تشغيل Raff بعد التحديث: {err}"))
+        .map_err(|err| format!("تعذّر جدولة إعادة تشغيل Raff: {err}"))
+}
+
+/// The relauncher's shell script. The bundle path travels as "$0", never
+/// interpolated into the script; only the pid and fixed text are.
+fn relauncher_script(pid: u32, reopen_settings: bool) -> String {
+    let open = if reopen_settings {
+        "exec /usr/bin/open \"$0\" --args --settings"
+    } else {
+        "exec /usr/bin/open \"$0\""
+    };
+    format!(
+        "i=0; while kill -0 {pid} 2>/dev/null && [ $i -lt 200 ]; do sleep 0.1; i=$((i+1)); done; \
+         {open}"
+    )
 }
 
 /// The official Raff repository. Hardcoded on purpose: the About window's link
@@ -567,6 +798,161 @@ pub fn ax_prompt() -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ت٤٨ ─────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn a_test_run_of_raff_never_has_the_real_clipboard() {
+        // (RAFF_DEV_ISOLATED=1, bundle identifier) → clipboard
+        let cases = [
+            (false, Some("com.raff.app"), Clipboard::Real),
+            (false, None, Clipboard::Real), // `tauri dev`: no bundle
+            (true, Some("com.raff.app"), Clipboard::Inert),
+            (true, None, Clipboard::Inert),
+            (false, Some("com.raff.app.designprobe"), Clipboard::Inert),
+            (false, Some("com.raff.app.restartprobe"), Clipboard::Inert),
+            (false, Some("com.raff.application"), Clipboard::Real),
+        ];
+        for (isolated, bundle, expected) in cases {
+            assert_eq!(
+                clipboard_for(isolated, bundle),
+                expected,
+                "isolated {isolated}, bundle {bundle:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn an_inert_clipboard_is_never_reached_from_the_first_call_on() {
+        let mut results = None;
+        let touched = test_clipboard::run(Clipboard::Inert, || {
+            // In the order a launch meets them: the monitor's first count,
+            // then a poll, then a paste, a copy and a report paste.
+            results = Some((
+                change_count(),
+                has_concealed_type(),
+                read_clip().text,
+                write_clip(Some("x"), None, None, None),
+                matches!(read_image_for_report(), PastedImage::Nothing),
+                send_cmd_v(),
+            ));
+        });
+        assert_eq!(touched, (0, 0), "no pasteboard reached, no ⌘V sent");
+        assert_eq!(
+            results,
+            Some((0, false, None, None, true, false)),
+            "and every answer is the empty one"
+        );
+    }
+
+    #[test]
+    fn the_counts_see_every_reach_and_tests_only_reach_a_private_pasteboard() {
+        // The same calls under Real: each reaches a pasteboard — the private
+        // one `run` made — so the zero above is not the counter missing them.
+        let mut read_back = None;
+        let touched = test_clipboard::run(Clipboard::Real, || {
+            assert!(write_clip(Some("private text"), None, None, None).is_some());
+            read_back = read_clip().text;
+            let _ = send_cmd_v();
+        });
+        assert_eq!(read_back.as_deref(), Some("private text"));
+        assert!(touched.0 >= 2 && touched.1 == 1, "{touched:?}");
+    }
+
+    /// F-OWNWRITE: the count a write reports is the one its own clear
+    /// produced. Another app writing after that clear is a change of its own,
+    /// which the capture loop must see as the user's — a count read after the
+    /// last representation would have named it رفّ's and hidden it.
+    #[test]
+    fn a_write_reports_the_count_its_own_clear_produced() {
+        test_clipboard::run(Clipboard::Real, || {
+            let ours =
+                write_clip(Some("رفّ"), Some("<b>رفّ</b>"), Some(b"{\\rtf1 x}"), None).unwrap();
+            assert_eq!(
+                change_count(),
+                ours,
+                "setting representations does not move the count"
+            );
+
+            test_clipboard::after_write(|| {
+                write_clip(Some("تطبيق آخر"), None, None, None).unwrap();
+            });
+            let ours = write_clip(Some("رفّ"), None, None, None).unwrap();
+            assert!(
+                change_count() > ours,
+                "the other app's write is not taken for رفّ's"
+            );
+            assert_eq!(read_clip().text.as_deref(), Some("تطبيق آخر"));
+        });
+    }
+
+    #[test]
+    fn nothing_reaches_the_system_pasteboard_but_through_the_gate() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+        for entry in std::fs::read_dir(dir).unwrap().flatten() {
+            let path = entry.path();
+            let text = std::fs::read_to_string(&path).unwrap();
+            // Built here, so this test's own text is not counted.
+            let needle = ["NSPasteboard::", "generalPasteboard()"].concat();
+            let reaches = text.matches(needle.as_str()).count();
+            let expected = usize::from(path.ends_with("macos.rs"));
+            assert_eq!(reaches, expected, "{}", path.display());
+            let named = ["pasteboard", "WithName"].concat();
+            assert!(
+                !text.contains(&named),
+                "{}: no other pasteboard by name",
+                path.display()
+            );
+        }
+        // And the one function that hands it out has one caller: the gate.
+        let macos = include_str!("macos.rs");
+        let call = ["system_", "pasteboard()"].concat();
+        let calls = macos.matches(call.as_str()).count();
+        let definitions = macos.matches(format!("fn {call}").as_str()).count();
+        assert_eq!((definitions, calls - definitions), (2, 1));
+    }
+
+    #[test]
+    fn the_clipboard_is_decided_before_anything_starts() {
+        let main = include_str!("main.rs");
+        let body = &main[main.find("fn main()").unwrap()..];
+        let decided = body
+            .find("macos::decide_clipboard()")
+            .expect("main decides it");
+        for later in ["tauri::Builder::default()", "monitor::start("] {
+            if let Some(at) = body.find(later) {
+                assert!(decided < at, "decided before {later}");
+            }
+        }
+    }
+
+    #[test]
+    fn the_app_the_user_came_from_is_remembered_past_raff_itself() {
+        let own = std::process::id() as i32;
+        assert!(worth_returning_to(4242, own, true));
+        assert!(!worth_returning_to(own, own, true), "not رفّ itself");
+        assert!(
+            !worth_returning_to(0, own, true),
+            "nor a payload with no process"
+        );
+        assert!(
+            !worth_returning_to(4243, own, false),
+            "nor an agent with no windows"
+        );
+
+        remember_front(4242, true);
+        remember_front(own, true);
+        remember_front(4243, false);
+        assert_eq!(last_other_app(), Some(4242));
+    }
+
+    #[test]
+    fn the_shipped_identity_has_the_real_clipboard() {
+        let conf: serde_json::Value =
+            serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
+        let id = conf["identifier"].as_str().unwrap();
+        assert_eq!(clipboard_for(false, Some(id)), Clipboard::Real, "{id}");
+    }
 
     fn act(at: Instant, bundle: &str) -> Activation {
         Activation {
@@ -655,6 +1041,21 @@ mod tests {
                 CONCEALED_TYPES.contains(&marker),
                 "{marker} must be skipped"
             );
+        }
+    }
+
+    #[test]
+    fn the_relauncher_waits_for_this_pid_and_reopens_settings_only_when_asked() {
+        for (reopen, tail) in [
+            (true, "exec /usr/bin/open \"$0\" --args --settings"),
+            (false, "exec /usr/bin/open \"$0\""),
+        ] {
+            let script = relauncher_script(4242, reopen);
+            assert!(
+                script.starts_with("i=0; while kill -0 4242 2>/dev/null"),
+                "it waits for this very process to be gone first: {script}"
+            );
+            assert!(script.ends_with(tail), "reopen_settings={reopen}: {script}");
         }
     }
 }

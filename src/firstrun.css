@@ -1,5 +1,6 @@
-/* The welcome — five calm steps in a 460×520 window (Figma 273:8). Each step
-   fits without scrolling; the footer never moves. */
+/* The welcome — a splash, then five calm steps in a 460×520 window (Figma
+   XCNmucSuAe007qWHnOXQpW «01 · الترحيب» 42:4060). Each step fits without
+   scrolling; the footer never moves. Flat: tone and a 1px line. */
 
 html,
 body {
@@ -9,10 +10,66 @@ body {
 }
 
 .firstrun {
+  position: relative;
   display: flex;
   flex-direction: column;
   height: 100vh;
   padding: var(--space-32) 0 0;
+}
+
+/* ─── Splash: the mark, «رفّ», its line — under the native title bar ──── */
+
+.splash {
+  position: absolute;
+  inset: 28px 0 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-12);
+  /* Centred where a step's content sits: the footer's height kept clear. */
+  padding: var(--space-4) var(--space-32) 128px;
+  background: var(--bg-window);
+  text-align: center;
+  transition: opacity var(--t-base) var(--ease), visibility 0s linear var(--t-base);
+}
+
+.splash.is-done {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.mark {
+  position: relative;
+  display: block;
+  flex: none;
+}
+
+.mark .mark-base,
+.mark .mark-card {
+  position: absolute;
+  inset: 0;
+}
+
+.splash-mark {
+  width: 233px;
+  height: 144px;
+}
+
+.splash-name {
+  font-family: var(--font-heading);
+  font-size: 56px;
+  font-weight: 700;
+  line-height: normal;
+  color: var(--brand-ink);
+}
+
+.splash-tagline {
+  font-size: var(--text-body);
+  line-height: var(--line-body);
+  color: var(--ink-2);
 }
 
 .step {
@@ -32,8 +89,8 @@ body {
   height: 96px;
 }
 
-.figure.is-small {
-  width: 72px;
+.step-mark {
+  width: 117px;
   height: 72px;
 }
 
@@ -41,7 +98,7 @@ body {
   margin: 0;
   font-size: var(--text-display);
   font-weight: 700;
-  line-height: 1.5;
+  line-height: var(--line-display);
 }
 
 .title:focus {
@@ -52,11 +109,12 @@ body {
   max-width: 388px;
   margin: 0;
   font-size: var(--text-body);
+  line-height: var(--line-body);
   color: var(--ink-2);
 }
 
 .body-text strong {
-  font-weight: 600;
+  font-weight: 700;
   color: var(--ink);
 }
 
@@ -78,11 +136,13 @@ body {
   background: var(--bg-raised);
   text-align: start;
   font-size: var(--text-caption);
+  line-height: var(--line-tight);
   color: var(--ink-2);
 }
 
 .layer strong {
   font-size: var(--text-body);
+  line-height: var(--line-body);
   color: var(--ink);
 }
 
@@ -93,7 +153,7 @@ body {
 /* Step 2 — the way in. Keycaps read ⇧⌘V left to right even in RTL. */
 .keys {
   display: flex;
-  gap: var(--space-6);
+  gap: var(--space-8);
 }
 
 .keys kbd {
@@ -121,6 +181,7 @@ body {
   padding: 0;
   list-style: none;
   font-size: var(--text-small);
+  line-height: var(--line-body);
   color: var(--ink);
 }
 
@@ -148,7 +209,7 @@ body {
 }
 
 .choices .btn {
-  min-height: 34px;
+  width: 100%;
 }
 
 .step .callout {
@@ -177,6 +238,7 @@ body {
   list-style: none;
   counter-reset: step;
   font-size: var(--text-small);
+  line-height: var(--line-body);
   color: var(--ink-2);
 }
 
@@ -203,14 +265,15 @@ body {
 
 .privacy-line {
   margin: 0;
-  font-size: var(--text-small);
-  color: var(--ink-2);
+  font-size: var(--text-caption);
+  line-height: var(--line-tight);
+  color: var(--ink-3);
 }
 
 /* Step 5 — what you chose, not a general promise. */
 .summary {
   display: grid;
-  gap: var(--space-6);
+  gap: var(--space-8);
   width: 100%;
   max-width: 388px;
   margin: 0;
@@ -248,7 +311,7 @@ body {
 }
 
 .completion kbd {
-  padding: 1px var(--space-6);
+  padding: 0 var(--space-4);
   font-size: var(--text-small);
   color: var(--ink);
 }
@@ -269,18 +332,18 @@ body {
 
 .progress {
   display: flex;
-  gap: var(--space-6);
+  gap: var(--space-8);
 }
 
 .progress span {
-  width: 6px;
-  height: 6px;
-  border-radius: 3px;
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-full);
   background: var(--line-strong);
   transition: width var(--t-base) var(--ease);
 }
 
 .progress span.is-current {
-  width: 18px;
+  width: 20px;
   background: var(--accent);
 }

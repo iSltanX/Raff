@@ -56,8 +56,23 @@ jobs:
       - name: تثبيت الاعتماديات
         run: npm ci
 
+      # البوابة نفسها التي في ci.yml: إصدار من وسم لا يُبنى على ثغرة معروفة
+      # ظهرت بعد آخر دمج.
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
+
+      - name: ثغرات اعتمادات Rust
+        working-directory: src-tauri
+        run: cargo audit
+
       - name: اختبارات الواجهة
         run: npm test
+
+      # cargo test يضمّن dist/ وقت الترجمة (generate_context!)، و npm test لم
+      # يعد يتركه خلفه منذ أن صار يبني في مجلد مؤقت. فيُبنى هنا قبله.
+      - name: بناء الواجهة
+        run: npm run build:frontend
 
       - name: اختبارات الخلفية
         run: cargo test --manifest-path src-tauri/Cargo.toml
