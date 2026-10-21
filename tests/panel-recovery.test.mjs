@@ -339,10 +339,12 @@ test('panel recovery: first load retries, then ⌘R re-initialises in place', as
     clickFilter(dom, 'image');
     assert.deepEqual(rowIds(dom), []);
     assert.match(listText(dom), /لا نتائج/);
+    // A search glass since the Najdi redesign (Figma 40:1823) — still never
+    // the shelf illustration, which belongs to a genuinely empty collection.
     assert.equal(
-      dom.window.document.querySelector('.state-view.is-no-results .state-art'),
+      dom.window.document.querySelector('.state-view.is-no-results .brand-art'),
       null,
-      'search-empty is textual and never borrows the shelf illustration'
+      'search-empty never borrows the shelf illustration'
     );
     assert.doesNotMatch(listText(dom), EMPTY_SHELF_HEADLINE, 'a narrowed list is not an empty shelf');
     assert.doesNotMatch(listText(dom), FAILURE_HEADLINE, 'and never the failure state');

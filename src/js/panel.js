@@ -142,8 +142,11 @@ function syncActiveOption() {
 }
 
 const BRAND = Symbol('brand-mark');
+// The shelf without its card: nothing is arriving (the menu-bar glyph's off
+// state, Figma «03 · الحالات الفارغة» 40:1823).
+const BRAND_OFF = Symbol('brand-mark-off');
 
-function stateView(art, title, sub, extraClass = '') {
+function stateView(art, title, sub, extraClass = '', action = null) {
   const view = document.createElement('div');
   view.className = `state-view ${extraClass}`.trim();
   const isFailure = extraClass.split(/\s+/).includes('is-failure');
@@ -162,19 +165,32 @@ function stateView(art, title, sub, extraClass = '') {
   if (art) {
     const artEl = document.createElement('div');
     artEl.className = 'state-art';
-    if (art === BRAND) {
+    if (art === BRAND || art === BRAND_OFF) {
       artEl.classList.add('brand-art');
+      artEl.classList.toggle('is-off', art === BRAND_OFF);
       const base = document.createElement('span');
       base.className = 'mark-base';
-      const card = document.createElement('span');
-      card.className = 'mark-card';
-      artEl.replaceChildren(base, card);
+      artEl.replaceChildren(base);
+      if (art === BRAND) {
+        const card = document.createElement('span');
+        card.className = 'mark-card';
+        artEl.append(card);
+      }
     } else {
       artEl.replaceChildren(createIcon(art));
     }
     view.append(artEl);
   }
   view.append(text);
+  if (action) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'btn';
+    button.id = 'state-action';
+    button.textContent = action.label;
+    button.addEventListener('click', () => void action.run());
+    view.append(button);
+  }
   return view;
 }
 
@@ -545,9 +561,9 @@ function renderList() {
     setListStructure(false);
     syncActiveOption();
     if (query || filter !== 'all') {
-      // Search-empty is text-only in «07 — Patterns & States»; the shelf
-      // illustration belongs exclusively to a genuinely empty collection.
-      listEl.append(stateView(null, 'لا نتائج', 'جرّب كلمة أخرى أو صنفًا مختلفًا', 'is-no-results'));
+      // A search glass (Figma 40:1823); the shelf illustration belongs
+      // exclusively to a genuinely empty collection.
+      listEl.append(stateView(SEARCH, 'لا نتائج', 'جرّب كلمة أخرى أو صنفًا مختلفًا', 'is-no-results'));
     } else if (state.unreadableLayer) {
       // The list is empty because a layer did not parse, not because nothing
       // was ever saved. Saying «رفّك جاهز» here would report the user's clips
@@ -562,9 +578,17 @@ function renderList() {
       );
     } else if (captureStatus()?.blocking) {
       // Empty AND not saving: «سيظهر هنا فورًا» would be a promise رفّ is not
-      // keeping right now (Figma 284:1938). The strip above names the cause.
+      // keeping right now. The strip above names the cause; the way back is
+      // here as well, under the shelf with no card (Figma 40:1823).
+      const { action } = captureStatus();
       listEl.append(
-        stateView(BRAND, 'رفّك فارغ', 'الالتقاط لا يعمل الآن، فلن يظهر هنا ما تنسخه حتى يعود.')
+        stateView(
+          BRAND_OFF,
+          'رفّك فارغ',
+          'الالتقاط لا يعمل الآن، فلن يظهر هنا ما تنسخه حتى يعود.',
+          '',
+          action && { label: action.stateLabel ?? action.label, run: action.run }
+        )
       );
     } else {
       // Genuinely nothing saved yet — never shown for a failed fetch.
@@ -625,7 +649,7 @@ function captureStatus() {
       tone: 'info',
       icon: CAPTURE_OFF,
       text: 'الالتقاط معطّل — لا يُحفظ ما تنسخه',
-      action: { label: 'تفعيل', run: enableCapture },
+      action: { label: 'تفعيل', stateLabel: 'تفعيل الالتقاط', run: enableCapture },
       blocking: true,
     };
   }
