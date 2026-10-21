@@ -945,7 +945,51 @@ fn write_layer_bytes(path: &Path, bytes: &[u8]) -> Result<(), String> {
     if durable {
         sync_parent_dir(path);
     }
+    stop::point();
     Ok(())
+}
+
+/// Tests only: stops the "process" right after its n-th step that reached
+/// the disk — a layer or journal written, a journal removed — as a power cut
+/// would. The test then loads a new store from what is on disk. Compiled out
+/// of the app.
+#[cfg(test)]
+pub(crate) mod stop {
+    use std::cell::Cell;
+
+    thread_local! {
+        static AFTER: Cell<Option<usize>> = const { Cell::new(None) };
+        static STEPS: Cell<usize> = const { Cell::new(0) };
+    }
+
+    /// Counts steps from now on, stopping after the `after`-th.
+    pub(crate) fn arm(after: usize) {
+        AFTER.set(Some(after));
+        STEPS.set(0);
+    }
+
+    /// Stops counting; how many steps were taken.
+    pub(crate) fn disarm() -> usize {
+        AFTER.set(None);
+        STEPS.get()
+    }
+
+    pub(crate) fn point() {
+        let Some(after) = AFTER.get() else {
+            return;
+        };
+        STEPS.set(STEPS.get() + 1);
+        if STEPS.get() >= after {
+            AFTER.set(None);
+            panic!("simulated stop after step {after}");
+        }
+    }
+}
+
+#[cfg(not(test))]
+mod stop {
+    #[inline(always)]
+    pub(crate) fn point() {}
 }
 
 /// The files whose writes reach the platter before they count as done (H3):
@@ -1757,17 +1801,42 @@ impl Store {
         self.delete_files_except(item, None);
     }
 
-    /// Deletes `item`'s image files, sparing any that `keep` names too.
+    /// Deletes `item`'s image files, sparing any that `keep` names — and any
+    /// that another saved row still names, in either layer or in a journal.
+    /// Two rows can come to name one file: a pinned picture whose own file
+    /// was gone takes its copy's, and a stop before the copy's row is written
+    /// away leaves both (ت٤٦). Every deletion of an image comes here, so a
+    /// file goes only with the last row that names it.
     fn delete_files_except(&self, item: &ClipItem, keep: Option<&ClipItem>) {
         let images = self.images_dir();
+        let names = |row: &ClipItem, f: &String| {
+            row.image_file.as_ref() == Some(f) || row.thumb_file.as_ref() == Some(f)
+        };
         for f in [&item.image_file, &item.thumb_file].into_iter().flatten() {
-            let shared = keep.is_some_and(|keep| {
-                keep.image_file.as_ref() == Some(f) || keep.thumb_file.as_ref() == Some(f)
-            });
+            let shared = keep.is_some_and(|keep| names(keep, f))
+                || self
+                    .saved_rows()
+                    .any(|row| row.id != item.id && names(row, f));
             if let (false, Some(path)) = (shared, image_path(&images, f)) {
-                let _ = fs::remove_file(path);
+                if fs::remove_file(path).is_ok() {
+                    stop::point();
+                }
             }
         }
+    }
+
+    /// Every row the store still holds on to: both layers, and the rows its
+    /// journals carry.
+    fn saved_rows(&self) -> impl Iterator<Item = &ClipItem> {
+        self.history
+            .iter()
+            .chain(&self.pinned)
+            .chain(self.pending_delete.iter().map(|pending| &pending.item))
+            .chain(
+                self.pending_pin
+                    .iter()
+                    .flat_map(|pending| std::iter::once(&pending.item).chain(&pending.dropped)),
+            )
     }
 
     fn try_save_pending_delete(&self) -> Result<(), String> {
@@ -1775,7 +1844,10 @@ impl Store {
             try_save_json(&self.dir.join(PENDING_DELETE_FILE), &self.pending_delete)
         } else {
             match fs::remove_file(self.dir.join(PENDING_DELETE_FILE)) {
-                Ok(()) => Ok(()),
+                Ok(()) => {
+                    stop::point();
+                    Ok(())
+                }
                 Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
                 Err(err) => Err(format!("تعذّر إغلاق سجل الحذف المؤقت: {err}")),
             }
@@ -1793,7 +1865,10 @@ impl Store {
             try_save_json(&self.dir.join(PENDING_PIN_FILE), &self.pending_pin)
         } else {
             match fs::remove_file(self.dir.join(PENDING_PIN_FILE)) {
-                Ok(()) => Ok(()),
+                Ok(()) => {
+                    stop::point();
+                    Ok(())
+                }
                 Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
                 Err(err) => Err(format!("تعذّر إغلاق سجل التثبيت المؤقت: {err}")),
             }
@@ -1900,10 +1975,51 @@ impl Store {
             .iter()
             .chain(self.history.iter())
             .any(|item| item.id == pending.item.id);
-        if !item_is_live {
+        let settled = if item_is_live {
+            self.finish_interrupted_fold(&pending)
+        } else {
             self.delete_files(&pending.item);
+            true
+        };
+        // Kept on disk when the fold could not be finished: the next launch
+        // tries again. Never kept in memory — it names the live row.
+        if settled {
+            self.save_pending_delete();
         }
-        self.save_pending_delete();
+    }
+
+    /// An undo that puts a pinned item back on its shelf, taking in a copy
+    /// made meanwhile, writes the shelf first and then history without the
+    /// copy (017). Stopped between the two, the copy is still in history,
+    /// beside a pinned row that already carries its counts: it leaves now, as
+    /// it would have (ت٤٦). Its files go only if nothing else names them, and
+    /// whatever the restored row no longer names is collected as an orphan.
+    ///
+    /// Only that undo leaves this shape: a copy of a pinned row's content
+    /// lands on the row itself, never beside it in history. Returns whether
+    /// the receipt can go.
+    fn finish_interrupted_fold(&mut self, pending: &PendingDelete) -> bool {
+        let deleted = &pending.item;
+        let (DeletedLayer::Pinned, Some(since)) = (pending.layer, pending.deleted_at) else {
+            return true;
+        };
+        if !self.pinned.iter().any(|item| item.id == deleted.id) {
+            return true;
+        }
+        let Some(index) = self.history.iter().position(|item| {
+            item.created_at >= since
+                && Self::same_content(item, deleted.kind, &deleted.text, deleted.hash.as_deref())
+        }) else {
+            return true;
+        };
+        let copy = self.history.remove(index);
+        if let Err(err) = try_save_json(&self.dir.join(HISTORY_FILE), &self.history) {
+            eprintln!("raff: {err}");
+            self.history.insert(index, copy);
+            return false;
+        }
+        self.delete_files(&copy);
+        true
     }
 
     fn commit_any_pending_delete(&mut self) -> Result<(), String> {
@@ -6217,6 +6333,214 @@ mod data_safety_tests {
             !dir.join(PENDING_PIN_FILE).exists(),
             "the journal is retired"
         );
+    }
+
+    // ت٤٦: a stop (power cut, crash) at any step of an undo ─────────────────
+
+    /// The undo branches, by where the item was and where a copy of it is.
+    #[derive(Clone, Copy, Debug)]
+    enum Undo {
+        History,
+        Pinned,
+        HistoryIntoCopy,
+        HistoryIntoPinnedCopy,
+        PinnedTakingCopy,
+        PinnedTakingCopyItsOwnFileGone,
+        PinnedTakingPinnedCopy,
+    }
+
+    const EVERY_UNDO: [Undo; 7] = [
+        Undo::History,
+        Undo::Pinned,
+        Undo::HistoryIntoCopy,
+        Undo::HistoryIntoPinnedCopy,
+        Undo::PinnedTakingCopy,
+        Undo::PinnedTakingCopyItsOwnFileGone,
+        Undo::PinnedTakingPinnedCopy,
+    ];
+
+    /// A deleted picture waiting for its undo, in the shape `undo` names.
+    fn deleted_picture(undo: Undo) -> (Store, String) {
+        let mut s = Store::load(temp_dir());
+        picture_files(&s, &["own", "copy"]);
+        // Each capture is written down, as `capture_and_persist` does.
+        capture_text(&mut s, "beside"); // history is never left empty
+        capture_image(&mut s, "own", "f1:00000000000000aa");
+        s.save_history();
+        let id = s.history[0].id.clone();
+        if matches!(
+            undo,
+            Undo::Pinned
+                | Undo::PinnedTakingCopy
+                | Undo::PinnedTakingCopyItsOwnFileGone
+                | Undo::PinnedTakingPinnedCopy
+        ) {
+            assert!(s.set_pin_persisted(&id, true).unwrap());
+        }
+        if matches!(undo, Undo::PinnedTakingCopyItsOwnFileGone) {
+            fs::remove_file(s.images_dir().join("own.png")).unwrap();
+        }
+        let token = s.delete_reversible(&id).unwrap();
+        if !matches!(undo, Undo::History | Undo::Pinned) {
+            capture_image(&mut s, "copy", "f1:00000000000000aa");
+            s.save_history();
+        }
+        if matches!(
+            undo,
+            Undo::HistoryIntoPinnedCopy | Undo::PinnedTakingPinnedCopy
+        ) {
+            let copy = s.history[0].id.clone();
+            assert!(s.set_pin_persisted(&copy, true).unwrap());
+        }
+        (s, token)
+    }
+
+    /// Runs the undo and stops the process right after its `after`-th step.
+    fn undo_stopped_after(s: &mut Store, token: &str, after: usize) {
+        stop::arm(after);
+        let stopped =
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| s.undo_delete(token)))
+                .is_err();
+        stop::disarm();
+        assert!(stopped, "the undo has a step {after} to stop after");
+    }
+
+    fn assert_rows_have_their_files(s: &Store, label: &str) {
+        let images = s.images_dir();
+        for item in s.history.iter().chain(&s.pinned) {
+            for file in [&item.image_file, &item.thumb_file].into_iter().flatten() {
+                assert!(
+                    images.join(file).exists(),
+                    "{label}: {} lost {file}",
+                    item.id
+                );
+            }
+        }
+    }
+
+    /// Restarts, then deletes every row one at a time, restarting after each:
+    /// no step may take a file another saved row still names, and at the end
+    /// nothing is left behind.
+    fn restart_and_empty(dir: &Path, label: &str) {
+        let mut s = Store::load(dir.to_path_buf());
+        assert!(
+            s.pending_delete.is_none(),
+            "{label}: the receipt is settled"
+        );
+        assert_rows_have_their_files(&s, label);
+        let pictures = s
+            .history
+            .iter()
+            .chain(&s.pinned)
+            .filter(|i| i.kind == ItemKind::Image)
+            .count();
+        assert_eq!(pictures, 1, "{label}: one row of the picture");
+        while let Some(id) = s.history.first().or(s.pinned.first()).map(|i| i.id.clone()) {
+            let token = s.delete_reversible(&id).unwrap();
+            s.commit_delete(&token).unwrap();
+            s = Store::load(dir.to_path_buf());
+            assert_rows_have_their_files(&s, label);
+        }
+        let left: Vec<_> = fs::read_dir(dir.join(IMAGES_DIR))
+            .unwrap()
+            .flatten()
+            .map(|e| e.file_name())
+            .collect();
+        assert!(left.is_empty(), "{label}: left behind {left:?}");
+    }
+
+    #[test]
+    fn a_stop_between_the_writes_of_a_pinned_undo_loses_no_picture() {
+        // The pinned picture's own file is gone, so it takes its copy's; the
+        // shelf reaches the disk, then the process stops before history does.
+        let (mut s, token) = deleted_picture(Undo::PinnedTakingCopyItsOwnFileGone);
+        let pinned = s.pending_delete.as_ref().unwrap().item.id.clone();
+        undo_stopped_after(&mut s, &token, 1);
+        let dir = s.dir.clone();
+        drop(s);
+
+        let mut s = Store::load(dir.clone());
+        let item = s.find(&pinned).expect("the pinned picture is back");
+        assert_eq!(item.image_file.as_deref(), Some("copy.png"));
+        assert_eq!(
+            s.history
+                .iter()
+                .filter(|i| i.kind == ItemKind::Image)
+                .count(),
+            0,
+            "the copy it took in is not left in history beside it"
+        );
+        // Whatever goes from history next, the pinned picture keeps its file.
+        while let Some(id) = s.history.first().map(|i| i.id.clone()) {
+            let token = s.delete_reversible(&id).unwrap();
+            s.commit_delete(&token).unwrap();
+        }
+        let s = Store::load(dir);
+        assert!(s.images_dir().join("copy.png").exists());
+        assert!(s.images_dir().join("copy.thumb.png").exists());
+        assert_eq!(s.find(&pinned).unwrap().copy_count, 2);
+    }
+
+    #[test]
+    fn a_file_another_saved_row_names_is_never_deleted_with_a_row() {
+        // However two rows came to name one file, deleting one keeps it.
+        let mut s = Store::load(temp_dir());
+        picture_files(&s, &["shared"]);
+        capture_image(&mut s, "shared", "f1:00000000000000bb");
+        let pinned = s.history[0].id.clone();
+        assert!(s.set_pin_persisted(&pinned, true).unwrap());
+        let mut twin = s.find(&pinned).unwrap().clone();
+        twin.id = "twin".into();
+        twin.is_pinned = false;
+        s.history.insert(0, twin);
+        s.save_history();
+
+        let token = s.delete_reversible("twin").unwrap();
+        s.commit_delete(&token).unwrap();
+        assert_eq!(
+            has_files(&s, "shared"),
+            (true, true),
+            "the pin still names them"
+        );
+        let mut s = Store::load(s.dir.clone());
+        assert_eq!(
+            has_files(&s, "shared"),
+            (true, true),
+            "and a restart keeps them"
+        );
+
+        let token = s.delete_reversible(&pinned).unwrap();
+        s.commit_delete(&token).unwrap();
+        assert_eq!(
+            has_files(&s, "shared"),
+            (false, false),
+            "the last row takes them"
+        );
+    }
+
+    #[test]
+    fn every_stop_inside_an_undo_leaves_each_saved_row_its_files() {
+        let mut stops = 0;
+        for undo in EVERY_UNDO {
+            let (mut s, token) = deleted_picture(undo);
+            stop::arm(usize::MAX);
+            s.undo_delete(&token)
+                .expect("an uninterrupted undo succeeds");
+            let steps = stop::disarm();
+            assert!(steps >= 2, "{undo:?}: a layer and the receipt, at least");
+            restart_and_empty(&s.dir.clone(), &format!("{undo:?}, uninterrupted"));
+
+            for after in 1..=steps {
+                let (mut s, token) = deleted_picture(undo);
+                undo_stopped_after(&mut s, &token, after);
+                let dir = s.dir.clone();
+                drop(s);
+                restart_and_empty(&dir, &format!("{undo:?}, stopped after step {after}"));
+            }
+            stops += steps;
+            eprintln!("{undo:?}: {steps} steps, a stop after each");
+        }
+        eprintln!("{stops} stops across {} undo shapes", EVERY_UNDO.len());
     }
 
     // 016 ج2 ──────────────────────────────────────────────────────────────
