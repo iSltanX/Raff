@@ -792,7 +792,10 @@ mod tests {
         assert!(window >= MS(801) && window < MS(1_201), "{window:?}");
 
         let mut quick = Watch::from(5, t0);
-        assert_eq!(quick.notice(6, t0 + MS(10), t0 + MS(11)), Some(SOURCE_WINDOW));
+        assert_eq!(
+            quick.notice(6, t0 + MS(10), t0 + MS(11)),
+            Some(SOURCE_WINDOW)
+        );
     }
 
     fn empty_store() -> (std::path::PathBuf, Mutex<Store>) {
