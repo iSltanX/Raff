@@ -18,6 +18,9 @@ use crate::{macos, panel, AppState};
 const ACTIVATE_DELAY_MS: u64 = 150;
 /// How long a paste may take to start before it is called off.
 const PASTE_PATIENCE: Duration = Duration::from_secs(2);
+/// How long a paste that started may take to finish — hide, activate, wait
+/// `ACTIVATE_DELAY_MS`, press — before the panel stops waiting for it.
+const PASTE_FINISH: Duration = Duration::from_secs(3);
 
 /// Writes an item to the pasteboard. `plain` drops rich representations
 /// ("لصق كنص عادي"). Returns false when the id is unknown.
@@ -93,21 +96,23 @@ pub async fn paste_item(app: &AppHandle, id: &str, plain: bool) -> Result<bool, 
     }
 
     let state = app.state::<AppState>();
-    let previous_pid = crate::lock_previous_app(&state.previous_app).take();
+    let own = std::process::id() as i32;
+    let previous_pid = match take_target(&state.previous_app, own) {
+        Target::App(pid) => pid,
+        Target::Raff => {
+            crate::startup_trace::mark(
+                "PASTE STOPPED HERE: the panel was opened over Raff itself — copied only",
+            );
+            bump_paste_signals(app, id);
+            return Ok(false);
+        }
+    };
     crate::startup_trace::mark_with(|| {
         format!("PASTE previous app remembered={}", previous_pid.is_some())
     });
-    let own = std::process::id() as i32;
-    if opened_over_raff(previous_pid, own) {
-        crate::startup_trace::mark(
-            "PASTE STOPPED HERE: the panel was opened over Raff itself — copied only",
-        );
-        bump_paste_signals(app, id);
-        return Ok(false);
-    }
 
     let handle = app.clone();
-    let id = id.to_string();
+    let item = id.to_string();
     let attempt = tauri::async_runtime::spawn_blocking(move || {
         let (tx, rx) = std::sync::mpsc::channel();
         let ticket = Arc::new(PasteTicket::new());
@@ -161,13 +166,15 @@ pub async fn paste_item(app: &AppHandle, id: &str, plain: bool) -> Result<bool, 
                     ));
                     let pasted =
                         paste_confirmed(still_trusted, sent, previous_pid, front_before_paste.pid);
-                    bump_paste_signals(&handle2, &id);
                     crate::startup_trace::mark(&format!("PASTE COMPLETE pasted={pasted}"));
+                    // Answered first: the counter waits for the store lock,
+                    // and the panel's answer must not wait with it.
                     let _ = tx.send(pasted);
+                    bump_paste_signals(&handle2, &item);
                 });
             })
         });
-        await_paste(&rx, &ticket, PASTE_PATIENCE)
+        await_paste(&rx, &ticket, PASTE_PATIENCE, PASTE_FINISH)
     })
     .await
     .map_err(paste_failed)
@@ -177,6 +184,9 @@ pub async fn paste_item(app: &AppHandle, id: &str, plain: bool) -> Result<bool, 
         Ok(pasted) => pasted,
         Err(err) => {
             crate::startup_trace::mark(&format!("PASTE ERROR {err} — reshowing panel"));
+            // The item was written before any of this, as the message says:
+            // counted as used, like every other paste that ends as a copy.
+            bump_paste_signals(app, id);
             panel::show(app);
             return Err(err);
         }
@@ -244,12 +254,33 @@ fn await_paste(
     rx: &Receiver<bool>,
     ticket: &PasteTicket,
     patience: Duration,
+    finish: Duration,
 ) -> Result<bool, String> {
     match rx.recv_timeout(patience) {
         Ok(pasted) => Ok(pasted),
         Err(err) if ticket.call_off() => Err(err.to_string()),
-        Err(_) => rx.recv().map_err(|err| err.to_string()),
+        Err(_) => rx.recv_timeout(finish).map_err(|err| err.to_string()),
     }
+}
+
+/// Where a paste goes: back to the app the panel was opened over, or nowhere
+/// because that was رفّ.
+#[derive(Debug, PartialEq)]
+enum Target {
+    Raff,
+    App(Option<i32>),
+}
+
+/// Takes the remembered app for this paste. A panel opened over رفّ keeps
+/// that answer for its next click as well: the panel stays open after a copy,
+/// and a second click finding nothing remembered would hide it, press nothing
+/// and show it again.
+fn take_target(previous_app: &std::sync::Mutex<Option<i32>>, own: i32) -> Target {
+    let mut previous = crate::lock_previous_app(previous_app);
+    if opened_over_raff(*previous, own) {
+        return Target::Raff;
+    }
+    Target::App(previous.take())
 }
 
 /// Whether the panel was opened over one of رفّ's own windows — Settings in
@@ -365,7 +396,7 @@ mod tests {
             });
         });
 
-        assert!(await_paste(&rx, &ticket, PATIENCE).is_err());
+        assert!(await_paste(&rx, &ticket, PATIENCE, PATIENCE).is_err());
         late.join().unwrap();
         assert_eq!(
             pressed.load(Ordering::SeqCst),
@@ -387,8 +418,38 @@ mod tests {
             let _ = tx.send(true);
         });
 
-        assert_eq!(await_paste(&rx, &ticket, PATIENCE), Ok(true));
+        assert_eq!(await_paste(&rx, &ticket, PATIENCE, PATIENCE * 10), Ok(true));
         slow.join().unwrap();
+    }
+
+    /// Review م١: a paste that started and never answered — its thread stuck
+    /// behind a lock — must not leave the panel waiting forever.
+    #[test]
+    fn a_paste_that_started_and_never_answers_is_not_waited_on_forever() {
+        let (tx, rx) = std::sync::mpsc::channel::<bool>();
+        let ticket = Arc::new(PasteTicket::new());
+        assert!(ticket.start());
+        let (done_tx, done_rx) = std::sync::mpsc::channel();
+        let waiter = Arc::clone(&ticket);
+        std::thread::spawn(move || {
+            let _ = done_tx.send(await_paste(&rx, &waiter, PATIENCE, PATIENCE));
+        });
+        let answer = done_rx.recv_timeout(PATIENCE * 10);
+        drop(tx);
+        assert!(matches!(answer, Ok(Err(_))), "{answer:?}");
+    }
+
+    /// Review م٢: the panel stays open after a copy over رفّ, and its next
+    /// click must be judged the same way, not as a paste with no target.
+    #[test]
+    fn a_second_click_over_raff_is_still_only_a_copy() {
+        let slot = std::sync::Mutex::new(Some(OWN));
+        assert_eq!(take_target(&slot, OWN), Target::Raff);
+        assert_eq!(take_target(&slot, OWN), Target::Raff);
+
+        let other = std::sync::Mutex::new(Some(TARGET));
+        assert_eq!(take_target(&other, OWN), Target::App(Some(TARGET)));
+        assert_eq!(take_target(&other, OWN), Target::App(None), "spent");
     }
 
     #[test]
@@ -411,8 +472,12 @@ mod tests {
             [src.find("pub async fn paste_item").unwrap()..src.find("struct PasteTicket").unwrap()];
         let claims = flow.find("if_claimed(&ours, move ||").expect("claimed");
         assert!(claims < flow.find("panel::hide").unwrap());
-        assert!(flow.contains("await_paste(&rx, &ticket, PASTE_PATIENCE)"));
+        assert!(flow.contains("await_paste(&rx, &ticket, PASTE_PATIENCE, PASTE_FINISH)"));
         assert!(!flow.contains(".run_on_main_thread("));
+        // A paste that ends in the failure message is still a copy (م٣).
+        let failed = &flow[flow.find("PASTE ERROR").unwrap()..];
+        let counted = failed.find("bump_paste_signals(app, id)").expect("counted");
+        assert!(counted < failed.find("panel::show(app)").unwrap());
     }
 
     /// 009: Settings was in front when the panel opened, so the app to go
@@ -439,7 +504,7 @@ mod tests {
         let flow = &src[src.find("pub async fn paste_item").unwrap()
             ..src.find("fn opened_over_raff").unwrap()];
         let asks = flow
-            .find("opened_over_raff(previous_pid, own)")
+            .find("take_target(&state.previous_app, own)")
             .expect("asked");
         assert!(
             asks < flow.find("panel::hide").unwrap(),
