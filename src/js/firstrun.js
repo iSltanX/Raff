@@ -1,5 +1,6 @@
-// The welcome (Figma «09 — Onboarding» 273:8): five steps — the idea, the way
-// in, the capture decision, the optional paste permission, and first use.
+// The welcome (Figma «01 · الترحيب» 42:4060): a splash, then five steps — the
+// idea, the way in, the capture decision, the optional paste permission, and
+// first use.
 //
 // Two answers, never confused: whether رفّ may capture, and whether it may
 // paste for you. A granted permission is not a capture decision, a failed
@@ -219,6 +220,21 @@ permissionRetry.addEventListener('click', () => {
   consecutiveFailures = 0;
   void checkGranted({ manual: true });
 });
+
+// ─── Splash ───────────────────────────────────────────────────────────────
+
+// The mark and its line, over step 1 (already shown and focused beneath it).
+// It lifts by itself, or at once on the first key or click — which then does
+// nothing else, since nothing on it can be pressed.
+const splash = el('splash');
+function liftSplash() {
+  splash.classList.add('is-done');
+  window.removeEventListener('keydown', liftSplash, true);
+  window.removeEventListener('pointerdown', liftSplash, true);
+}
+window.addEventListener('keydown', liftSplash, true);
+window.addEventListener('pointerdown', liftSplash, true);
+window.setTimeout(liftSplash, Number(splash.dataset.duration) || 0);
 
 // ─── Ready ────────────────────────────────────────────────────────────────
 
