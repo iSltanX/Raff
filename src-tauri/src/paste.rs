@@ -2,6 +2,9 @@
 //! item to the pasteboard, then synthesize ⌘V (Accessibility permitting).
 //! Without the permission the item still lands on the clipboard.
 
+use std::sync::atomic::{AtomicU8, Ordering};
+use std::sync::mpsc::Receiver;
+use std::sync::Arc;
 use std::time::Duration;
 
 use base64::Engine;
@@ -13,6 +16,8 @@ use crate::{macos, panel, AppState};
 
 /// How long we give macOS to move focus back before synthesizing ⌘V.
 const ACTIVATE_DELAY_MS: u64 = 150;
+/// How long a paste may take to start before it is called off.
+const PASTE_PATIENCE: Duration = Duration::from_secs(2);
 
 /// Writes an item to the pasteboard. `plain` drops rich representations
 /// ("لصق كنص عادي"). Returns false when the id is unknown.
@@ -94,70 +99,79 @@ pub async fn paste_item(app: &AppHandle, id: &str, plain: bool) -> Result<bool, 
     });
     let own = std::process::id() as i32;
     if opened_over_raff(previous_pid, own) {
-        crate::startup_trace::mark("PASTE STOPPED HERE: the panel was opened over Raff itself — copied only");
+        crate::startup_trace::mark(
+            "PASTE STOPPED HERE: the panel was opened over Raff itself — copied only",
+        );
         bump_paste_signals(app, id);
         return Ok(false);
     }
 
     let handle = app.clone();
     let id = id.to_string();
-    let worker = handle.clone();
     let attempt = tauri::async_runtime::spawn_blocking(move || {
         let (tx, rx) = std::sync::mpsc::channel();
-        worker
-            .run_on_main_thread(move || {
-                crate::startup_trace::mark("PASTE panel_hide requested");
-                panel::hide(&handle);
-                crate::startup_trace::mark(&format!(
-                    "PASTE panel_hide done; panel.is_visible()={:?}",
-                    handle
-                        .get_webview_panel(panel::PANEL_LABEL)
-                        .map(|p| p.is_visible())
-                ));
-                if let Some(previous) = previous_pid {
-                    crate::startup_trace::mark("PASTE activate_app requested");
-                    macos::activate_app(previous);
-                    crate::startup_trace::mark("PASTE activate_app call returned");
-                } else {
-                    crate::startup_trace::mark(
-                        "PASTE no previous app to activate — never remembered or already consumed",
-                    );
-                }
+        let ticket = Arc::new(PasteTicket::new());
+        let ours = Arc::clone(&ticket);
+        // Not `run_on_main_thread`: tao drains that queue only while it is
+        // processing events, the queue that once held a panel show for 2.5s
+        // (`macos::dispatch_to_main`).
+        macos::dispatch_to_main(move || {
+            if !ours.start() {
+                crate::startup_trace::mark(
+                    "PASTE called off before it started — nothing hidden, nothing pressed",
+                );
+                return;
+            }
+            crate::startup_trace::mark("PASTE panel_hide requested");
+            panel::hide(&handle);
+            crate::startup_trace::mark(&format!(
+                "PASTE panel_hide done; panel.is_visible()={:?}",
+                handle
+                    .get_webview_panel(panel::PANEL_LABEL)
+                    .map(|p| p.is_visible())
+            ));
+            if let Some(previous) = previous_pid {
+                crate::startup_trace::mark("PASTE activate_app requested");
+                macos::activate_app(previous);
+                crate::startup_trace::mark("PASTE activate_app call returned");
+            } else {
+                crate::startup_trace::mark(
+                    "PASTE no previous app to activate — never remembered or already consumed",
+                );
+            }
+            crate::startup_trace::mark_with(|| {
+                format!(
+                    "PASTE front is the previous app immediately after activate: {}",
+                    previous_pid == Some(macos::frontmost_app().pid)
+                )
+            });
+            let handle2 = handle.clone();
+            std::thread::spawn(move || {
+                std::thread::sleep(Duration::from_millis(ACTIVATE_DELAY_MS));
+                let front_before_paste = macos::frontmost_app();
                 crate::startup_trace::mark_with(|| {
                     format!(
-                        "PASTE front is the previous app immediately after activate: {}",
-                        previous_pid == Some(macos::frontmost_app().pid)
+                        "PASTE front is the previous app after {ACTIVATE_DELAY_MS}ms wait: {}",
+                        previous_pid == Some(front_before_paste.pid)
                     )
                 });
-                let handle2 = handle.clone();
-                std::thread::spawn(move || {
-                    std::thread::sleep(Duration::from_millis(ACTIVATE_DELAY_MS));
-                    let front_before_paste = macos::frontmost_app();
-                    crate::startup_trace::mark_with(|| {
-                        format!(
-                            "PASTE front is the previous app after {ACTIVATE_DELAY_MS}ms wait: {}",
-                            previous_pid == Some(front_before_paste.pid)
-                        )
-                    });
-                    let still_trusted = macos::ax_trusted();
-                    let sent = if may_press_paste(still_trusted, front_before_paste.pid, own) {
-                        macos::send_cmd_v()
-                    } else {
-                        false
-                    };
-                    crate::startup_trace::mark(&format!(
-                        "PASTE CGEvent cmd-v: still_trusted={still_trusted} sent={sent}"
-                    ));
-                    let pasted =
-                        paste_confirmed(still_trusted, sent, previous_pid, front_before_paste.pid);
-                    bump_paste_signals(&handle2, &id);
-                    crate::startup_trace::mark(&format!("PASTE COMPLETE pasted={pasted}"));
-                    let _ = tx.send(pasted);
-                });
-            })
-            .map_err(|err| err.to_string())?;
-        rx.recv_timeout(Duration::from_secs(2))
-            .map_err(|err| err.to_string())
+                let still_trusted = macos::ax_trusted();
+                let sent = if may_press_paste(still_trusted, front_before_paste.pid, own) {
+                    macos::send_cmd_v()
+                } else {
+                    false
+                };
+                crate::startup_trace::mark(&format!(
+                    "PASTE CGEvent cmd-v: still_trusted={still_trusted} sent={sent}"
+                ));
+                let pasted =
+                    paste_confirmed(still_trusted, sent, previous_pid, front_before_paste.pid);
+                bump_paste_signals(&handle2, &id);
+                crate::startup_trace::mark(&format!("PASTE COMPLETE pasted={pasted}"));
+                let _ = tx.send(pasted);
+            });
+        });
+        await_paste(&rx, &ticket, PASTE_PATIENCE)
     })
     .await
     .map_err(paste_failed)
@@ -177,6 +191,58 @@ pub async fn paste_item(app: &AppHandle, id: &str, plain: bool) -> Result<bool, 
         panel::show(app);
     }
     Ok(pasted)
+}
+
+/// One paste's claim on the panel and the keystroke (015). The work queued on
+/// the main thread and the wait for it race for the claim, and one wins: work
+/// that starts after the wait gave up hides nothing and presses nothing, and a
+/// wait that finds the work started sees it through.
+struct PasteTicket(AtomicU8);
+
+const WAITING: u8 = 0;
+const STARTED: u8 = 1;
+const CALLED_OFF: u8 = 2;
+
+impl PasteTicket {
+    fn new() -> Self {
+        Self(AtomicU8::new(WAITING))
+    }
+
+    /// The work's side, before anything moves: false once the paste was
+    /// called off.
+    fn start(&self) -> bool {
+        self.claim(STARTED)
+    }
+
+    /// The wait's side, once its patience runs out: true when the work had
+    /// not started, and now never will.
+    fn call_off(&self) -> bool {
+        self.claim(CALLED_OFF)
+    }
+
+    fn claim(&self, by: u8) -> bool {
+        self.0
+            .compare_exchange(WAITING, by, Ordering::AcqRel, Ordering::Acquire)
+            .is_ok()
+    }
+}
+
+/// Waits for the paste's answer. A paste that has not started within
+/// `patience` is called off and reported as failed — the item is on the
+/// clipboard already, which is what the failure message says. One that has
+/// started is waited out: hiding, activating and pressing take a few hundred
+/// milliseconds, and leaving them running would put a ⌘V into whatever is in
+/// front after the panel was shown again.
+fn await_paste(
+    rx: &Receiver<bool>,
+    ticket: &PasteTicket,
+    patience: Duration,
+) -> Result<bool, String> {
+    match rx.recv_timeout(patience) {
+        Ok(pasted) => Ok(pasted),
+        Err(err) if ticket.call_off() => Err(err.to_string()),
+        Err(_) => rx.recv().map_err(|err| err.to_string()),
+    }
 }
 
 /// Whether the panel was opened over one of رفّ's own windows — Settings in
@@ -273,6 +339,74 @@ mod tests {
     }
 
     const OWN: i32 = 777;
+    const PATIENCE: Duration = Duration::from_millis(100);
+
+    /// 015: the main thread got to the paste only after the wait gave up and
+    /// the panel was shown again. The work still hid it, brought the old app
+    /// forward and pressed ⌘V into whatever was in front by then.
+    #[test]
+    fn a_paste_called_off_never_starts_late() {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let ticket = Arc::new(PasteTicket::new());
+        let (ours, pressed) = (Arc::clone(&ticket), Arc::new(AtomicU8::new(0)));
+        let presses = Arc::clone(&pressed);
+        let late = std::thread::spawn(move || {
+            std::thread::sleep(PATIENCE * 3);
+            if ours.start() {
+                presses.fetch_add(1, Ordering::SeqCst);
+                let _ = tx.send(true);
+            }
+        });
+
+        assert!(await_paste(&rx, &ticket, PATIENCE).is_err());
+        late.join().unwrap();
+        assert_eq!(
+            pressed.load(Ordering::SeqCst),
+            0,
+            "nothing pressed after the wait gave up"
+        );
+    }
+
+    /// A paste that started just inside the patience is seen through, not
+    /// reported as failed while its keystroke is still on the way.
+    #[test]
+    fn a_paste_that_started_is_waited_out() {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let ticket = Arc::new(PasteTicket::new());
+        let ours = Arc::clone(&ticket);
+        let slow = std::thread::spawn(move || {
+            assert!(ours.start());
+            std::thread::sleep(PATIENCE * 3);
+            let _ = tx.send(true);
+        });
+
+        assert_eq!(await_paste(&rx, &ticket, PATIENCE), Ok(true));
+        slow.join().unwrap();
+    }
+
+    #[test]
+    fn the_claim_is_won_once() {
+        let started = PasteTicket::new();
+        assert!(started.start());
+        assert!(!started.call_off());
+        assert!(!started.start(), "and started once");
+
+        let called_off = PasteTicket::new();
+        assert!(called_off.call_off());
+        assert!(!called_off.start());
+    }
+
+    /// The main-thread work asks for the claim before it hides the panel.
+    #[test]
+    fn the_work_claims_the_paste_before_anything_moves() {
+        let src = include_str!("paste.rs");
+        let flow = &src
+            [src.find("pub async fn paste_item").unwrap()..src.find("struct PasteTicket").unwrap()];
+        let claims = flow.find("if !ours.start()").expect("claimed");
+        assert!(claims < flow.find("panel::hide").unwrap());
+        assert!(flow.contains("await_paste(&rx, &ticket, PASTE_PATIENCE)"));
+        assert!(!flow.contains(".run_on_main_thread("));
+    }
 
     /// 009: Settings was in front when the panel opened, so the app to go
     /// back to is رفّ. It used to activate itself, find itself in front as
@@ -295,9 +429,15 @@ mod tests {
     #[test]
     fn the_paste_flow_asks_both() {
         let src = include_str!("paste.rs");
-        let flow = &src[src.find("pub async fn paste_item").unwrap()..src.find("fn opened_over_raff").unwrap()];
-        let asks = flow.find("opened_over_raff(previous_pid, own)").expect("asked");
-        assert!(asks < flow.find("panel::hide").unwrap(), "before the panel hides");
+        let flow = &src[src.find("pub async fn paste_item").unwrap()
+            ..src.find("fn opened_over_raff").unwrap()];
+        let asks = flow
+            .find("opened_over_raff(previous_pid, own)")
+            .expect("asked");
+        assert!(
+            asks < flow.find("panel::hide").unwrap(),
+            "before the panel hides"
+        );
         assert!(flow.contains("may_press_paste(still_trusted, front_before_paste.pid, own)"));
     }
 
