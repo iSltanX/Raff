@@ -176,6 +176,13 @@ const flow = createUpdateFlow({ onChange: render });
 const closeWindow = () => window.__TAURI__?.window.getCurrentWindow().close();
 okBtn.addEventListener('click', closeWindow);
 laterBtn.addEventListener('click', closeWindow);
+// Escape leaves as the buttons do. Closing only hides this window (main.rs),
+// so a download or a staged restart is still there when it is reopened.
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape' || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
+  e.preventDefault();
+  closeWindow();
+});
 downloadBtn.addEventListener('click', () => flow.download());
 restartBtn.addEventListener('click', () => flow.restart());
 retryBtn.addEventListener('click', () => {
