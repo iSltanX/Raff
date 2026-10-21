@@ -22,6 +22,9 @@ pub mod err {
     pub const NOT_FOUND: &str = "raff/not-found";
     pub const SAVE_FAILED: &str = "raff/save-failed";
     pub const PASTE_FAILED: &str = "raff/paste-failed";
+    /// A command called from a window that has no business calling it
+    /// (`access`). Never reached from رفّ's own pages.
+    pub const WRONG_WINDOW: &str = "raff/wrong-window";
     /// A shortcut with no modifier but ⇧.
     pub const HOTKEY_NEEDS_MODIFIER: &str = "raff/hotkey-needs-modifier";
     /// ⌘C, ⌘V, ⌘X, ⌘A, ⌘Z, ⌘Q or ⌘W.
@@ -131,9 +134,14 @@ fn pause_view(state: &AppState) -> crate::PauseView {
 }
 
 #[tauri::command]
-pub fn get_settings(app: AppHandle, state: State<AppState>) -> SettingsPayload {
+pub fn get_settings(
+    window: tauri::WebviewWindow,
+    app: AppHandle,
+    state: State<AppState>,
+) -> Result<SettingsPayload, String> {
+    crate::access::require(&window, "get_settings")?;
     let store = crate::lock_store(&state.store);
-    SettingsPayload {
+    Ok(SettingsPayload {
         settings: store.settings.clone(),
         ax_trusted: ax_trusted_noted(),
         version: app.package_info().version.to_string(),
@@ -142,16 +150,21 @@ pub fn get_settings(app: AppHandle, state: State<AppState>) -> SettingsPayload {
             .capture_alive
             .load(std::sync::atomic::Ordering::SeqCst),
         capture_pause: pause_view(&state),
-    }
+    })
 }
 
 #[tauri::command]
-pub fn get_state(app: AppHandle, state: State<AppState>) -> StatePayload {
+pub fn get_state(
+    window: tauri::WebviewWindow,
+    app: AppHandle,
+    state: State<AppState>,
+) -> Result<StatePayload, String> {
+    crate::access::require(&window, "get_state")?;
     crate::startup_trace::mark("FRONTEND_CALLED_get_state");
     let store = crate::lock_store(&state.store);
     let mut pinned: Vec<&crate::storage::ClipItem> = store.pinned.iter().collect();
     pinned.sort_by_key(|i| i.pinned_order.unwrap_or(u32::MAX));
-    StatePayload {
+    Ok(StatePayload {
         pinned: pinned.into_iter().map(ItemDto::from).collect(),
         history: store.history.iter().map(ItemDto::from).collect(),
         settings: store.settings.clone(),
@@ -163,7 +176,7 @@ pub fn get_state(app: AppHandle, state: State<AppState>) -> StatePayload {
             .capture_alive
             .load(std::sync::atomic::Ordering::SeqCst),
         capture_pause: pause_view(&state),
-    }
+    })
 }
 
 /// Ids of the rows whose **full** text matches — everything the panel cannot
@@ -174,8 +187,13 @@ pub fn get_state(app: AppHandle, state: State<AppState>) -> StatePayload {
 /// around. The scan is linear over the shelf; the byte budget on the layer is
 /// what keeps that bounded.
 #[tauri::command]
-pub fn search_items(state: State<AppState>, query: String) -> Vec<String> {
-    matching_ids(&crate::lock_store(&state.store), &query)
+pub fn search_items(
+    window: tauri::WebviewWindow,
+    state: State<AppState>,
+    query: String,
+) -> Result<Vec<String>, String> {
+    crate::access::require(&window, "search_items")?;
+    Ok(matching_ids(&crate::lock_store(&state.store), &query))
 }
 
 /// `search_items` without the lock: the query trimmed and folded the way the
@@ -195,7 +213,13 @@ fn matching_ids(store: &Store, query: &str) -> Vec<String> {
 }
 
 #[tauri::command]
-pub async fn paste_item(app: AppHandle, id: String, plain: bool) -> Result<bool, String> {
+pub async fn paste_item(
+    window: tauri::WebviewWindow,
+    app: AppHandle,
+    id: String,
+    plain: bool,
+) -> Result<bool, String> {
+    crate::access::require(&window, "paste_item")?;
     let began = std::time::Instant::now();
     let result = paste::paste_item(&app, &id, plain).await;
     let outcome = match result {
@@ -210,7 +234,12 @@ pub async fn paste_item(app: AppHandle, id: String, plain: bool) -> Result<bool,
 /// Async, like `paste_item`: the write can wait out a poll's read and reads
 /// the picture file, neither of which belongs on the main thread.
 #[tauri::command]
-pub async fn copy_item(app: AppHandle, id: String) -> Result<(), String> {
+pub async fn copy_item(
+    window: tauri::WebviewWindow,
+    app: AppHandle,
+    id: String,
+) -> Result<(), String> {
+    crate::access::require(&window, "copy_item")?;
     let began = std::time::Instant::now();
     if macos::clipboard_inert() {
         crate::diagnostics::record("copy", "clipboard-off", began);
@@ -232,10 +261,12 @@ pub async fn copy_item(app: AppHandle, id: String) -> Result<(), String> {
 /// could only be rearranged by unpinning and pinning again in sequence.
 #[tauri::command]
 pub fn reorder_pinned(
+    window: tauri::WebviewWindow,
     app: AppHandle,
     state: State<AppState>,
     ids: Vec<String>,
 ) -> Result<(), String> {
+    crate::access::require(&window, "reorder_pinned")?;
     {
         let mut store = crate::lock_store(&state.store);
         store.reorder_pinned_persisted(&ids).map_err(save_failed)?;
@@ -273,11 +304,13 @@ fn set_pin(store: &mut Store, id: &str, is_pinned: bool) -> Result<PinDto, Strin
 /// one at a time, so this does not reorder them.
 #[tauri::command(async)]
 pub fn toggle_pin(
+    window: tauri::WebviewWindow,
     app: AppHandle,
     state: State<'_, AppState>,
     id: String,
     is_pinned: bool,
 ) -> Result<PinDto, String> {
+    crate::access::require(&window, "toggle_pin")?;
     let outcome = set_pin(&mut crate::lock_store(&state.store), &id, is_pinned)?;
     notify(&app);
     Ok(outcome)
@@ -294,10 +327,12 @@ pub struct DeleteReceiptDto {
 /// during which the main thread would draw nothing (F-MAINTHREAD-COST).
 #[tauri::command(async)]
 pub fn delete_item(
+    window: tauri::WebviewWindow,
     app: AppHandle,
     state: State<'_, AppState>,
     id: String,
 ) -> Result<DeleteReceiptDto, String> {
+    crate::access::require(&window, "delete_item")?;
     let token = {
         let mut store = crate::lock_store(&state.store);
         store.delete_reversible(&id).map_err(save_failed)?
@@ -309,10 +344,12 @@ pub fn delete_item(
 /// Off the main thread, like `delete_item`: it rewrites the layer.
 #[tauri::command(async)]
 pub fn undo_delete(
+    window: tauri::WebviewWindow,
     app: AppHandle,
     state: State<'_, AppState>,
     token: String,
 ) -> Result<(), String> {
+    crate::access::require(&window, "undo_delete")?;
     {
         let mut store = crate::lock_store(&state.store);
         store.undo_delete(&token).map_err(|e| {
@@ -329,13 +366,23 @@ pub fn undo_delete(
 
 /// Off the main thread, like `delete_item`: it deletes files and the journal.
 #[tauri::command(async)]
-pub fn commit_delete(state: State<'_, AppState>, token: String) -> Result<(), String> {
+pub fn commit_delete(
+    window: tauri::WebviewWindow,
+    state: State<'_, AppState>,
+    token: String,
+) -> Result<(), String> {
+    crate::access::require(&window, "commit_delete")?;
     let mut store = crate::lock_store(&state.store);
     store.commit_delete(&token).map_err(save_failed)
 }
 
 #[tauri::command]
-pub fn clear_history(app: AppHandle, state: State<AppState>) -> Result<(), String> {
+pub fn clear_history(
+    window: tauri::WebviewWindow,
+    app: AppHandle,
+    state: State<AppState>,
+) -> Result<(), String> {
+    crate::access::require(&window, "clear_history")?;
     {
         let mut store = crate::lock_store(&state.store);
         store.clear_history_persisted().map_err(save_failed)?;
@@ -345,7 +392,12 @@ pub fn clear_history(app: AppHandle, state: State<AppState>) -> Result<(), Strin
 }
 
 #[tauri::command]
-pub fn clear_learning(app: AppHandle, state: State<AppState>) -> Result<(), String> {
+pub fn clear_learning(
+    window: tauri::WebviewWindow,
+    app: AppHandle,
+    state: State<AppState>,
+) -> Result<(), String> {
+    crate::access::require(&window, "clear_learning")?;
     {
         let mut store = crate::lock_store(&state.store);
         store.clear_learning_persisted().map_err(save_failed)?;
@@ -368,7 +420,11 @@ pub struct LearnDto {
 /// "عرض ما تعلّمه رفّ" — the plan requires the user can see what is being
 /// learned. Returns the most-used items with their raw signals.
 #[tauri::command]
-pub fn learning_summary(state: State<AppState>) -> Vec<LearnDto> {
+pub fn learning_summary(
+    window: tauri::WebviewWindow,
+    state: State<AppState>,
+) -> Result<Vec<LearnDto>, String> {
+    crate::access::require(&window, "learning_summary")?;
     let store = crate::lock_store(&state.store);
     let mut items: Vec<&crate::storage::ClipItem> = store
         .pinned
@@ -377,7 +433,7 @@ pub fn learning_summary(state: State<AppState>) -> Vec<LearnDto> {
         .filter(|i| i.copy_count + i.paste_count > 1)
         .collect();
     items.sort_by_key(|i| std::cmp::Reverse(i.copy_count + i.paste_count));
-    items
+    Ok(items
         .into_iter()
         .take(10)
         .map(|i| LearnDto {
@@ -387,7 +443,7 @@ pub fn learning_summary(state: State<AppState>) -> Vec<LearnDto> {
             paste_count: i.paste_count,
             last_used_at: i.last_used_at,
         })
-        .collect()
+        .collect())
 }
 
 /// Changes the settings named in `settings` and leaves every other one as the
@@ -398,6 +454,17 @@ pub fn learning_summary(state: State<AppState>) -> Vec<LearnDto> {
 /// settings here and persisting the result below.
 #[tauri::command]
 pub fn update_settings(
+    window: tauri::WebviewWindow,
+    app: AppHandle,
+    state: State<AppState>,
+    settings: SettingsPatch,
+) -> Result<(), String> {
+    crate::access::require(&window, "update_settings")?;
+    apply_settings(app, state, settings)
+}
+
+/// `update_settings` past its window check: also the menu bar's way in.
+fn apply_settings(
     app: AppHandle,
     state: State<AppState>,
     settings: SettingsPatch,
@@ -478,13 +545,15 @@ pub fn set_capture_enabled(app: &AppHandle, enabled: bool) -> Result<(), String>
         capture_enabled: Some(enabled),
         ..SettingsPatch::default()
     };
-    update_settings(app.clone(), app.state::<AppState>(), patch)
+    apply_settings(app.clone(), app.state::<AppState>(), patch)
 }
 
 /// Ends a pause from the panel strip or Settings.
 #[tauri::command]
-pub fn resume_capture() {
+pub fn resume_capture(window: tauri::WebviewWindow) -> Result<(), String> {
+    crate::access::require(&window, "resume_capture")?;
     crate::tray::resume_capture();
+    Ok(())
 }
 
 /// «إعادة تشغيل رفّ» — the remedy when the capture loop has stopped. Asked
@@ -492,6 +561,7 @@ pub fn resume_capture() {
 /// simply returns to the menu bar.
 #[tauri::command]
 pub fn restart_app(app: AppHandle, window: tauri::WebviewWindow) -> Result<(), String> {
+    crate::access::require(&window, "restart_app")?;
     crate::relaunch(&app, window.label() == "settings")
 }
 
@@ -574,10 +644,12 @@ const PREVIEW_IMAGE_MAX_BYTES: u64 = 4 * 1024 * 1024;
 /// no thumbnail; the item still pastes.
 #[tauri::command(async)]
 pub fn get_image(
+    window: tauri::WebviewWindow,
     state: State<'_, AppState>,
     id: String,
     full: Option<bool>,
 ) -> Result<Option<String>, String> {
+    crate::access::require(&window, "get_image")?;
     let files = ImageFiles::of(&crate::lock_store(&state.store), &id);
     files.map_or(Ok(None), |files| files.data_url(full.unwrap_or(false)))
 }
@@ -654,21 +726,33 @@ pub fn show_panel(app: AppHandle) {
 }
 
 #[tauri::command]
-pub fn hide_panel(app: AppHandle) {
+pub fn hide_panel(window: tauri::WebviewWindow, app: AppHandle) -> Result<(), String> {
+    crate::access::require(&window, "hide_panel")?;
     panel::hide(&app);
+    Ok(())
 }
 
 /// The side of the panel with room for the preview, or none (Figma
 /// «05 · التفاصيل» 45:5325).
 #[tauri::command]
-pub fn panel_preview_side(app: AppHandle) -> Option<panel::PreviewSide> {
-    panel::preview_side(&app)
+pub fn panel_preview_side(
+    window: tauri::WebviewWindow,
+    app: AppHandle,
+) -> Result<Option<panel::PreviewSide>, String> {
+    crate::access::require(&window, "panel_preview_side")?;
+    Ok(panel::preview_side(&app))
 }
 
 /// Widens the panel window for the preview on `side`, or narrows it back.
 #[tauri::command]
-pub fn set_panel_preview(app: AppHandle, side: Option<panel::PreviewSide>) {
+pub fn set_panel_preview(
+    window: tauri::WebviewWindow,
+    app: AppHandle,
+    side: Option<panel::PreviewSide>,
+) -> Result<(), String> {
+    crate::access::require(&window, "set_panel_preview")?;
     panel::set_preview(&app, side);
+    Ok(())
 }
 
 #[tauri::command]
@@ -698,7 +782,12 @@ pub fn open_accessibility_settings() {
 }
 
 #[tauri::command]
-pub fn firstrun_done(app: AppHandle, state: State<AppState>) -> Result<(), String> {
+pub fn firstrun_done(
+    window: tauri::WebviewWindow,
+    app: AppHandle,
+    state: State<AppState>,
+) -> Result<(), String> {
+    crate::access::require(&window, "firstrun_done")?;
     {
         let mut store = crate::lock_store(&state.store);
         store
@@ -719,11 +808,12 @@ pub struct RunningApp {
 }
 
 #[tauri::command]
-pub fn list_running_apps() -> Vec<RunningApp> {
-    macos::running_apps()
+pub fn list_running_apps(window: tauri::WebviewWindow) -> Result<Vec<RunningApp>, String> {
+    crate::access::require(&window, "list_running_apps")?;
+    Ok(macos::running_apps()
         .into_iter()
         .map(|(name, bundle_id)| RunningApp { name, bundle_id })
-        .collect()
+        .collect())
 }
 
 // ─── helpers shared with main/tray ───────────────────────────────────────────

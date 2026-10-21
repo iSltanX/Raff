@@ -4,6 +4,7 @@
 // for a problem report the user previews and confirms.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod access;
 mod commands;
 mod diagnostics;
 mod macos;

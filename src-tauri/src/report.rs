@@ -369,16 +369,6 @@ fn write_clipboard(app: &AppHandle, text: &str) -> Result<(), String> {
 
 // ─── Commands ─────────────────────────────────────────────────────────────
 
-/// Only the report window may drive a report (and Settings may copy the
-/// diagnostics): the panel, which renders clipboard content, may not.
-fn require_window(window: &tauri::WebviewWindow, allowed: &[&str]) -> Result<(), String> {
-    if allowed.contains(&window.label()) {
-        Ok(())
-    } else {
-        Err(err::INVALID.into())
-    }
-}
-
 /// Reads the macOS version once, off the main thread, at launch.
 pub fn warm() {
     std::thread::spawn(|| {
@@ -396,7 +386,7 @@ pub async fn report_prepare(
     category: Option<String>,
     description: String,
 ) -> Result<Preview, String> {
-    require_window(&window, &["report"])?;
+    crate::access::require(&window, "report_prepare")?;
     let diagnostics = diagnostics::collect(&app);
     let version = app.package_info().version.to_string();
     let mut session = lock();
@@ -418,7 +408,7 @@ pub async fn report_prepare(
 /// Sends the frozen payload (or re-sends it, with the same key).
 #[tauri::command]
 pub async fn report_send(window: tauri::WebviewWindow) -> Result<SendOutcome, String> {
-    require_window(&window, &["report"])?;
+    crate::access::require(&window, "report_send")?;
     let (body, key, blocked, epoch) = {
         let session = lock();
         let frozen = session.frozen.as_ref().ok_or(err::NOT_PREPARED)?;
@@ -468,7 +458,7 @@ pub async fn report_send(window: tauri::WebviewWindow) -> Result<SendOutcome, St
 /// «نسخ البلاغ» — the frozen payload, attachments as {type, bytes}.
 #[tauri::command]
 pub async fn report_copy(app: AppHandle, window: tauri::WebviewWindow) -> Result<(), String> {
-    require_window(&window, &["report"])?;
+    crate::access::require(&window, "report_copy")?;
     let text = {
         let session = lock();
         copy_text(&session.frozen.as_ref().ok_or(err::NOT_PREPARED)?.body)
@@ -483,14 +473,14 @@ pub async fn report_copy_number(
     window: tauri::WebviewWindow,
     id: u64,
 ) -> Result<(), String> {
-    require_window(&window, &["report"])?;
+    crate::access::require(&window, "report_copy_number")?;
     write_clipboard(&app, &format!("#{id}"))
 }
 
 /// «معلومات التشخيص ← نسخ» — the diagnostics object alone. Sends nothing.
 #[tauri::command]
 pub async fn diagnostics_copy(app: AppHandle, window: tauri::WebviewWindow) -> Result<(), String> {
-    require_window(&window, &["settings", "report"])?;
+    crate::access::require(&window, "diagnostics_copy")?;
     let text = serde_json::to_string_pretty(&diagnostics::collect(&app))
         .map_err(|_| err::COPY_FAILED.to_string())?;
     write_clipboard(&app, &text)
@@ -533,7 +523,7 @@ fn forget_image_on_error<T>(result: Result<T, String>) -> Result<T, String> {
 /// Cancelling keeps whatever was attached.
 #[tauri::command]
 pub async fn report_pick_image(window: tauri::WebviewWindow) -> Result<Option<ImageMeta>, String> {
-    require_window(&window, &["report"])?;
+    crate::access::require(&window, "report_pick_image")?;
     forget_image_on_error(pick_image().await)
 }
 
@@ -584,7 +574,7 @@ async fn pick_image() -> Result<Option<ImageMeta>, String> {
 /// stays).
 #[tauri::command]
 pub async fn report_paste_image(window: tauri::WebviewWindow) -> Result<Option<ImageMeta>, String> {
-    require_window(&window, &["report"])?;
+    crate::access::require(&window, "report_paste_image")?;
     let result = match crate::macos::read_image_for_report() {
         crate::macos::PastedImage::Image(bytes) => prepare_off_main(bytes, true).await.map(Some),
         crate::macos::PastedImage::File => Err(err::PASTED_FILE.into()),
@@ -595,7 +585,7 @@ pub async fn report_paste_image(window: tauri::WebviewWindow) -> Result<Option<I
 
 #[tauri::command]
 pub fn report_remove_image(window: tauri::WebviewWindow) {
-    if require_window(&window, &["report"]).is_err() {
+    if !crate::access::allowed(window.label(), "report_remove_image") {
         return;
     }
     let mut session = lock();

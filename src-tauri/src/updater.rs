@@ -239,7 +239,11 @@ struct ErrorPayload {
 /// the install step. Never downloads. Returns a structured `UpdateCheck`; only
 /// a "busy" precondition (another op already running) surfaces as an `Err`.
 #[tauri::command]
-pub async fn check_for_update(app: AppHandle) -> Result<UpdateCheck, String> {
+pub async fn check_for_update(
+    window: tauri::WebviewWindow,
+    app: AppHandle,
+) -> Result<UpdateCheck, String> {
+    crate::access::require(&window, "check_for_update")?;
     {
         let state = app.state::<UpdaterState>();
         let mut inner = state.lock();
@@ -293,7 +297,11 @@ async fn do_check(app: &AppHandle) -> tauri_plugin_updater::Result<Option<Update
 /// or alongside another operation. On failure the machine returns to a
 /// retryable state (the held update is preserved).
 #[tauri::command]
-pub async fn download_and_install_update(app: AppHandle) -> Result<(), String> {
+pub async fn download_and_install_update(
+    window: tauri::WebviewWindow,
+    app: AppHandle,
+) -> Result<(), String> {
+    crate::access::require(&window, "download_and_install_update")?;
     let update = {
         let state = app.state::<UpdaterState>();
         let mut inner = state.lock();
@@ -378,7 +386,8 @@ pub async fn download_and_install_update(app: AppHandle) -> Result<(), String> {
 /// after this process has fully exited and released the single-instance
 /// socket, and brings the user back to Settings.
 #[tauri::command]
-pub async fn restart_to_update(app: AppHandle) -> Result<(), String> {
+pub async fn restart_to_update(window: tauri::WebviewWindow, app: AppHandle) -> Result<(), String> {
+    crate::access::require(&window, "restart_to_update")?;
     {
         let state = app.state::<UpdaterState>();
         let inner = state.lock();
@@ -426,7 +435,12 @@ pub fn open_updates(app: AppHandle) {
 /// Returns true to exactly one caller; every later caller gets false, so the
 /// menu can never trigger two checks.
 #[tauri::command]
-pub fn consume_update_intent() -> bool {
+pub fn consume_update_intent(window: tauri::WebviewWindow) -> Result<bool, String> {
+    crate::access::require(&window, "consume_update_intent")?;
+    Ok(take_update_intent())
+}
+
+fn take_update_intent() -> bool {
     PENDING_MENU_CHECK.swap(false, Ordering::SeqCst)
 }
 
@@ -505,9 +519,9 @@ mod tests {
         // A menu click sets the flag; exactly one claimer sees it, so the tray
         // entry point can never trigger two checks for one click.
         PENDING_MENU_CHECK.store(true, Ordering::SeqCst);
-        assert!(consume_update_intent());
-        assert!(!consume_update_intent());
-        assert!(!consume_update_intent());
+        assert!(take_update_intent());
+        assert!(!take_update_intent());
+        assert!(!take_update_intent());
     }
 
     #[test]
