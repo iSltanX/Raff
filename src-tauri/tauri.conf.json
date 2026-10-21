@@ -23,18 +23,11 @@
         "closable": false,
         "decorations": false,
         "transparent": true,
-        "shadow": true,
+        "shadow": false,
         "visible": false,
         "alwaysOnTop": true,
         "skipTaskbar": true,
-        "acceptFirstMouse": true,
-        "windowEffects": {
-          "effects": [
-            "popover"
-          ],
-          "state": "active",
-          "radius": 16
-        }
+        "acceptFirstMouse": true
       }
     ],
     "security": {

@@ -112,8 +112,9 @@ pub fn init(app: &AppHandle) -> tauri::Result<()> {
         .get_webview_window(PANEL_LABEL)
         .expect("panel window missing from tauri.conf.json");
 
-    // The native popover material (tauri.conf.json `windowEffects`, 16pt
-    // radius) sits under a translucent CSS surface of the same radius.
+    // Flat: no native material and no window shadow (tauri.conf.json). The
+    // window is transparent only so the opaque CSS surface keeps its 16pt
+    // corners; a 1px line, not a shadow, separates it from what is behind.
     let panel = window.to_panel()?;
     panel.set_level(PANEL_LEVEL);
     panel.set_style_mask(STYLE_MASK_NON_ACTIVATING_PANEL);

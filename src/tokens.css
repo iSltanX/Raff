@@ -1,7 +1,11 @@
-/* رفّ — design tokens («قريب ومرتب»، 2026-10).
-   Neutral greys (R=G=B), one olive-leaning sage, a clear ink. Cairo sets
-   Arabic; Almarai sets Latin, numerals and key glyphs. Nothing else declares
-   colour. Figma: «Raff · Theme» — each role's codeSyntax.WEB is its name here. */
+/* رفّ — design tokens: «نجدي · طين وقرميد» (2026-10-21).
+   Warm sand for every surface, one clay for what is pressed and what was
+   just copied, crimson for danger so an error never reads as an action.
+   Flat: no shadows, no gradients, no frosted glass — layers part by tone and
+   a 1px line. Cairo sets headings, Almarai the interface, Inter numerals and
+   Latin runs, JetBrains Mono code. Every length sits on a 4pt grid.
+   Figma XCNmucSuAe007qWHnOXQpW, collection «Color»: each role's
+   codeSyntax.WEB is its name here. */
 
 @font-face { font-family: 'Cairo'; src: url('fonts/Cairo-Regular.ttf') format('truetype'); font-weight: 400; font-display: block; }
 @font-face { font-family: 'Cairo'; src: url('fonts/Cairo-Medium.ttf') format('truetype'); font-weight: 500; font-display: block; }
@@ -9,15 +13,23 @@
 @font-face { font-family: 'Cairo'; src: url('fonts/Cairo-Bold.ttf') format('truetype'); font-weight: 700; font-display: block; }
 @font-face { font-family: 'Almarai'; src: url('fonts/Almarai-Regular.ttf') format('truetype'); font-weight: 400; font-display: block; }
 @font-face { font-family: 'Almarai'; src: url('fonts/Almarai-Bold.ttf') format('truetype'); font-weight: 700; font-display: block; }
+@font-face { font-family: 'Inter'; src: url('fonts/Inter-Regular.ttf') format('truetype'); font-weight: 400; font-display: block; }
+@font-face { font-family: 'Inter'; src: url('fonts/Inter-Medium.ttf') format('truetype'); font-weight: 500; font-display: block; }
+@font-face { font-family: 'Inter'; src: url('fonts/Inter-SemiBold.ttf') format('truetype'); font-weight: 600; font-display: block; }
+@font-face { font-family: 'JetBrains Mono'; src: url('fonts/JetBrainsMono-Regular.ttf') format('truetype'); font-weight: 400; font-display: block; }
+@font-face { font-family: 'JetBrains Mono'; src: url('fonts/JetBrainsMono-Medium.ttf') format('truetype'); font-weight: 500; font-display: block; }
 
 :root {
   color-scheme: light;
 
-  --font-ar: 'Cairo', system-ui, sans-serif;
-  --font-latin: 'Almarai', 'Cairo', system-ui, sans-serif;
-  --font-mono: ui-monospace, 'SF Mono', Menlo, monospace;
+  /* Type — four roles, four families. */
+  --font-heading: 'Cairo', system-ui, sans-serif;
+  --font-ui: 'Almarai', 'Cairo', system-ui, sans-serif;
+  --font-ar: var(--font-ui);
+  --font-latin: 'Inter', 'Almarai', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, Menlo, monospace;
 
-  /* Type scale */
+  /* Type scale — line heights on the 4pt grid. */
   /* A reference number the user may copy by eye (the report's #id). */
   --text-figure: 28px;
   --text-display: 20px;
@@ -26,11 +38,15 @@
   --text-small: 12px;
   --text-caption: 11px;
   --leading: 1.5;
+  --line-figure: 40px;
+  --line-display: 32px;
+  --line-title: 24px;
+  --line-body: 20px;
+  --line-tight: 16px;
 
-  /* Spacing — a closed scale; nothing in between. */
+  /* Spacing — a closed 4pt scale; 2 is an optical nudge only. */
   --space-2: 2px;
   --space-4: 4px;
-  --space-6: 6px;
   --space-8: 8px;
   --space-12: 12px;
   --space-16: 16px;
@@ -38,73 +54,72 @@
   --space-24: 24px;
   --space-32: 32px;
   --space-40: 40px;
+  --space-48: 48px;
+  --space-64: 64px;
 
-  /* Surfaces */
-  --bg-window: #fafafa;
-  --bg-canvas: #f3f3f3;
+  /* Surfaces — the shelf layers: window, raised, floating. */
+  --bg-window: #fcfaf7;
+  --bg-canvas: #f5f1ea;
   --bg-raised: #ffffff;
   --bg-sunken: rgba(0, 0, 0, 0.055);
-  --bg-glass: rgba(250, 250, 250, 0.84);
+  /* The floating panel. Opaque: flat, not frosted. */
+  --bg-glass: #fcfaf7;
   --bg-hover: rgba(0, 0, 0, 0.045);
   --bg-pressed: rgba(0, 0, 0, 0.08);
-  --bg-selected: #e5e9e0;
+  --bg-selected: #f6e4da;
   --bg-overlay: rgba(0, 0, 0, 0.28);
-  --bg-inverse: #1f1f1f;
+  --bg-inverse: #221e1b;
   --inverse-wash: rgba(255, 255, 255, 0.12);
-  --danger-on-inverse: #e89b92;
+  --danger-on-inverse: #f29aab;
 
   /* Lines */
   --line: rgba(0, 0, 0, 0.08);
-  --line-strong: #d9d9d9;
+  --line-strong: #e2dbd0;
   --line-edge: rgba(0, 0, 0, 0.08);
-  --line-input: #949494;
-  --control-off: #949494;
+  --line-input: #857a70;
+  --control-off: #857a70;
 
   /* Ink */
-  --ink: #1a1a1a;
-  --ink-2: #474747;
-  --ink-3: #666666;
-  --ink-disabled: #b3b3b3;
-  --ink-inverse: #f3f3f3;
+  --ink: #1f1915;
+  --ink-2: #4a403a;
+  --ink-3: #6b5f57;
+  --ink-disabled: #b8aea3;
+  --ink-inverse: #f5f1ea;
 
-  /* Accent — sage. `--accent` fills and draws; `--accent-ink` writes. */
-  --accent: #56644c;
-  --accent-hover: #46523e;
-  --accent-ink: #46523e;
-  --accent-soft: #e5e9e0;
+  /* Accent — clay. `--accent` fills and draws; `--accent-ink` writes. */
+  --accent: #a84a24;
+  --accent-hover: #8a3c1d;
+  --accent-ink: #8a3c1d;
+  --accent-soft: #f6e4da;
   --on-accent: #ffffff;
-  --accent-on-inverse: #a5b199;
-  --brand-ink: #1a1a1a;
-  --brand-sage: #86947b;
-  --focus: #6b7a60;
+  --accent-on-inverse: #ef9d79;
+  --brand-ink: #1f1915;
+  --brand-accent: #c25a2f;
+  --focus: #c25a2f;
 
   /* Status — one tone per state, wherever the state appears. */
-  --success: #56644c;
-  --success-ink: #46523e;
-  --success-soft: #f2f4ef;
-  --warning: #b0842c;
-  --warning-ink: #7d5b17;
-  --warning-soft: #f8f1e2;
-  --danger: #a83a2e;
-  --danger-ink: #a83a2e;
-  --danger-soft: #fbefed;
+  --success: #2c7a47;
+  --success-ink: #23633a;
+  --success-soft: #ecf6ef;
+  --warning: #b5842a;
+  --warning-ink: #795714;
+  --warning-soft: #fbf3e4;
+  --danger: #b4233f;
+  --danger-ink: #b4233f;
+  --danger-soft: #fcedf0;
   --on-danger: #ffffff;
 
-  --toggle-off: #949494;
+  --toggle-off: #857a70;
   --knob: #ffffff;
 
   /* Geometry — radius tiers by object, not by component. */
-  --radius-xs: 4px;  /* keycap, badge */
-  --radius-sm: 6px;  /* row action, thumbnail */
-  --radius-md: 8px;  /* button, field, kind well, row */
-  --radius-lg: 12px; /* card, callout, toast */
-  --radius-xl: 16px; /* panel, window */
+  --radius-xs: 4px;  /* keycap, badge, checkbox */
+  --radius-md: 8px;  /* button, field, row, row action, thumbnail */
+  --radius-lg: 12px; /* card, callout, toast, settings group */
+  --radius-xl: 16px; /* panel, window, state art */
+  --radius-2xl: 24px; /* onboarding art */
   --radius-panel: 16px;
   --radius-full: 999px;
-
-  --shadow-float: 0 1px 2px rgba(0, 0, 0, 0.08), 0 12px 32px rgba(0, 0, 0, 0.14);
-  --shadow-control: 0 1px 1px rgba(0, 0, 0, 0.06);
-  --shadow-knob: 0 1px 2px rgba(0, 0, 0, 0.25);
 
   /* Motion */
   --t-fast: 120ms;
@@ -115,56 +130,52 @@
 :root[data-appearance='dark'] {
   color-scheme: dark;
 
-  --bg-window: #1f1f1f;
-  --bg-canvas: #151515;
-  --bg-raised: #262626;
+  --bg-window: #221e1b;
+  --bg-canvas: #181411;
+  --bg-raised: #2b2622;
   --bg-sunken: rgba(255, 255, 255, 0.07);
-  --bg-glass: rgba(31, 31, 31, 0.78);
+  --bg-glass: #221e1b;
   --bg-hover: rgba(255, 255, 255, 0.06);
   --bg-pressed: rgba(255, 255, 255, 0.1);
-  --bg-selected: #2a3026;
+  --bg-selected: #3d2419;
   --bg-overlay: rgba(0, 0, 0, 0.5);
-  --bg-inverse: #333333;
+  --bg-inverse: #38312c;
 
   --line: rgba(255, 255, 255, 0.09);
-  --line-strong: #333333;
+  --line-strong: #38312c;
   --line-edge: rgba(255, 255, 255, 0.14);
-  --line-input: #737373;
-  --control-off: #737373;
+  --line-input: #857a70;
+  --control-off: #857a70;
 
-  --ink: #f3f3f3;
-  --ink-2: #cccccc;
-  --ink-3: #a0a0a0;
-  --ink-disabled: #5c5c5c;
-  --ink-inverse: #f3f3f3;
+  --ink: #f5f1ea;
+  --ink-2: #d3cbc1;
+  --ink-3: #a89d92;
+  --ink-disabled: #5e534c;
+  --ink-inverse: #f5f1ea;
 
-  --accent: #a5b199;
-  --accent-hover: #c3cdb9;
-  --accent-ink: #a5b199;
-  --accent-soft: #2a3026;
-  --on-accent: #1a1e17;
-  --accent-on-inverse: #a5b199;
-  --brand-ink: #f3f3f3;
-  --brand-sage: #a5b199;
-  --focus: #a5b199;
+  --accent: #ef9d79;
+  --accent-hover: #f2c3ab;
+  --accent-ink: #ef9d79;
+  --accent-soft: #3d2419;
+  --on-accent: #2a120a;
+  --accent-on-inverse: #ef9d79;
+  --brand-ink: #f5f1ea;
+  --brand-accent: #ef9d79;
+  --focus: #ef9d79;
 
-  --success: #a5b199;
-  --success-ink: #a5b199;
-  --success-soft: #2a3026;
-  --warning: #e0bd73;
-  --warning-ink: #e0bd73;
-  --warning-soft: #332a18;
-  --danger: #e3877d;
-  --danger-ink: #e89b92;
-  --danger-soft: #3a1d19;
-  --on-danger: #101010;
+  --success: #86cf9d;
+  --success-ink: #86cf9d;
+  --success-soft: #183223;
+  --warning: #ebc377;
+  --warning-ink: #ebc377;
+  --warning-soft: #352812;
+  --danger: #ec8094;
+  --danger-ink: #f29aab;
+  --danger-soft: #3e1520;
+  --on-danger: #120f0d;
 
-  --toggle-off: #737373;
-  --knob: #f3f3f3;
-
-  --shadow-float: 0 1px 2px rgba(0, 0, 0, 0.4), 0 16px 40px rgba(0, 0, 0, 0.45);
-  --shadow-control: 0 1px 1px rgba(0, 0, 0, 0.3);
-  --shadow-knob: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --toggle-off: #857a70;
+  --knob: #f5f1ea;
 }
 
 *,
@@ -198,6 +209,19 @@ button {
   cursor: default;
 }
 
+/* Headings are Cairo; everything else in the interface is Almarai. */
+h1,
+h2,
+h3 {
+  font-family: var(--font-heading);
+}
+
+code,
+pre,
+.mono {
+  font-family: var(--font-mono);
+}
+
 :focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
@@ -223,7 +247,7 @@ kbd {
 }
 
 /* A Latin run, shortcut or number inside Arabic prose: an LTR island in
-   Almarai, so «⌘V» never reads «V⌘». */
+   Inter, so «⌘V» never reads «V⌘». */
 bdi,
 .ltr {
   unicode-bidi: isolate;
@@ -252,6 +276,27 @@ bdi,
   background-color: currentColor;
   -webkit-mask: var(--icon) center / contain no-repeat;
   mask: var(--icon) center / contain no-repeat;
+}
+
+/* The mark: two masks sharing one 610 × 377 frame, the shelf in ink and the
+   card in clay. Its box sets the size; the drawing keeps its proportions. */
+.mark-base,
+.mark-card {
+  display: block;
+  -webkit-mask: center / contain no-repeat;
+  mask: center / contain no-repeat;
+}
+
+.mark-base {
+  background: var(--brand-ink);
+  -webkit-mask-image: url('assets/brand/mark-base.svg');
+  mask-image: url('assets/brand/mark-base.svg');
+}
+
+.mark-card {
+  background: var(--brand-accent);
+  -webkit-mask-image: url('assets/brand/mark-card.svg');
+  mask-image: url('assets/brand/mark-card.svg');
 }
 
 @media (prefers-reduced-motion: reduce) {

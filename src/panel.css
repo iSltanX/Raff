@@ -1,5 +1,6 @@
-/* The floating panel — 460 × 540, glass over the native popover material.
-   Figma «06 — Product UI · Panel» (262:26, 265:532, 266:1178, 284:1830). */
+/* The floating panel — 460 × 540, flat and opaque on the desktop: a sand
+   surface with a 1px edge, no material behind it and no shadow under it.
+   Figma XCNmucSuAe007qWHnOXQpW «02 · مساحة العمل» and «Components». */
 
 html,
 body {
@@ -54,7 +55,7 @@ body {
   border: 0;
   outline: 0;
   background: transparent;
-  font-size: 14px;
+  font-size: var(--text-body);
   color: var(--ink);
   -webkit-user-select: text;
   user-select: text;
@@ -86,8 +87,8 @@ body {
 }
 
 .icon-btn {
-  width: 30px;
-  height: 30px;
+  width: 32px;
+  height: 32px;
   border-radius: var(--radius-md);
   transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
 }
@@ -111,13 +112,14 @@ body {
 }
 
 .segment {
-  height: 26px;
+  height: 28px;
   padding: 0 var(--space-12);
   border: 0;
   border-radius: var(--radius-full);
   background: transparent;
   font-size: var(--text-small);
-  font-weight: 500;
+  font-weight: 700;
+  line-height: var(--line-tight);
   color: var(--ink-2);
   transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
 }
@@ -130,7 +132,6 @@ body {
 .segment.is-active {
   background: var(--accent-soft);
   color: var(--accent-ink);
-  font-weight: 600;
 }
 
 .segment:focus-visible {
@@ -145,13 +146,13 @@ body {
   display: flex;
   align-items: center;
   gap: var(--space-8);
-  min-height: 32px;
-  margin: 0 var(--space-8) var(--space-6);
-  padding: var(--space-4) var(--space-8) var(--space-4) var(--space-6);
+  min-height: 36px;
+  margin: 0 var(--space-8) var(--space-8);
+  padding: var(--space-4) var(--space-8);
   border-radius: var(--radius-md);
   background: var(--bg-sunken);
   font-size: var(--text-small);
-  font-weight: 600;
+  font-weight: 700;
   color: var(--ink);
 }
 
@@ -166,13 +167,13 @@ body {
 
 .capture-strip-action {
   flex: none;
-  height: 22px;
+  height: 24px;
   padding: 0 var(--space-8);
   border: 0;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   background: var(--bg-raised);
   font-size: var(--text-caption);
-  font-weight: 600;
+  font-weight: 700;
   color: inherit;
 }
 
@@ -197,7 +198,7 @@ body {
   align-items: center;
   gap: var(--space-12);
   min-height: 44px;
-  padding: var(--space-6) var(--space-8);
+  padding: var(--space-4) var(--space-8);
   border-radius: var(--radius-md);
 }
 
@@ -227,8 +228,8 @@ body {
   position: relative;
   display: grid;
   place-items: center;
-  width: 30px;
-  height: 30px;
+  width: 32px;
+  height: 32px;
   flex: none;
   border-radius: var(--radius-md);
   background: var(--bg-sunken);
@@ -253,7 +254,9 @@ body {
   height: auto;
   border-radius: var(--radius-md);
   background: var(--accent);
-  font-size: var(--text-small);
+  font-family: var(--font-latin);
+  font-size: var(--text-body);
+  font-weight: 500;
   color: var(--on-accent);
 }
 
@@ -282,7 +285,6 @@ body {
 }
 
 .preview-title.is-latin,
-.preview-title.is-code,
 .preview-title.is-link {
   font-family: var(--font-latin);
 }
@@ -293,6 +295,7 @@ body {
 }
 
 .preview-title.is-code {
+  font-family: var(--font-mono);
   font-size: var(--text-small);
   color: var(--ink-2);
 }
@@ -307,14 +310,8 @@ body {
   transition: opacity var(--t-fast) var(--ease);
 }
 
-/* The dark panel is glass: over a bright desktop it composites to about
-   #505050, the worst background these rows are read on. There --ink-3 falls to
-   3.1:1 and --accent-ink to 3.6:1; the next step up in each clears 4.5:1
-   (WCAG 1.4.3) — 5.0:1 and 4.9:1. */
-:root[data-appearance='dark'] .row-time {
-  color: var(--ink-2);
-}
-
+/* Links read in the lighter clay on the dark panel (Figma text/link). The
+   panel is opaque now, so time and links are read on --bg-glass itself. */
 :root[data-appearance='dark'] .preview-title.is-link {
   color: var(--accent-hover);
 }
@@ -325,9 +322,9 @@ body {
   height: 40px;
   flex: none;
   overflow: hidden;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   background: var(--bg-sunken);
-  box-shadow: inset 0 0 0 0.5px var(--line);
+  box-shadow: inset 0 0 0 1px var(--line);
 }
 
 .preview-thumb img {
@@ -406,10 +403,10 @@ body {
 .row-action {
   display: grid;
   place-items: center;
-  width: 26px;
-  height: 26px;
+  width: 28px;
+  height: 28px;
   border: 0;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--ink-2);
 }
@@ -435,8 +432,8 @@ body {
 /* Pinned: a ringed badge on the kind well's outer corner. */
 .row-pin-flag {
   position: absolute;
-  inset-inline-start: 31px;
-  top: 1px;
+  inset-inline-start: 33px;
+  top: 0;
   display: grid;
   place-items: center;
   width: 14px;
@@ -459,7 +456,7 @@ body {
   color: var(--ink-3);
 }
 
-/* ─── States (Figma State View 260:277) ───────────────────────────────── */
+/* ─── States (Figma State View 36:540, «03 · الحالات الفارغة» 40:1823) ── */
 
 .state-view {
   display: flex;
@@ -508,43 +505,28 @@ body {
   inset: 12px;
 }
 
-.mark-base,
-.mark-card {
-  display: block;
-  -webkit-mask: center / contain no-repeat;
-  mask: center / contain no-repeat;
-}
-
-.mark-base {
-  background: var(--brand-ink);
-  -webkit-mask-image: url('assets/brand/mark-base.svg');
-  mask-image: url('assets/brand/mark-base.svg');
-}
-
-.mark-card {
-  background: var(--brand-sage);
-  -webkit-mask-image: url('assets/brand/mark-card.svg');
-  mask-image: url('assets/brand/mark-card.svg');
-}
-
 .state-text {
   display: grid;
   gap: var(--space-4);
 }
 
 .state-title {
+  font-family: var(--font-heading);
   font-size: var(--text-title);
-  font-weight: 700;
+  font-weight: 600;
+  line-height: var(--line-title);
 }
 
 .state-sub {
   max-width: 300px;
   font-size: var(--text-small);
+  line-height: var(--line-body);
   color: var(--ink-2);
 }
 
 .state-hint {
   font-size: var(--text-caption);
+  line-height: var(--line-tight);
   color: var(--ink-3);
 }
 
@@ -568,7 +550,7 @@ body {
 .skeleton-preview {
   display: grid;
   flex: 1;
-  gap: var(--space-6);
+  gap: var(--space-8);
 }
 
 .skeleton-block {
@@ -579,8 +561,8 @@ body {
 }
 
 .skeleton-kind-icon {
-  width: 30px;
-  height: 30px;
+  width: 32px;
+  height: 32px;
   border-radius: var(--radius-md);
 }
 
@@ -600,8 +582,9 @@ body {
   }
 }
 
-/* ─── Feedback (Figma Toast 259:230) ──────────────────────────────────── */
-/* A dark surface in both appearances: no bright flash over a dark panel. */
+/* ─── Feedback (Figma «Toast») ────────────────────────────────────────── */
+/* A dark surface in both appearances: no bright flash over a dark panel.
+   Flat: it parts from the list by tone alone. */
 
 .panel-feedback {
   position: absolute;
@@ -618,11 +601,10 @@ body {
   align-items: center;
   gap: var(--space-8);
   max-width: 100%;
-  min-height: 38px;
-  padding: var(--space-6) var(--space-12) var(--space-6) var(--space-8);
+  min-height: 40px;
+  padding: var(--space-8) var(--space-12) var(--space-8) var(--space-8);
   border-radius: var(--radius-lg);
   background: var(--bg-inverse);
-  box-shadow: var(--shadow-float);
   font-size: var(--text-small);
   color: var(--ink-inverse);
   pointer-events: auto;
@@ -659,12 +641,12 @@ body {
 }
 
 .toast-btn {
-  height: 26px;
+  height: 28px;
   padding: 0 var(--space-12);
   border: 0;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   background: var(--inverse-wash);
-  font-weight: 600;
+  font-weight: 700;
   color: var(--accent-on-inverse);
 }
 
@@ -675,7 +657,7 @@ body {
   }
 }
 
-/* ─── Footer (Figma Panel Footer 261:385) ─────────────────────────────── */
+/* ─── Footer (Figma «Panel Footer») ───────────────────────────────────── */
 
 .panel-footer {
   display: flex;
@@ -692,13 +674,23 @@ body {
   height: 16px;
   flex: none;
   order: 2;
-  opacity: 0.85;
 }
 
 .footer-mark .mark-base,
 .footer-mark .mark-card {
   position: absolute;
   inset: 0;
+}
+
+/* At 16 px the large drawing's gaps melt; the footer uses the pixel-grid one. */
+.footer-mark .mark-base {
+  -webkit-mask-image: url('assets/brand/mark-micro-base.svg');
+  mask-image: url('assets/brand/mark-micro-base.svg');
+}
+
+.footer-mark .mark-card {
+  -webkit-mask-image: url('assets/brand/mark-micro-card.svg');
+  mask-image: url('assets/brand/mark-micro-card.svg');
 }
 
 .footer-shortcuts {
@@ -712,7 +704,7 @@ body {
 .shortcut-hint {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-6);
+  gap: var(--space-4);
   flex: none;
   font-size: var(--text-caption);
   color: var(--ink-3);
