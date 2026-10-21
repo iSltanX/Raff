@@ -116,60 +116,56 @@ pub async fn paste_item(app: &AppHandle, id: &str, plain: bool) -> Result<bool, 
         // processing events, the queue that once held a panel show for 2.5s
         // (`macos::dispatch_to_main`).
         macos::dispatch_to_main(move || {
-            if !ours.start() {
-                crate::startup_trace::mark(
-                    "PASTE called off before it started — nothing hidden, nothing pressed",
-                );
-                return;
-            }
-            crate::startup_trace::mark("PASTE panel_hide requested");
-            panel::hide(&handle);
-            crate::startup_trace::mark(&format!(
-                "PASTE panel_hide done; panel.is_visible()={:?}",
-                handle
-                    .get_webview_panel(panel::PANEL_LABEL)
-                    .map(|p| p.is_visible())
-            ));
-            if let Some(previous) = previous_pid {
-                crate::startup_trace::mark("PASTE activate_app requested");
-                macos::activate_app(previous);
-                crate::startup_trace::mark("PASTE activate_app call returned");
-            } else {
-                crate::startup_trace::mark(
-                    "PASTE no previous app to activate — never remembered or already consumed",
-                );
-            }
-            crate::startup_trace::mark_with(|| {
-                format!(
-                    "PASTE front is the previous app immediately after activate: {}",
-                    previous_pid == Some(macos::frontmost_app().pid)
-                )
-            });
-            let handle2 = handle.clone();
-            std::thread::spawn(move || {
-                std::thread::sleep(Duration::from_millis(ACTIVATE_DELAY_MS));
-                let front_before_paste = macos::frontmost_app();
+            if_claimed(&ours, move || {
+                crate::startup_trace::mark("PASTE panel_hide requested");
+                panel::hide(&handle);
+                crate::startup_trace::mark(&format!(
+                    "PASTE panel_hide done; panel.is_visible()={:?}",
+                    handle
+                        .get_webview_panel(panel::PANEL_LABEL)
+                        .map(|p| p.is_visible())
+                ));
+                if let Some(previous) = previous_pid {
+                    crate::startup_trace::mark("PASTE activate_app requested");
+                    macos::activate_app(previous);
+                    crate::startup_trace::mark("PASTE activate_app call returned");
+                } else {
+                    crate::startup_trace::mark(
+                        "PASTE no previous app to activate — never remembered or already consumed",
+                    );
+                }
                 crate::startup_trace::mark_with(|| {
                     format!(
-                        "PASTE front is the previous app after {ACTIVATE_DELAY_MS}ms wait: {}",
-                        previous_pid == Some(front_before_paste.pid)
+                        "PASTE front is the previous app immediately after activate: {}",
+                        previous_pid == Some(macos::frontmost_app().pid)
                     )
                 });
-                let still_trusted = macos::ax_trusted();
-                let sent = if may_press_paste(still_trusted, front_before_paste.pid, own) {
-                    macos::send_cmd_v()
-                } else {
-                    false
-                };
-                crate::startup_trace::mark(&format!(
-                    "PASTE CGEvent cmd-v: still_trusted={still_trusted} sent={sent}"
-                ));
-                let pasted =
-                    paste_confirmed(still_trusted, sent, previous_pid, front_before_paste.pid);
-                bump_paste_signals(&handle2, &id);
-                crate::startup_trace::mark(&format!("PASTE COMPLETE pasted={pasted}"));
-                let _ = tx.send(pasted);
-            });
+                let handle2 = handle.clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(Duration::from_millis(ACTIVATE_DELAY_MS));
+                    let front_before_paste = macos::frontmost_app();
+                    crate::startup_trace::mark_with(|| {
+                        format!(
+                            "PASTE front is the previous app after {ACTIVATE_DELAY_MS}ms wait: {}",
+                            previous_pid == Some(front_before_paste.pid)
+                        )
+                    });
+                    let still_trusted = macos::ax_trusted();
+                    let sent = if may_press_paste(still_trusted, front_before_paste.pid, own) {
+                        macos::send_cmd_v()
+                    } else {
+                        false
+                    };
+                    crate::startup_trace::mark(&format!(
+                        "PASTE CGEvent cmd-v: still_trusted={still_trusted} sent={sent}"
+                    ));
+                    let pasted =
+                        paste_confirmed(still_trusted, sent, previous_pid, front_before_paste.pid);
+                    bump_paste_signals(&handle2, &id);
+                    crate::startup_trace::mark(&format!("PASTE COMPLETE pasted={pasted}"));
+                    let _ = tx.send(pasted);
+                });
+            })
         });
         await_paste(&rx, &ticket, PASTE_PATIENCE)
     })
@@ -224,6 +220,17 @@ impl PasteTicket {
         self.0
             .compare_exchange(WAITING, by, Ordering::AcqRel, Ordering::Acquire)
             .is_ok()
+    }
+}
+
+/// Runs the paste's main-thread work only when it wins the claim.
+fn if_claimed(ticket: &PasteTicket, work: impl FnOnce()) {
+    if ticket.start() {
+        work();
+    } else {
+        crate::startup_trace::mark(
+            "PASTE called off before it started — nothing hidden, nothing pressed",
+        );
     }
 }
 
@@ -352,10 +359,10 @@ mod tests {
         let presses = Arc::clone(&pressed);
         let late = std::thread::spawn(move || {
             std::thread::sleep(PATIENCE * 3);
-            if ours.start() {
+            if_claimed(&ours, || {
                 presses.fetch_add(1, Ordering::SeqCst);
                 let _ = tx.send(true);
-            }
+            });
         });
 
         assert!(await_paste(&rx, &ticket, PATIENCE).is_err());
@@ -402,7 +409,7 @@ mod tests {
         let src = include_str!("paste.rs");
         let flow = &src
             [src.find("pub async fn paste_item").unwrap()..src.find("struct PasteTicket").unwrap()];
-        let claims = flow.find("if !ours.start()").expect("claimed");
+        let claims = flow.find("if_claimed(&ours, move ||").expect("claimed");
         assert!(claims < flow.find("panel::hide").unwrap());
         assert!(flow.contains("await_paste(&rx, &ticket, PASTE_PATIENCE)"));
         assert!(!flow.contains(".run_on_main_thread("));
