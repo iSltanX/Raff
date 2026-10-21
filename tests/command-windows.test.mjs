@@ -33,19 +33,26 @@ const API = Object.fromEntries(
 function scripts(entry, seen = new Set()) {
   if (seen.has(entry)) return seen;
   seen.add(entry);
-  for (const m of read(entry).matchAll(/^import .* from '\.\/([\w-]+\.js)';/gmu)) {
+  // Static imports over any number of lines, and dynamic `import('./x.js')`.
+  const source = read(entry);
+  const imported = [
+    ...source.matchAll(/^import\b[^;]*?from\s+'\.\/([\w-]+\.js)'/gmu),
+    ...source.matchAll(/\bimport\(\s*'\.\/([\w-]+\.js)'\s*\)/gu),
+  ];
+  for (const m of imported) {
     if (m[1] !== 'store.js' && m[1] !== 'mock.js') scripts(`src/js/${m[1]}`, seen);
   }
   return seen;
 }
 
-/** The commands a page can call: every `.method(` of the API in its scripts. */
+/** The commands a page can call: every `.method` of the API in its scripts,
+ * called or handed on (`run: api.restartApp`, `.then(api.getState)`). */
 function pageCommands(entry) {
   const calls = new Set();
   for (const file of scripts(entry)) {
     const source = read(file);
     for (const [method, command] of Object.entries(API)) {
-      if (new RegExp(`\\.\\s*${method}\\s*(\\?\\.)?\\(`, 'u').test(source)) calls.add(command);
+      if (new RegExp(`\\.\\s*${method}\\b`, 'u').test(source)) calls.add(command);
     }
   }
   return calls;
@@ -65,6 +72,28 @@ function rustTable() {
   );
   return { windows, open };
 }
+
+test('every entry of the IPC layer is read, and no page goes around it', () => {
+  const entries = read('src/js/store.js').match(/^ {2}\w+: /gmu).length;
+  assert.equal(Object.keys(API).length, entries, 'an api entry in an unread shape');
+  for (const file of new Set(Object.values(PAGES).flatMap((entry) => [...scripts(entry)]))) {
+    assert.doesNotMatch(read(file), /__TAURI__\s*\.\s*core\b|\binvoke\s*\(/u, `${file} calls Rust directly`);
+  }
+});
+
+/** Windows other than Settings may only turn capture on or off (`patch_allowed`). */
+test('the panel and the welcome send no setting but capture', () => {
+  for (const entry of [PAGES.panel, PAGES.firstrun]) {
+    const source = read(entry);
+    const calls = [...source.matchAll(/\.\s*updateSettings\(\s*\{([^}]*)\}/gu)];
+    assert.ok(calls.length > 0, entry);
+    for (const [, body] of calls) {
+      const keys = [...body.matchAll(/(\w+)\s*:/gu)].map((m) => m[1]);
+      assert.deepEqual(keys, ['captureEnabled'], `${entry}: ${body}`);
+    }
+    assert.doesNotMatch(source.replace(/\.\s*updateSettings\(\s*\{[^}]*\}/gu, ''), /\.\s*updateSettings\b/u, entry);
+  }
+});
 
 test('the table and the store agree on what exists', () => {
   const { windows, open } = rustTable();

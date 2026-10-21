@@ -82,6 +82,36 @@ pub fn allowed(label: &str, command: &str) -> bool {
         .is_some_and(|(_, windows)| windows.contains(&label))
 }
 
+/// What a window other than Settings may change: capture on or off — the
+/// panel's «تفعيل الالتقاط» and the welcome's answer — and nothing else. Every
+/// field is named, so a new one cannot join the patch unseen.
+pub fn patch_allowed(label: &str, patch: &crate::storage::SettingsPatch) -> bool {
+    let crate::storage::SettingsPatch {
+        hotkey,
+        launch_at_login,
+        history_limit,
+        capture_enabled: _,
+        respect_concealed,
+        excluded_apps,
+        learning_enabled,
+        first_run_shown,
+        appearance,
+        follow_system,
+        retention_days,
+    } = patch;
+    label == "settings"
+        || (hotkey.is_none()
+            && launch_at_login.is_none()
+            && history_limit.is_none()
+            && respect_concealed.is_none()
+            && excluded_apps.is_none()
+            && learning_enabled.is_none()
+            && first_run_shown.is_none()
+            && appearance.is_none()
+            && follow_system.is_none()
+            && retention_days.is_none())
+}
+
 /// The check each guarded command makes first.
 pub fn require(window: &tauri::WebviewWindow, command: &str) -> Result<(), String> {
     if allowed(window.label(), command) {
@@ -109,6 +139,34 @@ mod tests {
         assert!(allowed("settings", "diagnostics_copy"));
         assert!(!allowed("panel", "download_and_install_update"));
         assert!(!allowed("panel", "no_such_command"), "unknown is refused");
+    }
+
+    /// The panel shows clipboard content; it may turn capture on, not change
+    /// the shortcut or the exclusions (review of م٥).
+    #[test]
+    fn only_settings_changes_more_than_capture() {
+        use crate::storage::SettingsPatch;
+        let capture = SettingsPatch {
+            capture_enabled: Some(true),
+            ..SettingsPatch::default()
+        };
+        let hotkey = SettingsPatch {
+            hotkey: Some("Cmd+Shift+V".into()),
+            ..SettingsPatch::default()
+        };
+        let exclusions = SettingsPatch {
+            excluded_apps: Some(vec![]),
+            capture_enabled: Some(true),
+            ..SettingsPatch::default()
+        };
+        for label in ["panel", "firstrun"] {
+            assert!(patch_allowed(label, &capture), "{label}");
+            assert!(!patch_allowed(label, &hotkey), "{label}");
+            assert!(!patch_allowed(label, &exclusions), "{label}");
+        }
+        assert!(patch_allowed("settings", &hotkey));
+        assert!(patch_allowed("settings", &exclusions));
+        assert!(body_of("update_settings").contains("patch_allowed(window.label(), &settings)"));
     }
 
     /// The commands registered with Tauri, read from `main.rs`.
@@ -166,14 +224,18 @@ mod tests {
     fn every_guarded_command_checks_its_window_first() {
         for (name, _) in WINDOWS {
             let body = body_of(name);
-            let check = format!("\"{name}\")");
             let first = body
                 .lines()
                 .map(str::trim)
                 .find(|l| !l.is_empty() && *l != "{" && !l.starts_with("//"))
                 .unwrap_or_default();
+            // The check exactly, with its `?`: a `let _ =` would pass any
+            // looser test and guard nothing. The one command with nothing to
+            // return refuses by returning early.
+            let returns = format!("crate::access::require(&window, \"{name}\")?;");
+            let silent = format!("if !crate::access::allowed(window.label(), \"{name}\") {{");
             assert!(
-                first.contains(&check) && first.contains("access::"),
+                first == returns || first == silent,
                 "{name} starts with: {first}"
             );
         }

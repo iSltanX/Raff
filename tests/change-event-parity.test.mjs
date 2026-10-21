@@ -66,7 +66,7 @@ function rustAnnounces(source = (file) => read(`src-tauri/src/${file}`)) {
   assert.match(apply.slice(0, apply.indexOf('\n}\n')), /\bnotify\(&app\)/u, 'saved settings announce');
   assert.match(
     commands,
-    /pub fn update_settings\([^)]*\)[^{]*\{\s*crate::access::require\(&window, "update_settings"\)\?;\s*apply_settings\(/u
+    /pub fn update_settings\([^)]*\)[^{]*\{\s*crate::access::require\(&window, "update_settings"\)\?;\s*if !crate::access::patch_allowed\([^}]*\}\s*apply_settings\(/u
   );
   announced.add('update_settings');
   return announced;

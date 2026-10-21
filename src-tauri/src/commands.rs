@@ -460,6 +460,9 @@ pub fn update_settings(
     settings: SettingsPatch,
 ) -> Result<(), String> {
     crate::access::require(&window, "update_settings")?;
+    if !crate::access::patch_allowed(window.label(), &settings) {
+        return Err(err::WRONG_WINDOW.into());
+    }
     apply_settings(app, state, settings)
 }
 
