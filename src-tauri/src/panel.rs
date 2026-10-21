@@ -182,7 +182,10 @@ fn centered_origin(window: (f64, f64), area: Rect) -> (f64, f64) {
     )
 }
 
-/// Runs `work` on the main thread and waits for its answer.
+/// Runs `work` on the main thread and waits for its answer. The preview's
+/// commands are synchronous, so Tauri already runs them on the main thread and
+/// `on_main` runs `work` inline; the timeout only bounds an off-main caller,
+/// whose `None` then reads as "no room" rather than a hang.
 fn on_main_sync<T: Send + 'static>(work: impl FnOnce() -> T + Send + 'static) -> Option<T> {
     let (tx, rx) = std::sync::mpsc::channel();
     on_main(move || {
@@ -208,18 +211,25 @@ fn rect_from(native: NSRect) -> Rect {
     }
 }
 
-/// The window's frame and its screen's visible frame, in AppKit points. Only
-/// x and width ever change, so the bottom-left origin needs no conversion.
-fn native_frames(ns: *mut AnyObject) -> Option<(Rect, Rect)> {
+/// The window's frame, in AppKit points. Only x and width ever change, so the
+/// bottom-left origin needs no conversion.
+fn native_frame(ns: *mut AnyObject) -> Rect {
     // SAFETY: `ns` is the panel's live NSWindow, used on the main thread.
+    let frame: NSRect = unsafe { msg_send![&*ns, frame] };
+    rect_from(frame)
+}
+
+/// The visible frame of the window's screen — needed to widen, never to
+/// narrow back (a window between screens has none for a moment).
+fn native_visible_frame(ns: *mut AnyObject) -> Option<Rect> {
+    // SAFETY: as above.
     unsafe {
-        let frame: NSRect = msg_send![&*ns, frame];
         let screen: *mut AnyObject = msg_send![&*ns, screen];
         if screen.is_null() {
             return None;
         }
         let visible: NSRect = msg_send![&*screen, visibleFrame];
-        Some((rect_from(frame), rect_from(visible)))
+        Some(rect_from(visible))
     }
 }
 
@@ -248,8 +258,13 @@ pub fn preview_side(app: &AppHandle) -> Option<PreviewSide> {
         if let Some(open) = preview_open() {
             return Some(open);
         }
-        let (frame, visible) = native_frames(ns_window(&window)?)?;
-        preview_side_for(frame, visible, PREVIEW_EXTRA, PANEL_EDGE_MARGIN)
+        let ns = ns_window(&window)?;
+        preview_side_for(
+            native_frame(ns),
+            native_visible_frame(ns)?,
+            PREVIEW_EXTRA,
+            PANEL_EDGE_MARGIN,
+        )
     })
     .flatten()
 }
@@ -270,9 +285,7 @@ fn apply_preview(window: &tauri::WebviewWindow, side: Option<PreviewSide>) {
     let Some(ns) = ns_window(window) else {
         return;
     };
-    let Some((frame, _)) = native_frames(ns) else {
-        return;
-    };
+    let frame = native_frame(ns);
     let panel = match current {
         Some(open) => narrowed(frame, open, PREVIEW_EXTRA),
         None => frame,

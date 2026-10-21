@@ -529,9 +529,11 @@ fn validate_settings(settings: &Settings) -> Result<(), String> {
 /// the main thread evaluates, so a large screenshot would stall it.
 const PREVIEW_IMAGE_MAX_BYTES: u64 = 4 * 1024 * 1024;
 
-/// `full` is the preview's request for the original picture.
-#[tauri::command]
-pub fn get_image(state: State<AppState>, id: String, full: Option<bool>) -> Option<String> {
+/// `full` is the preview's request for the original picture. Off the main
+/// thread (`async`): reading and encoding a few megabytes there would stall
+/// the menu-bar icon and every window.
+#[tauri::command(async)]
+pub fn get_image(state: State<'_, AppState>, id: String, full: Option<bool>) -> Option<String> {
     let store = crate::lock_store(&state.store);
     image_data_url(&store, &id, full.unwrap_or(false))
 }
@@ -540,17 +542,28 @@ pub fn get_image(state: State<AppState>, id: String, full: Option<bool>) -> Opti
 /// thumbnail write by reading the original image. Older history files can
 /// legitimately contain a stale `thumbFile`, so fallback happens on read
 /// failure rather than only when the field is absent. With `full`, the
-/// original comes first while it is small enough to send.
+/// original comes first while it is small enough to send, then the thumbnail
+/// — never an original past the limit.
 fn image_data_url(store: &Store, id: &str, full: bool) -> Option<String> {
     let item = store.find(id)?;
     let dir = store.images_dir();
-    let original = item.image_file.iter().filter(|file| {
-        full && std::fs::metadata(dir.join(file))
-            .is_ok_and(|meta| meta.len() <= PREVIEW_IMAGE_MAX_BYTES)
-    });
-    let bytes = original
-        .chain(item.thumb_file.iter())
-        .chain(item.image_file.iter())
+    let small = |file: &&String| {
+        std::fs::metadata(dir.join(file)).is_ok_and(|meta| meta.len() <= PREVIEW_IMAGE_MAX_BYTES)
+    };
+    let candidates: Vec<&String> = if full {
+        item.image_file
+            .iter()
+            .filter(small)
+            .chain(item.thumb_file.iter())
+            .collect()
+    } else {
+        item.thumb_file
+            .iter()
+            .chain(item.image_file.iter())
+            .collect()
+    };
+    let bytes = candidates
+        .into_iter()
         .find_map(|file| std::fs::read(dir.join(file)).ok())?;
     Some(format!(
         "data:image/png;base64,{}",
@@ -1106,6 +1119,13 @@ mod tests {
             image_data_url(&store, &id, true),
             Some(format!("data:image/png;base64,{thumbnail}")),
             "too large for the bridge: the thumbnail instead"
+        );
+
+        let (store, id) = image_store(&huge, None);
+        assert_eq!(
+            image_data_url(&store, &id, true),
+            None,
+            "and with no thumbnail, nothing rather than the oversized original"
         );
     }
 
