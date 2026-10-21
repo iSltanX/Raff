@@ -82,6 +82,29 @@ function setProgress(percent) {
 }
 
 function render(state, data = {}) {
+  const hadFocus = updateWindowEl.contains(document.activeElement);
+  paint(state, data);
+  keepFocus(hadFocus);
+}
+
+/** Each state hides the last one's buttons, the pressed one among them: focus
+ * moves to what this state offers, or to the status line saying what is
+ * happening — never to <body> (IMP-08). Parked on the status line, it moves
+ * on as soon as there is something to press. */
+function keepFocus(hadFocus) {
+  const active = document.activeElement;
+  const lost = !active || active === document.body || active.closest('[hidden]') || active === statusEl;
+  if (!hadFocus || !lost) return;
+  const next = [restartBtn, downloadBtn, retryBtn, okBtn, laterBtn].find((button) => !button.hidden);
+  if (next) {
+    next.focus();
+  } else if (active !== statusEl) {
+    statusEl.tabIndex = -1;
+    statusEl.focus();
+  }
+}
+
+function paint(state, data) {
   resizeForState(state, data);
   updateWindowEl.setAttribute(
     'aria-busy',
