@@ -36,6 +36,7 @@ pub fn start(app: AppHandle) {
     start_retention_sweeper(app.clone());
     std::thread::spawn(move || {
         let mut watch = Watch::from(macos::change_count(), Instant::now());
+        macos::keep_activations_since(watch.looked_at);
         let outcome = supervise(|| {
             std::thread::sleep(Duration::from_millis(POLL_MS));
             in_pool(|| poll_once(&app, &mut watch));
@@ -288,11 +289,17 @@ fn poll_once(app: &AppHandle, watch: &mut Watch) {
     let before = Instant::now();
     let glance = macos::change_count();
     let detected_at = Instant::now();
+    // The next window opens at this look, and however long this poll takes,
+    // what happens from then on must stay in the activation log for it. Told
+    // only once this window's rules hold their snapshot of the log: told
+    // sooner, a window longer than the keep could lose its own start.
     let Some(window) = watch.notice(glance, before, detected_at) else {
+        macos::keep_activations_since(watch.looked_at);
         return;
     };
     let state = app.state::<AppState>();
     let rules = Rules::now(&state.store, detected_at, window);
+    macos::keep_activations_since(watch.looked_at);
     let (found, pause_ended) = look(
         &SystemPasteboard,
         &state.own_writes,
@@ -759,6 +766,28 @@ mod tests {
         })
         .join()
         .unwrap();
+    }
+
+    /// Every look tells the activation log where the next window opens, so a
+    /// window without a limit never outlasts the history it reads.
+    #[test]
+    fn every_look_tells_the_log_where_the_next_window_opens() {
+        let src = include_str!("monitor.rs");
+        let poll = &src[src.find("fn poll_once(").unwrap()..src.find("fn look(").unwrap()];
+        let told = "macos::keep_activations_since(watch.looked_at)";
+        let unchanged = &poll[..poll.find("return;").unwrap()];
+        assert!(unchanged.contains(told), "a look that found nothing");
+        let snapshot = poll.find("Rules::now(").unwrap();
+        assert!(
+            poll[snapshot..].contains(told),
+            "a look that found a change"
+        );
+        assert!(
+            !poll[unchanged.len()..snapshot].contains(told),
+            "not before its snapshot"
+        );
+        let start = &src[src.find("pub fn start(").unwrap()..src.find("fn in_pool").unwrap()];
+        assert!(start.contains("macos::keep_activations_since(watch.looked_at)"));
     }
 
     /// And the loop does run every tick that way.

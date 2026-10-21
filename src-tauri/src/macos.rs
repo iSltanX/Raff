@@ -420,16 +420,30 @@ pub fn note_activation(app: FrontApp) {
     let mut log = activation_log()
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
-    forget_old_activations(&mut log, now);
+    let needed = *window_opened().lock().unwrap_or_else(|p| p.into_inner());
+    forget_old_activations(&mut log, now, needed);
     remember_front(app.pid, is_regular_app(app.pid));
     log.push(Activation { at: now, app });
+}
+
+/// Where the capture loop's next window opens: its last look at the count.
+fn window_opened() -> &'static Mutex<Option<Instant>> {
+    static OPENED: OnceLock<Mutex<Option<Instant>>> = OnceLock::new();
+    OPENED.get_or_init(|| Mutex::new(None))
+}
+
+/// Called by the capture loop at every look: nothing from `at` on may be
+/// forgotten, however long the next poll is held up.
+pub fn keep_activations_since(at: Instant) {
+    *window_opened().lock().unwrap_or_else(|p| p.into_inner()) = Some(at);
 }
 
 /// Drops what no capture will ask about any more. The newest activation at or
 /// before the cutoff stays: it is the one still in force, and dropping it
 /// would lose the answer for older windows.
-fn forget_old_activations(log: &mut Vec<Activation>, now: Instant) {
-    let cutoff = now.checked_sub(ACTIVATION_KEEP).unwrap_or(now);
+fn forget_old_activations(log: &mut Vec<Activation>, now: Instant, needed: Option<Instant>) {
+    let by_age = now.checked_sub(ACTIVATION_KEEP).unwrap_or(now);
+    let cutoff = needed.map_or(by_age, |opened| opened.min(by_age));
     let keep_from = log.iter().rposition(|a| a.at <= cutoff).unwrap_or(0);
     log.drain(..keep_from);
 }
@@ -988,10 +1002,51 @@ mod tests {
             act(ago(now, 30_000), "com.agilebits.onepassword7"),
             act(ago(now, 29_000), "com.apple.Terminal"),
         ];
-        forget_old_activations(&mut log, now);
+        forget_old_activations(&mut log, now, Some(ago(now, 35_000)));
         let excluded = vec!["com.agilebits.onepassword7".to_string()];
         let window = Duration::from_millis(35_000);
         assert!(window_has_excluded(&log, &excluded, now, window));
+    }
+
+    /// A poll held up past the log's own keep — seven minutes, the password
+    /// manager in front in the first two and gone before the keep began. The
+    /// window still reaches back to the previous look, and the log must still
+    /// hold what was in front there: a gap in it would read as "nothing
+    /// excluded" and store the copy. No keep, however long, promises that to a
+    /// window without a limit; the loop telling the log where its window opens
+    /// does.
+    #[test]
+    fn a_window_longer_than_the_keep_keeps_its_whole_history() {
+        let now = Instant::now();
+        let opened = ago(now, 7 * 60_000);
+        let mut log = vec![
+            act(ago(now, 8 * 60_000), "com.apple.Safari"),
+            act(ago(now, 6 * 60_000), "com.agilebits.onepassword7"),
+            act(ago(now, 5 * 60_000 + 30_000), "com.apple.Terminal"),
+            act(ago(now, 60_000), "com.apple.Notes"),
+        ];
+        forget_old_activations(&mut log, now, Some(opened));
+        let excluded = vec!["com.agilebits.onepassword7".to_string()];
+        assert!(window_has_excluded(&log, &excluded, now, now - opened));
+        assert_eq!(
+            front_at(&log, now, now - opened).map(|a| a.bundle_id),
+            Some("com.apple.Safari".to_string()),
+            "and the app in force when it opened"
+        );
+    }
+
+    /// Once the loop has looked again, the old part goes as before.
+    #[test]
+    fn what_no_window_needs_is_still_forgotten() {
+        let now = Instant::now();
+        let mut log = vec![
+            act(ago(now, 8 * 60_000), "com.apple.Safari"),
+            act(ago(now, 6 * 60_000), "com.agilebits.onepassword7"),
+            act(ago(now, 60_000), "com.apple.Notes"),
+        ];
+        forget_old_activations(&mut log, now, Some(ago(now, 1_000)));
+        let kept: Vec<_> = log.iter().map(|a| a.app.bundle_id.as_str()).collect();
+        assert_eq!(kept, ["com.agilebits.onepassword7", "com.apple.Notes"]);
     }
 
     #[test]
