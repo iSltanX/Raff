@@ -19,14 +19,20 @@ const PAGE_COMMANDS = [
   ...new Set([...read('src/js/store.js').matchAll(/invoke\('([a-z_]+)'/gu)].map((m) => m[1])),
 ];
 
-/** The commands whose success Rust follows with `raff://changed`. */
-function rustAnnounces() {
-  const commands = read('src-tauri/src/commands.rs');
+const RUST_FILES = readdirSync(path.join(here, '../src-tauri/src')).filter((f) => f.endsWith('.rs'));
+
+/**
+ * The commands whose success Rust follows with `raff://changed`. `source`
+ * gives a Rust file's text, so a test can hand it an edited copy.
+ */
+function rustAnnounces(source = (file) => read(`src-tauri/src/${file}`)) {
+  const commands = source('commands.rs');
   const announced = new Set();
   // Every module, not just commands.rs: a command added elsewhere that
   // announces directly is caught too.
-  for (const file of readdirSync(path.join(here, '../src-tauri/src')).filter((f) => f.endsWith('.rs'))) {
-    for (const block of read(`src-tauri/src/${file}`).split('#[tauri::command]').slice(1)) {
+  for (const file of RUST_FILES) {
+    // Both spellings: `#[tauri::command]` and `#[tauri::command(async)]`.
+    for (const block of source(file).split(/#\[tauri::command(?:\([^)]*\))?\]/u).slice(1)) {
       const name = block.match(/pub (?:async )?fn ([a-z_]+)/u)[1];
       const body = block.slice(0, block.search(/\n\}\n/u));
       if (/\bnotify\(&app\)|emit\("raff:\/\/changed"/u.test(body)) announced.add(name);
@@ -35,24 +41,42 @@ function rustAnnounces() {
 
   // Three announce on the way through another module; each path is checked
   // so the list cannot outlive the code it describes.
-  const paste = read('src-tauri/src/paste.rs');
+  const paste = source('paste.rs');
   const bump = paste.slice(paste.indexOf('fn bump_signals'));
   assert.match(bump.slice(0, bump.indexOf('\n}\n')), /emit\("raff:\/\/changed"/u, 'a counted use announces');
   assert.match(paste, /pub async fn paste_item[^]*?bump_paste_signals\(/u);
-  assert.match(commands, /pub fn copy_item[^]*?paste::bump_copy_signals\(/u);
+  assert.match(commands, /pub (?:async )?fn copy_item[^]*?paste::bump_copy_signals\(/u);
   announced.add('paste_item');
   announced.add('copy_item');
 
-  const tray = read('src-tauri/src/tray.rs');
+  const tray = source('tray.rs');
   const setPause = tray.slice(tray.indexOf('fn set_pause'));
   assert.match(setPause.slice(0, setPause.indexOf('\n}\n')), /emit\("raff:\/\/changed"/u);
-  assert.match(read('src-tauri/src/tray.rs'), /pub fn resume_capture\(\) \{\s*set_pause\(/u);
-  assert.match(commands, /pub fn resume_capture\(\) \{\s*crate::tray::resume_capture\(\)/u);
+  assert.match(tray, /pub fn resume_capture\(\) \{\s*set_pause\(/u);
+  assert.match(commands, /pub (?:async )?fn resume_capture\(\) \{\s*crate::tray::resume_capture\(\)/u);
   announced.add('resume_capture');
   return announced;
 }
 
 const ANNOUNCED = rustAnnounces();
+
+test('a command moved off the main thread is still read as announcing', () => {
+  // `#[tauri::command(async)]` and `pub async fn` are how a command leaves the
+  // main thread. Neither may drop it from the list: the list would then fail
+  // with a diff that says the command stopped announcing, and a new command
+  // written that way would never be asked of the stand-ins at all.
+  const offMain = (text) =>
+    text
+      .replace(/#\[tauri::command\]\n(pub fn (?:delete_item|toggle_pin|undo_delete|clear_history))\b/gu, '#[tauri::command(async)]\n$1')
+      .replace(/#\[tauri::command\]\npub fn (copy_item|reorder_pinned)\b/gu, '#[tauri::command]\npub async fn $1');
+  const edited = read('src-tauri/src/commands.rs');
+  assert.notEqual(offMain(edited), edited, 'the edit reaches the commands it names');
+  const moved = rustAnnounces((file) => {
+    const text = read(`src-tauri/src/${file}`);
+    return file === 'commands.rs' ? offMain(text) : text;
+  });
+  assert.deepEqual([...moved].sort(), [...ANNOUNCED].sort());
+});
 
 test('the list read from Rust is the one this suite expects', () => {
   assert.deepEqual(
