@@ -45,6 +45,12 @@ body {
   color: var(--ink);
 }
 
+/* Focus rests here only when a state offers nothing to press (update.js
+   keepFocus): a place to read from, not a control, so no ring. */
+.update-status:focus {
+  outline: none;
+}
+
 .update-status.error {
   color: var(--danger-ink);
 }

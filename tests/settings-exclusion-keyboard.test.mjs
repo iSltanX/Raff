@@ -127,6 +127,14 @@ test('settings: the exclusion list works from the keyboard', async (t) => {
     assert.ok(field.getAttribute('aria-describedby').split(' ').includes('excluded-manual-error'));
     type('com.good.id');
     assert.equal(field.hasAttribute('aria-invalid'), false);
+
+    // One already in the list is said to be, not silently ignored.
+    type('com.apple.Terminal');
+    press('Enter');
+    await flush();
+    assert.equal(error.hidden, false);
+    assert.match(doc.getElementById('excluded-manual-error-text').textContent, /مستبعَد بالفعل/u);
+    type('');
   });
 
   await t.test('removing an app gives it back to the picker and keeps focus in the list', async () => {

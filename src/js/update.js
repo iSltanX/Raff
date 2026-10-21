@@ -104,6 +104,13 @@ function keepFocus(hadFocus) {
   }
 }
 
+/** The status line is a live region, and now also where focus may rest:
+ * rewriting it with the same words on every progress event would have it
+ * announced again each time. */
+function say(text) {
+  if (statusEl.textContent !== text) statusEl.textContent = text;
+}
+
 function paint(state, data) {
   resizeForState(state, data);
   updateWindowEl.setAttribute(
@@ -127,19 +134,19 @@ function paint(state, data) {
 
   switch (state) {
     case 'checking':
-      statusEl.textContent = 'جارٍ التحقق من وجود تحديثات…';
+      say('جارٍ التحقق من وجود تحديثات…');
       subEl.textContent = CHECKING_SUB;
       break;
 
     case 'uptodate':
-      statusEl.textContent = data.currentVersion
+      say(data.currentVersion
         ? `لا توجد تحديثات — الإصدار الحالي ${arabicDigits(data.currentVersion)}`
-        : 'لا توجد تحديثات';
+        : 'لا توجد تحديثات');
       okBtn.hidden = false;
       break;
 
     case 'available':
-      statusEl.textContent = 'إصدار جديد متاح';
+      say('إصدار جديد متاح');
       subEl.textContent = 'الحزمة موقّعة، ويرفض رفّ ما لا يطابق توقيعه.';
       availableEl.hidden = false;
       newVersionEl.textContent = `الإصدار ${arabicDigits(data.version)}`;
@@ -155,18 +162,18 @@ function paint(state, data) {
       availableEl.hidden = false; // keep the version context visible
       progressEl.hidden = false;
       setProgress(data.percent ?? null);
-      statusEl.textContent = 'جارٍ تنزيل التحديث…';
+      say('جارٍ تنزيل التحديث…');
       break;
 
     case 'installing':
       availableEl.hidden = false;
       progressEl.hidden = false;
       setProgress(null); // install has no byte progress
-      statusEl.textContent = 'جارٍ تثبيت التحديث…';
+      say('جارٍ تثبيت التحديث…');
       break;
 
     case 'installed':
-      statusEl.textContent = 'اكتمل التثبيت';
+      say('اكتمل التثبيت');
       subEl.textContent = 'أعد تشغيل رفّ لإكمال التثبيت. لا يُفقد شيء من سجلّك.';
       restartBtn.hidden = false;
       laterBtn.hidden = false;
@@ -176,7 +183,7 @@ function paint(state, data) {
       statusEl.classList.add('error');
       statusEl.setAttribute('role', 'alert');
       statusEl.setAttribute('aria-live', 'assertive');
-      statusEl.textContent = data.message || 'حدث خطأ';
+      say(data.message || 'حدث خطأ');
       lastErrorFrom = data.from || 'check';
       if (lastErrorFrom === 'restart') {
         // The appropriate retry for a failed restart is the restart button
@@ -189,7 +196,7 @@ function paint(state, data) {
       break;
 
     default:
-      statusEl.textContent = 'جارٍ التحقق من وجود تحديثات…';
+      say('جارٍ التحقق من وجود تحديثات…');
       subEl.textContent = CHECKING_SUB;
   }
 }

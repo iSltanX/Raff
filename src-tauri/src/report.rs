@@ -486,8 +486,13 @@ pub async fn diagnostics_copy(app: AppHandle, window: tauri::WebviewWindow) -> R
     write_clipboard(&app, &text)
 }
 
-async fn prepare_off_main(bytes: Vec<u8>, from_pasteboard: bool) -> Result<ImageMeta, String> {
-    let epoch = lock().epoch;
+/// `epoch` is the window's the attach started in, as its failure is fenced
+/// by (`forget_image_on_error`): success and failure answer to the same one.
+async fn prepare_off_main(
+    epoch: u64,
+    bytes: Vec<u8>,
+    from_pasteboard: bool,
+) -> Result<ImageMeta, String> {
     let prepared = tauri::async_runtime::spawn_blocking(move || {
         report_image::prepare(&bytes, from_pasteboard)
     })
@@ -532,7 +537,7 @@ fn forget_attach(session: &mut Session, epoch: u64) {
 pub async fn report_pick_image(window: tauri::WebviewWindow) -> Result<Option<ImageMeta>, String> {
     crate::access::require(&window, "report_pick_image")?;
     let epoch = lock().epoch;
-    forget_image_on_error(epoch, pick_image().await)
+    forget_image_on_error(epoch, pick_image(epoch).await)
 }
 
 /// Trims what the report window's `String.trim()` trims, so the count the
@@ -568,7 +573,7 @@ fn read_capped(path: &std::path::Path) -> Result<Vec<u8>, report_image::ImageErr
     Ok(bytes)
 }
 
-async fn pick_image() -> Result<Option<ImageMeta>, String> {
+async fn pick_image(epoch: u64) -> Result<Option<ImageMeta>, String> {
     // The panel runs on the GCD main queue, not inside Tauri's event-loop
     // task: a modal loop nested in that task can re-enter the runtime's
     // locked event handler (a redraw while the panel is up) and hang.
@@ -586,7 +591,7 @@ async fn pick_image() -> Result<Option<ImageMeta>, String> {
             .await
             .map_err(|_| report_image::ImageError::Unreadable.code().to_string())?
             .map_err(|e| e.code().to_string())?;
-    prepare_off_main(bytes, false).await.map(Some)
+    prepare_off_main(epoch, bytes, false).await.map(Some)
 }
 
 /// A paste in the report window: the pasteboard is read at that moment, for
@@ -597,7 +602,9 @@ pub async fn report_paste_image(window: tauri::WebviewWindow) -> Result<Option<I
     crate::access::require(&window, "report_paste_image")?;
     let epoch = lock().epoch;
     let result = match crate::macos::read_image_for_report() {
-        crate::macos::PastedImage::Image(bytes) => prepare_off_main(bytes, true).await.map(Some),
+        crate::macos::PastedImage::Image(bytes) => {
+            prepare_off_main(epoch, bytes, true).await.map(Some)
+        }
         crate::macos::PastedImage::File => Err(err::PASTED_FILE.into()),
         crate::macos::PastedImage::TooLarge => {
             Err(report_image::ImageError::TooLarge.code().to_string())

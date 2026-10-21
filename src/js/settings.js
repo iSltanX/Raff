@@ -712,7 +712,11 @@ manualBundle.addEventListener('keydown', (e) => {
 
 el('add-excluded-manual').addEventListener('click', async () => {
   const bundleId = manualBundle.value.trim();
-  if (!bundleId || settings.excludedApps.includes(bundleId)) return;
+  if (!bundleId) return;
+  if (settings.excludedApps.includes(bundleId)) {
+    showManualError('هذا التطبيق مستبعَد بالفعل.');
+    return;
+  }
 
   const saved = await save((current) => ({
     excludedApps: current.excludedApps.includes(bundleId)

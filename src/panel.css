@@ -467,6 +467,7 @@ body {
 
 .results-end {
   padding: var(--space-12) 0 var(--space-4);
+  overflow-wrap: anywhere;
   text-align: center;
   font-size: var(--text-caption);
   color: var(--ink-3);

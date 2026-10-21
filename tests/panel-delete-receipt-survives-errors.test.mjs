@@ -41,8 +41,11 @@ test('a failed reorder waits behind a delete receipt instead of erasing it', asy
   // Undo settles the receipt; the error that waited is then shown.
   click(dom, doc.getElementById('toast-undo'));
   await flush(10);
-  // The waiting message follows once the receipt has left (TOAST_EXIT_MS).
-  await new Promise((resolve) => setTimeout(resolve, 250));
+  // The waiting message follows once the receipt has left (TOAST_EXIT_MS):
+  // waited for, not timed, so a slow machine does not fail it.
+  for (let waited = 0; waited < 3000 && toast().message === ''; waited += 25) {
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
   await flush(10);
   assert.equal(fake.invokeCount('undo_delete'), 1);
   assert.notEqual(toast().message, 'تم حذف العنصر');

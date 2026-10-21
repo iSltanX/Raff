@@ -417,6 +417,9 @@ function buildRow(item, index) {
     // stays open after the paste, the row shown as chosen must be this one
     // (audit 012).
     setSelection(item.id);
+    // The search field holds the active descendant: a click on a row must not
+    // leave it without focus when the panel stays open after the paste.
+    searchEl.focus({ preventScroll: true });
     paste(item.id, e.altKey);
   });
 
@@ -514,6 +517,9 @@ function buildCard(row, item, index) {
     // stays open after the paste, the row shown as chosen must be this one
     // (audit 012).
     setSelection(item.id);
+    // The search field holds the active descendant: a click on a row must not
+    // leave it without focus when the panel stays open after the paste.
+    searchEl.focus({ preventScroll: true });
     paste(item.id, e.altKey);
   });
   row.append(media, foot);
@@ -693,10 +699,10 @@ function renderList() {
   }
 
   setListStructure(true);
-  listEl.setAttribute('aria-rowcount', String(visible.length + (query ? 1 : 0)));
+  listEl.setAttribute('aria-rowcount', String(visible.length + (query.trim() ? 1 : 0)));
   const fragment = document.createDocumentFragment();
   visible.forEach((item, index) => fragment.append(buildRow(item, index)));
-  if (query) {
+  if (query.trim()) {
     // A grid owns rows and nothing else: the closing line is a row of its
     // own, after the results (audit 021 ج2). It has no id, so the keyboard
     // and the selection, which move over `.row`, never land on it.
@@ -706,7 +712,8 @@ function renderList() {
     end.setAttribute('aria-rowindex', String(visible.length + 1));
     const cell = document.createElement('span');
     cell.setAttribute('role', 'gridcell');
-    cell.textContent = `نهاية نتائج البحث عن «${query}»`;
+    // Isolated: a Latin query must not reorder the Arabic around it.
+    cell.textContent = `نهاية نتائج البحث عن «\u2068${query.trim()}\u2069»`;
     end.append(cell);
     fragment.append(end);
   }
@@ -862,22 +869,38 @@ function heldListFocus() {
   if (!el || el === searchEl || !listEl.contains(el)) return null;
   return {
     id: el.closest('.row[data-id]')?.dataset.id ?? null,
-    classes: [...el.classList],
+    // What the control is, not its state: `is-pinned` flips with the pin.
+    classes: [...el.classList].filter((name) => !name.startsWith('is-')),
+    // A state view's own button (retry, enable capture) has an id.
+    elementId: el.id || null,
   };
 }
+
+/** At the end of the shelf a move button turns off; its opposite does not. */
+const OPPOSITE_MOVE = { 'move-up': 'move-down', 'move-down': 'move-up' };
 
 /** Puts focus back on the same control of the same row — or on search, when
  * that row is gone or the control can no longer be pressed. Left alone when
  * something else has focus by now. */
 function restoreListFocus(held) {
   if (!held || (document.activeElement && document.activeElement !== document.body)) return;
+  const byId = held.elementId && document.getElementById(held.elementId);
+  if (byId && listEl.contains(byId) && !byId.disabled) {
+    byId.focus({ preventScroll: true });
+    return;
+  }
   const row = [...listEl.querySelectorAll('.row[data-id]')].find((r) => r.dataset.id === held.id);
-  const target =
+  const find = (classes) =>
     row &&
-    held.classes.length > 0 &&
+    classes.length > 0 &&
     [...row.querySelectorAll('button, [tabindex]')].find((el) =>
-      held.classes.every((name) => el.classList.contains(name))
+      classes.every((name) => el.classList.contains(name))
     );
+  let target = find(held.classes);
+  const move = held.classes.find((name) => OPPOSITE_MOVE[name]);
+  if (target?.disabled && move) {
+    target = find(held.classes.map((name) => OPPOSITE_MOVE[name] ?? name));
+  }
   if (target && !target.disabled) target.focus({ preventScroll: true });
   else searchEl.focus({ preventScroll: true });
 }

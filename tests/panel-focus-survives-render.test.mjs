@@ -36,13 +36,21 @@ test('focus on a row control stays with that control across a render', async () 
   );
   assert.equal(focused(), 'p1 row-action.move-down', 'still on p1’s «نقل لأسفل»');
 
-  // Moved to the bottom, the same button is disabled: focus goes to search
-  // rather than to a control that cannot be pressed.
+  // Moved to the bottom, the same button is disabled: focus goes to its
+  // opposite, the move that is still possible, not to a dead control.
   click(dom, doc.activeElement);
   await flush(10);
   assert.deepEqual(
     [...doc.querySelectorAll('.row[data-id]')].map((r) => r.dataset.id),
     ['p2', 'p3', 'p1']
   );
-  assert.equal(focused(), 'search');
+  assert.equal(focused(), 'p1 row-action.move-up');
+
+  // A control whose state class flips (the pin: is-pinned) is still found.
+  const pin = doc.querySelector('.row[data-id="p1"] .pin-btn');
+  pin.focus();
+  fake.failCommand('toggle_pin', 'raff/save-failed');
+  click(dom, pin);
+  await flush(10);
+  assert.equal(focused(), 'p1 row-action.pin-btn.is-pinned', 'back on its pin after a failed unpin');
 });

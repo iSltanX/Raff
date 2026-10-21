@@ -37,6 +37,10 @@ test('the combobox tells what its grid holds', async () => {
     assert.equal(child.getAttribute('role'), 'row', `${child.className} is a row`);
   }
 
+  // Spaces are no search: no closing line for «nothing».
+  await type('   ');
+  assert.equal(list.querySelector('.results-end'), null);
+
   await type('لا شيء يطابق');
   assert.equal(list.querySelectorAll('.row[data-id]').length, 0);
   assert.equal(search.getAttribute('aria-expanded'), 'false', 'nothing to move into');
