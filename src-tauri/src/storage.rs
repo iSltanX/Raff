@@ -333,6 +333,11 @@ struct PendingDelete {
     after_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     after_created_at: Option<u64>,
+    /// When the delete happened: a row of the same content dated from then on
+    /// is the copy made inside the undo window (017). Absent in a journal
+    /// written before it was recorded.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    deleted_at: Option<u64>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -396,6 +401,72 @@ pub fn now_ms() -> u64 {
         .unwrap_or(0)
 }
 
+/// A stored image file name that names a file inside `images/` and nothing
+/// else (005). Names are generated (`<uuid>.png`, `<uuid>.thumb.png`), so the
+/// rule can be narrow: ASCII letters, digits, `-`, `_` and single dots, not
+/// starting with a dot, at most 128 bytes. A history file edited by hand, or
+/// damaged, cannot make رفّ read, send or delete anything outside the folder.
+pub(crate) fn is_safe_image_name(name: &str) -> bool {
+    !name.is_empty()
+        && name.len() <= 128
+        && name.as_bytes()[0].is_ascii_alphanumeric()
+        && !name.contains("..")
+        && name
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.'))
+}
+
+/// The path of a stored image, or `None` for a name that would leave the
+/// folder. Every read and delete of an image goes through here.
+pub(crate) fn image_path(images_dir: &Path, name: &str) -> Option<PathBuf> {
+    is_safe_image_name(name).then(|| images_dir.join(name))
+}
+
+/// Drops the image names that fail `is_safe_image_name`: the row stays, as a
+/// picture whose file is unavailable. Reports whether anything changed.
+fn disarm_image_names(items: &mut [ClipItem]) -> bool {
+    let mut changed = false;
+    for item in items.iter_mut() {
+        for name in [&mut item.image_file, &mut item.thumb_file] {
+            if name.as_deref().is_some_and(|n| !is_safe_image_name(n)) {
+                *name = None;
+                changed = true;
+            }
+        }
+    }
+    changed
+}
+
+/// An undo the history no longer has room for: the item would be the one to
+/// leave as it came back (017). A kind, not words — the panel words it (ت٢٣).
+pub(crate) const UNDO_NO_ROOM: &str = "raff/undo-no-room";
+/// The same, because its age is past the retention period, not the count —
+/// not the undo window running out, which is another thing.
+pub(crate) const UNDO_RETENTION: &str = "raff/undo-retention";
+
+/// Adds `from`'s use to `into`: both were the same copy.
+fn fold_counts(into: &mut ClipItem, from: &ClipItem) {
+    into.copy_count = into.copy_count.saturating_add(from.copy_count);
+    into.paste_count = into.paste_count.saturating_add(from.paste_count);
+    into.last_used_at = into.last_used_at.max(from.last_used_at);
+}
+
+/// `item` takes in a newer copy of itself, as a re-copy bumps a row: the
+/// copy's time, source and representations, and both counts. Its own image
+/// files stay; the copy's are the ones to delete.
+fn take_in_copy(item: &mut ClipItem, copy: &ClipItem) {
+    fold_counts(item, copy);
+    if copy.created_at > item.created_at {
+        item.created_at = copy.created_at;
+        item.text.clone_from(&copy.text);
+        item.html.clone_from(&copy.html);
+        item.rtf.clone_from(&copy.rtf);
+        item.source_app.clone_from(&copy.source_app);
+        item.source_app_bundle_id
+            .clone_from(&copy.source_app_bundle_id);
+    }
+}
+
 /// Version prefix on a stored image fingerprint.
 ///
 /// The value is written into `history.json` and used as an identity key, so
@@ -433,14 +504,25 @@ fn migrate_image_hashes(items: &mut [ClipItem], images_dir: &Path) -> bool {
         if item.kind != ItemKind::Image {
             continue;
         }
+        let from_file = |item: &ClipItem| {
+            item.image_file
+                .as_deref()
+                .and_then(|file| image_path(images_dir, file))
+                .and_then(|path| fs::read(path).ok())
+                .map(|bytes| content_hash(&bytes))
+        };
         match item.hash.as_deref() {
             Some(hash) if !hash.starts_with(HASH_PREFIX) => {
-                item.hash = item
-                    .image_file
-                    .as_ref()
-                    .and_then(|file| fs::read(images_dir.join(file)).ok())
-                    .map(|bytes| content_hash(&bytes));
+                item.hash = from_file(item);
                 changed = true;
+            }
+            // ت٨: a row from before fingerprints, whose file is still here,
+            // gets one — or re-copying that picture would make a second row.
+            None => {
+                if let Some(hash) = from_file(item) {
+                    item.hash = Some(hash);
+                    changed = true;
+                }
             }
             _ => {}
         }
@@ -777,6 +859,26 @@ fn load_json<T: serde::de::DeserializeOwned + Default>(path: &Path) -> T {
     load_json_with_status(path).0
 }
 
+/// A journal (pending pin or delete) that does not parse is set aside like a
+/// layer — and then removed (016 ج2). A layer is rewritten by the next save;
+/// a journal is not, so it lingered and was met again at every launch. It is
+/// removed only once a set-aside copy holds exactly its bytes, which also
+/// keeps the images it names alive (`referenced_by_recovery_copies`).
+fn load_journal<T: serde::de::DeserializeOwned + Default>(path: &Path) -> T {
+    let (value, readable) = load_json_with_status(path);
+    if !readable {
+        if let Ok(bytes) = fs::read(path) {
+            let kept = recovery_copies(path)
+                .iter()
+                .any(|(_, copy)| fs::read(copy).is_ok_and(|copy| copy == bytes));
+            if kept {
+                let _ = fs::remove_file(path);
+            }
+        }
+    }
+    value
+}
+
 fn try_save_json<T: Serialize>(path: &Path, value: &T) -> Result<(), String> {
     stage_json(path, value)?.commit()
 }
@@ -1027,8 +1129,8 @@ impl Store {
             // would put its «أبقِه يعمل» ahead of the review this calls for.
             settings.first_run_shown = true;
         }
-        let pending_delete: Option<PendingDelete> = load_json(&dir.join(PENDING_DELETE_FILE));
-        let pending_pin: Option<PendingPin> = load_json(&dir.join(PENDING_PIN_FILE));
+        let pending_delete: Option<PendingDelete> = load_journal(&dir.join(PENDING_DELETE_FILE));
+        let pending_pin: Option<PendingPin> = load_journal(&dir.join(PENDING_PIN_FILE));
         let unreadable_shelf = !(history_metadata_loaded && pinned_metadata_loaded);
         let unreadable_settings = settings.settings_recovered;
         let mut store = Self {
@@ -1044,6 +1146,21 @@ impl Store {
             dirty_signals: DirtySignals::default(),
             unpin_removal: None,
         };
+
+        // 005: before anything reads, sends or deletes a file a row names.
+        if disarm_image_names(&mut store.history) {
+            store.save_history();
+        }
+        if disarm_image_names(&mut store.pinned) {
+            store.save_pinned();
+        }
+        if let Some(pending) = store.pending_delete.as_mut() {
+            disarm_image_names(std::slice::from_mut(&mut pending.item));
+        }
+        if let Some(pending) = store.pending_pin.as_mut() {
+            disarm_image_names(std::slice::from_mut(&mut pending.item));
+            disarm_image_names(&mut pending.dropped);
+        }
 
         store.resolve_interrupted_pin();
         // A toast cannot survive a process restart, so a journal from the
@@ -1637,8 +1754,19 @@ impl Store {
     }
 
     fn delete_files(&self, item: &ClipItem) {
+        self.delete_files_except(item, None);
+    }
+
+    /// Deletes `item`'s image files, sparing any that `keep` names too.
+    fn delete_files_except(&self, item: &ClipItem, keep: Option<&ClipItem>) {
+        let images = self.images_dir();
         for f in [&item.image_file, &item.thumb_file].into_iter().flatten() {
-            let _ = fs::remove_file(self.images_dir().join(f));
+            let shared = keep.is_some_and(|keep| {
+                keep.image_file.as_ref() == Some(f) || keep.thumb_file.as_ref() == Some(f)
+            });
+            if let (false, Some(path)) = (shared, image_path(&images, f)) {
+                let _ = fs::remove_file(path);
+            }
         }
     }
 
@@ -2063,6 +2191,7 @@ impl Store {
             before_created_at: before.as_ref().map(|item| item.1),
             after_id: after.as_ref().map(|item| item.0.clone()),
             after_created_at: after.as_ref().map(|item| item.1),
+            deleted_at: Some(now_ms()),
         });
 
         // Journal first. If the process stops before the layer files land,
@@ -2153,41 +2282,187 @@ impl Store {
     /// or pinned order, so capture de-duplication and concurrent pin mutations
     /// cannot make a numeric index or neighbor position stale.
     pub fn undo_delete(&mut self, token: &str) -> Result<(), String> {
+        // A pin still being written is finished first: the undo may take a
+        // row out of the shelf, and an unfinished pin journal would put it
+        // back afterwards — two of one item.
+        self.try_finish_pending_pin()?;
         let Some(pending) = self.pending_delete.as_ref() else {
             return Err("انتهت مهلة التراجع عن الحذف".into());
         };
         if pending.token != token || self.find(&pending.item.id).is_some() {
             return Err("انتهت مهلة التراجع عن الحذف".into());
         }
-
         let pending = pending.clone();
-        match pending.layer {
-            DeletedLayer::History => {
-                let index = Self::restore_index(&self.history, &pending);
-                self.history.insert(index, pending.item.clone());
-                // Persist the restored layer before removing its journal. If
-                // the process stops between these writes, load() sees the live
-                // item and safely retires the journal instead of finalizing
-                // the deletion.
-                if let Err(err) = try_save_json(&self.dir.join(HISTORY_FILE), &self.history) {
-                    self.history.remove(index);
-                    return Err(err);
+        let deleted = &pending.item;
+
+        // 017: the same content copied again inside the undo window is a row
+        // of its own now, dated from the delete on (a re-copy bumps the row
+        // it lands on). A duplicate already there before — two rows can
+        // predate fingerprints — is not that copy. Bringing the deleted row
+        // back beside the copy would make two of one; the undo folds them
+        // instead, as a re-copy would. A journal from before the delete time
+        // was recorded falls back to "newer than the deleted row".
+        let since = pending
+            .deleted_at
+            .unwrap_or_else(|| deleted.created_at.saturating_add(1));
+        let is_copy = |i: &ClipItem| {
+            i.created_at >= since
+                && Self::same_content(i, deleted.kind, &deleted.text, deleted.hash.as_deref())
+        };
+        let twin = self
+            .history
+            .iter()
+            .position(is_copy)
+            .map(|index| (DeletedLayer::History, index))
+            .or_else(|| {
+                self.pinned
+                    .iter()
+                    .position(is_copy)
+                    .map(|index| (DeletedLayer::Pinned, index))
+            });
+
+        // Only the layers a branch changes are kept for the rollback: history
+        // can weigh tens of megabytes, under the lock the main thread takes.
+        // With a copy, its layer changes (the row folded into, or the copy
+        // taken out), and a pinned item's shelf; without one, the item's own.
+        let changes = |layer: DeletedLayer| match twin {
+            Some((twin_layer, _)) => {
+                twin_layer == layer
+                    || (pending.layer == DeletedLayer::Pinned && layer == DeletedLayer::Pinned)
+            }
+            None => pending.layer == layer,
+        };
+        let history_before = changes(DeletedLayer::History).then(|| self.history.clone());
+        let pinned_before = changes(DeletedLayer::Pinned).then(|| self.pinned.clone());
+        let rollback = |store: &mut Self| {
+            if let Some(history) = &history_before {
+                store.history.clone_from(history);
+            }
+            if let Some(pinned) = &pinned_before {
+                store.pinned.clone_from(pinned);
+            }
+        };
+
+        let written = match (pending.layer, twin) {
+            // A pinned item keeps its pin: it comes back to its place on the
+            // shelf, taking in the copy made meanwhile, which leaves its layer.
+            (DeletedLayer::Pinned, Some((twin_layer, index))) => {
+                let copy = match twin_layer {
+                    DeletedLayer::History => self.history.remove(index),
+                    DeletedLayer::Pinned => self.pinned.remove(index),
+                };
+                let mut item = deleted.clone();
+                take_in_copy(&mut item, &copy);
+                // Its own picture is the one kept — unless its file is gone,
+                // when the copy's healthy one is all there is.
+                let images = self.images_dir();
+                let has_file = item
+                    .image_file
+                    .as_deref()
+                    .and_then(|file| image_path(&images, file))
+                    .is_some_and(|path| path.exists());
+                if item.kind == ItemKind::Image && !has_file && copy.image_file.is_some() {
+                    item.image_file.clone_from(&copy.image_file);
+                    item.thumb_file.clone_from(&copy.thumb_file);
+                }
+                let at = Self::restore_index(&self.pinned, &pending);
+                self.pinned.insert(at, item.clone());
+                // Whatever the restored row no longer names goes: the copy's
+                // files, and the deleted row's own when it took the copy's.
+                let retire = |store: &Self| {
+                    store.delete_files_except(&copy, Some(&item));
+                    store.delete_files_except(deleted, Some(&item));
+                };
+                // The shelf first: a stop between the writes leaves a duplicate
+                // in history, never the item gone with its files.
+                match try_save_json(&self.dir.join(PINNED_FILE), &self.pinned) {
+                    Err(err) => Err(err),
+                    Ok(()) if twin_layer == DeletedLayer::Pinned => {
+                        retire(self);
+                        Ok(())
+                    }
+                    Ok(()) => match try_save_json(&self.dir.join(HISTORY_FILE), &self.history) {
+                        Ok(()) => {
+                            retire(self);
+                            Ok(())
+                        }
+                        Err(err) => {
+                            // The shelf already landed: put it back as the
+                            // rolled-back memory has it, or the disk would
+                            // name this item while memory does not.
+                            rollback(self);
+                            self.rewrite_layer(DeletedLayer::Pinned);
+                            return Err(err);
+                        }
+                    },
                 }
             }
-            DeletedLayer::Pinned => {
-                let index = Self::restore_index(&self.pinned, &pending);
-                self.pinned.insert(index, pending.item.clone());
-                if let Err(err) = try_save_json(&self.dir.join(PINNED_FILE), &self.pinned) {
-                    self.pinned.remove(index);
-                    return Err(err);
-                }
+            // A history item is already back, as the newer copy: that row
+            // stays where the copy put it and carries both counts.
+            (DeletedLayer::History, Some((twin_layer, index))) => {
+                let survivor = match twin_layer {
+                    DeletedLayer::History => &mut self.history[index],
+                    DeletedLayer::Pinned => &mut self.pinned[index],
+                };
+                fold_counts(survivor, deleted);
+                let survivor = survivor.clone();
+                let file = match twin_layer {
+                    DeletedLayer::History => {
+                        try_save_json(&self.dir.join(HISTORY_FILE), &self.history)
+                    }
+                    DeletedLayer::Pinned => {
+                        try_save_json(&self.dir.join(PINNED_FILE), &self.pinned)
+                    }
+                };
+                file.map(|()| self.delete_files_except(deleted, Some(&survivor)))
             }
+            (DeletedLayer::Pinned, None) => {
+                let at = Self::restore_index(&self.pinned, &pending);
+                self.pinned.insert(at, deleted.clone());
+                try_save_json(&self.dir.join(PINNED_FILE), &self.pinned)
+            }
+            // Back to its place in history, which may have filled meanwhile:
+            // the same limits as any copy, so the oldest leaves. If that is
+            // the item itself, it cannot come back, and the panel says why —
+            // its age, or a history with no room left.
+            (DeletedLayer::History, None) => {
+                let at = Self::restore_index(&self.history, &pending);
+                self.history.insert(at, deleted.clone());
+                let dropped = self.prune_history();
+                if dropped.iter().any(|item| item.id == deleted.id) {
+                    let expired = self
+                        .oldest_allowed_ms()
+                        .is_some_and(|oldest| deleted.created_at < oldest);
+                    rollback(self);
+                    self.pending_delete = None;
+                    self.save_pending_delete();
+                    self.delete_files(deleted);
+                    return Err(if expired {
+                        UNDO_RETENTION
+                    } else {
+                        UNDO_NO_ROOM
+                    }
+                    .into());
+                }
+                let saved = try_save_json(&self.dir.join(HISTORY_FILE), &self.history);
+                if saved.is_ok() {
+                    for item in &dropped {
+                        self.delete_files(item);
+                    }
+                }
+                saved
+            }
+        };
+        // Persisted before the journal goes: if the process stops between
+        // these writes, load() sees the live item and retires the receipt.
+        if let Err(err) = written {
+            rollback(self);
+            return Err(err);
         }
 
-        // The unchanged layer needs no write. Removing the journal is the
-        // transaction's final commit point. A failed journal removal does not
-        // invalidate the successful restore: restart recovery sees the live
-        // item and retires the stale receipt without deleting it.
+        // Removing the journal is the transaction's final commit point. A
+        // failed removal does not invalidate the restore: restart recovery
+        // sees the live item and retires the stale receipt without deleting.
         self.pending_delete = None;
         self.save_pending_delete();
         Ok(())
@@ -5384,6 +5659,598 @@ mod audit_tests {
             text.len(),
             out.len(),
             t.elapsed()
+        );
+    }
+}
+
+// م٢ — سلامة البيانات (roadmap-2026-10): 005 أسماء ملفات الصور، و017 دمج
+// التراجع عن الحذف وقصّه، و016 ج2 اليومية التالفة، وت٨ بصم الصور القديمة.
+#[cfg(test)]
+mod data_safety_tests {
+    use super::*;
+
+    fn temp_dir() -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("raff-m2-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(dir.join(IMAGES_DIR)).unwrap();
+        dir
+    }
+
+    fn capture_text(s: &mut Store, text: &str) {
+        s.capture(
+            detect_kind(text),
+            text.into(),
+            None,
+            None,
+            None,
+            None,
+            None,
+            ("Test".into(), "com.test".into()),
+        );
+    }
+
+    /// A stored image row as JSON, with whatever names the file says.
+    fn image_row(id: &str, image: &str, thumb: &str, hash: Option<&str>) -> serde_json::Value {
+        let now = now_ms();
+        let mut row = serde_json::json!({
+            "id": id, "type": "image", "text": "صورة 10×10",
+            "imageFile": image, "thumbFile": thumb,
+            "sourceAppBundleId": "com.test", "sourceApp": "Test",
+            "createdAt": now, "isPinned": false,
+            "copyCount": 1, "pasteCount": 0, "lastUsedAt": now
+        });
+        if let Some(hash) = hash {
+            row["hash"] = serde_json::json!(hash);
+        }
+        row
+    }
+
+    // 005 ────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn an_image_name_has_to_stay_inside_the_images_folder() {
+        for good in [
+            "5f1c9a0e-1b2c-4d5e-8f90-1234567890ab.png",
+            "5f1c9a0e-1b2c-4d5e-8f90-1234567890ab.thumb.png",
+            "original.png",
+            "preview.thumb.png",
+        ] {
+            assert!(is_safe_image_name(good), "{good}");
+        }
+        for bad in [
+            "",
+            "..",
+            "../outside.png",
+            "a/../../outside.png",
+            "/etc/passwd",
+            "sub/inside.png",
+            "back\\slash.png",
+            ".hidden.png",
+            "two..dots.png",
+            &"a".repeat(200),
+        ] {
+            assert!(!is_safe_image_name(bad), "{bad}");
+        }
+    }
+
+    #[test]
+    fn a_row_naming_a_file_outside_is_disarmed_at_load_and_nothing_outside_is_read_or_deleted() {
+        let dir = temp_dir();
+        let outside = dir.join("outside.png");
+        fs::write(&outside, b"not an image of ours").unwrap();
+        let rows = serde_json::json!([image_row(
+            "r1",
+            "../outside.png",
+            "../outside.png",
+            Some("legacy")
+        )]);
+        fs::write(dir.join(HISTORY_FILE), serde_json::to_vec(&rows).unwrap()).unwrap();
+
+        let mut s = Store::load(dir.clone());
+        let item = s.find("r1").expect("the row stays");
+        assert_eq!(item.image_file, None, "its name is dropped, not followed");
+        assert_eq!(item.thumb_file, None);
+        assert_eq!(
+            item.hash, None,
+            "and its fingerprint is not taken from that file"
+        );
+        assert!(
+            !fs::read_to_string(dir.join(HISTORY_FILE))
+                .unwrap()
+                .contains("outside"),
+            "written down, so the next launch does not meet it again"
+        );
+
+        let token = s.delete_reversible("r1").unwrap();
+        s.commit_delete(&token).unwrap();
+        assert!(outside.exists(), "deleting the row deletes nothing outside");
+    }
+
+    #[test]
+    fn an_interrupted_delete_naming_a_file_outside_deletes_nothing_outside() {
+        let dir = temp_dir();
+        let outside = dir.join("outside.png");
+        fs::write(&outside, b"keep me").unwrap();
+        let journal = serde_json::json!({
+            "token": "t", "item": image_row("gone", "../outside.png", "../outside.png", None),
+            "layer": "history", "index": 0
+        });
+        fs::write(
+            dir.join(PENDING_DELETE_FILE),
+            serde_json::to_vec(&journal).unwrap(),
+        )
+        .unwrap();
+
+        let _ = Store::load(dir.clone());
+        assert!(outside.exists());
+        assert!(
+            !dir.join(PENDING_DELETE_FILE).exists(),
+            "the journal is still retired"
+        );
+    }
+
+    // ت٨ ─────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn an_old_image_row_without_a_fingerprint_gets_one_from_its_file() {
+        let dir = temp_dir();
+        fs::write(dir.join(IMAGES_DIR).join("old.png"), b"old picture").unwrap();
+        let rows = serde_json::json!([image_row("old", "old.png", "old.thumb.png", None)]);
+        fs::write(dir.join(HISTORY_FILE), serde_json::to_vec(&rows).unwrap()).unwrap();
+
+        let s = Store::load(dir);
+        assert_eq!(
+            s.find("old").unwrap().hash.as_deref(),
+            Some(content_hash(b"old picture").as_str())
+        );
+    }
+
+    // 017 ────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn undoing_a_delete_folds_into_the_same_text_copied_meanwhile() {
+        let mut s = Store::load(temp_dir());
+        capture_text(&mut s, "x");
+        capture_text(&mut s, "y");
+        let deleted = s.history.iter().find(|i| i.text == "x").unwrap().id.clone();
+        s.find_mut(&deleted).unwrap().copy_count = 4;
+        let token = s.delete_reversible(&deleted).unwrap();
+        capture_text(&mut s, "x"); // copied again inside the undo window
+
+        s.undo_delete(&token).expect("undo succeeds");
+        let xs: Vec<&ClipItem> = s.history.iter().filter(|i| i.text == "x").collect();
+        assert_eq!(xs.len(), 1, "one row, not two");
+        assert_eq!(xs[0].copy_count, 5, "carrying both counts");
+        assert_eq!(s.history[0].text, "x", "where the new copy put it");
+        assert!(s.pending_delete.is_none());
+
+        let reloaded = Store::load(s.dir.clone());
+        assert_eq!(reloaded.history.iter().filter(|i| i.text == "x").count(), 1);
+    }
+
+    #[test]
+    fn undoing_a_pinned_delete_keeps_the_pin_and_takes_in_the_copy_made_meanwhile() {
+        let mut s = Store::load(temp_dir());
+        capture_text(&mut s, "pinned text");
+        let id = s.history[0].id.clone();
+        assert!(s.toggle_pin(&id));
+        s.save_history();
+        s.save_pinned();
+        let token = s.delete_reversible(&id).unwrap();
+        capture_text(&mut s, "pinned text"); // lands in history: the pin is gone for now
+
+        s.undo_delete(&token).expect("undo succeeds");
+        let pinned = s
+            .pinned
+            .iter()
+            .find(|i| i.id == id)
+            .expect("back on the shelf");
+        assert_eq!(pinned.text, "pinned text");
+        assert_eq!(pinned.copy_count, 2, "the copy made meanwhile counts");
+        assert!(
+            s.history.iter().all(|i| i.text != "pinned text"),
+            "and is not left behind in history as a duplicate"
+        );
+    }
+
+    #[test]
+    fn undo_trims_a_history_that_filled_meanwhile() {
+        let mut s = Store::load(temp_dir());
+        s.settings.history_limit = 3;
+        for text in ["a", "b", "c"] {
+            capture_text(&mut s, text);
+        }
+        let b = s.history.iter().find(|i| i.text == "b").unwrap().id.clone();
+        let token = s.delete_reversible(&b).unwrap();
+        capture_text(&mut s, "d"); // history full again: d, c, a
+
+        s.undo_delete(&token).expect("undo succeeds");
+        let texts: Vec<&str> = s.history.iter().map(|i| i.text.as_str()).collect();
+        assert_eq!(
+            texts,
+            ["d", "c", "b"],
+            "b is back and the oldest leaves, as for any copy"
+        );
+    }
+
+    #[test]
+    fn an_undo_the_history_no_longer_has_room_for_says_so() {
+        let mut s = Store::load(temp_dir());
+        s.settings.history_limit = 2;
+        capture_text(&mut s, "a");
+        capture_text(&mut s, "b");
+        let a = s.history.iter().find(|i| i.text == "a").unwrap().id.clone();
+        let token = s.delete_reversible(&a).unwrap();
+        capture_text(&mut s, "c"); // c, b: «a» would now be the one to leave
+
+        assert_eq!(
+            s.undo_delete(&token),
+            Err(UNDO_NO_ROOM.to_string()),
+            "it cannot come back, and the panel says why"
+        );
+        assert!(s.find(&a).is_none());
+        assert!(s.pending_delete.is_none(), "the receipt is spent");
+        assert_eq!(s.history.len(), 2);
+    }
+
+    fn capture_image(s: &mut Store, file: &str, hash: &str) {
+        s.capture(
+            ItemKind::Image,
+            "صورة 10×10".into(),
+            None,
+            None,
+            Some(format!("{file}.png")),
+            Some(format!("{file}.thumb.png")),
+            Some(hash.into()),
+            ("Test".into(), "com.test".into()),
+        );
+    }
+
+    #[test]
+    fn a_pin_still_being_written_is_finished_before_an_undo_reshapes_the_shelf() {
+        let mut s = Store::load(temp_dir());
+        capture_text(&mut s, "t");
+        let deleted = s.history[0].id.clone();
+        assert!(s.toggle_pin(&deleted));
+        let token = s.delete_reversible(&deleted).unwrap();
+        capture_text(&mut s, "t"); // the same text again, in history
+        let copy = s.history[0].id.clone();
+        assert!(s.toggle_pin(&copy)); // pinned too — its journal not yet retired
+        let item = s.find(&copy).unwrap().clone();
+        s.pending_pin = Some(PendingPin {
+            item,
+            desired: true,
+            dropped: Vec::new(),
+        });
+
+        s.undo_delete(&token).expect("undo succeeds");
+        capture_text(&mut s, "something else"); // any later change finishes pins
+        assert_eq!(
+            s.pinned.iter().filter(|i| i.text == "t").count(),
+            1,
+            "one pinned «t», not two"
+        );
+    }
+
+    #[test]
+    fn a_pinned_undo_that_cannot_finish_leaves_the_disk_as_the_memory() {
+        let mut s = Store::load(temp_dir());
+        capture_text(&mut s, "p");
+        let deleted = s.history[0].id.clone();
+        assert!(s.toggle_pin(&deleted));
+        s.save_history();
+        s.save_pinned();
+        let token = s.delete_reversible(&deleted).unwrap();
+        capture_text(&mut s, "p");
+        s.save_history();
+        // history.json can no longer be written: the second of the two writes fails.
+        fs::remove_file(s.dir.join(HISTORY_FILE)).unwrap();
+        fs::create_dir(s.dir.join(HISTORY_FILE)).unwrap();
+
+        assert!(s.undo_delete(&token).is_err());
+        assert!(
+            s.pinned.iter().all(|i| i.id != deleted),
+            "memory rolled back"
+        );
+        let on_disk = fs::read_to_string(s.dir.join(PINNED_FILE)).unwrap();
+        assert!(!on_disk.contains(&deleted), "and the shelf on disk with it");
+        assert!(
+            s.pending_delete.is_some(),
+            "the receipt stays for another try"
+        );
+    }
+
+    #[test]
+    fn an_older_duplicate_is_not_mistaken_for_the_copy_made_meanwhile() {
+        let mut s = Store::load(temp_dir());
+        capture_text(&mut s, "same");
+        let deleted = s.history[0].id.clone();
+        // An older row of the same text (two such rows can predate fingerprints).
+        let mut older = s.history[0].clone();
+        older.id = "older".into();
+        older.created_at -= 60_000;
+        s.history.push(older);
+        let token = s.delete_reversible(&deleted).unwrap();
+
+        s.undo_delete(&token).expect("undo succeeds");
+        assert!(s.find(&deleted).is_some(), "it comes back as itself");
+        assert!(s.find("older").is_some(), "and the older row is left alone");
+    }
+
+    #[test]
+    fn a_pinned_picture_whose_file_is_gone_takes_the_copy_s_file() {
+        let mut s = Store::load(temp_dir());
+        capture_image(&mut s, "lost", "f1:0000000000000001");
+        let images = s.images_dir();
+        // Its picture is gone; its thumbnail outlived it.
+        fs::write(images.join("lost.thumb.png"), b"thumb").unwrap();
+        let deleted = s.history[0].id.clone();
+        assert!(s.toggle_pin(&deleted));
+        let token = s.delete_reversible(&deleted).unwrap();
+        fs::write(images.join("fresh.png"), b"png").unwrap();
+        fs::write(images.join("fresh.thumb.png"), b"thumb").unwrap();
+        capture_image(&mut s, "fresh", "f1:0000000000000001");
+
+        s.undo_delete(&token).expect("undo succeeds");
+        let pinned = s.find(&deleted).unwrap();
+        assert_eq!(
+            pinned.image_file.as_deref(),
+            Some("fresh.png"),
+            "the file that exists"
+        );
+        assert!(images.join("fresh.png").exists(), "and it is kept");
+        assert!(
+            !images.join("lost.thumb.png").exists(),
+            "the thumbnail of the lost picture names nothing now"
+        );
+    }
+
+    #[test]
+    fn an_undo_past_the_retention_period_says_that_rather_than_no_room() {
+        let mut s = Store::load(temp_dir());
+        capture_text(&mut s, "old");
+        let deleted = s.history[0].id.clone();
+        s.find_mut(&deleted).unwrap().created_at = now_ms() - 3 * 86_400_000;
+        s.settings.retention_days = 1;
+        let token = s.delete_reversible(&deleted).unwrap();
+        assert_eq!(s.undo_delete(&token), Err(UNDO_RETENTION.to_string()));
+    }
+
+    #[test]
+    fn a_newer_duplicate_from_before_the_delete_is_not_the_copy_made_meanwhile() {
+        let mut s = Store::load(temp_dir());
+        capture_text(&mut s, "same");
+        let deleted = s.history[0].id.clone();
+        s.find_mut(&deleted).unwrap().created_at -= 120_000;
+        // A newer row of the same text, already there before the delete
+        // (two such rows can predate fingerprints).
+        let mut newer = s.history[0].clone();
+        newer.id = "newer".into();
+        newer.created_at += 60_000;
+        s.history.insert(0, newer);
+        let token = s.delete_reversible(&deleted).unwrap();
+
+        s.undo_delete(&token).expect("undo succeeds");
+        assert!(s.find(&deleted).is_some(), "it comes back as itself");
+        assert_eq!(
+            s.find("newer").unwrap().copy_count,
+            1,
+            "and the row that was already there is not folded into"
+        );
+    }
+
+    /// Writes the files a picture names, so that what an undo deletes or
+    /// keeps can be seen on disk.
+    fn picture_files(s: &Store, names: &[&str]) {
+        for name in names {
+            fs::write(s.images_dir().join(format!("{name}.png")), b"png").unwrap();
+            fs::write(s.images_dir().join(format!("{name}.thumb.png")), b"thumb").unwrap();
+        }
+    }
+
+    fn has_files(s: &Store, name: &str) -> (bool, bool) {
+        let images = s.images_dir();
+        (
+            images.join(format!("{name}.png")).exists(),
+            images.join(format!("{name}.thumb.png")).exists(),
+        )
+    }
+
+    #[test]
+    fn a_pinned_undo_takes_in_a_copy_pinned_meanwhile_and_keeps_its_own_picture() {
+        let mut s = Store::load(temp_dir());
+        picture_files(&s, &["own", "copy"]);
+        capture_image(&mut s, "own", "f1:0000000000000002");
+        let deleted = s.history[0].id.clone();
+        assert!(s.toggle_pin(&deleted));
+        let token = s.delete_reversible(&deleted).unwrap();
+        capture_image(&mut s, "copy", "f1:0000000000000002");
+        let copy = s.history[0].id.clone();
+        assert!(s.toggle_pin(&copy));
+
+        s.undo_delete(&token).expect("undo succeeds");
+        assert_eq!(s.pinned.len(), 1, "one pinned picture, not two");
+        assert_eq!(s.pinned[0].id, deleted);
+        assert_eq!(s.pinned[0].copy_count, 2);
+        assert_eq!(has_files(&s, "own"), (true, true), "its own files stay");
+        assert_eq!(has_files(&s, "copy"), (false, false), "the copy's go");
+        assert_eq!(Store::load(s.dir.clone()).pinned.len(), 1);
+    }
+
+    #[test]
+    fn a_pinned_undo_takes_in_a_copy_from_history_and_keeps_its_own_picture() {
+        let mut s = Store::load(temp_dir());
+        picture_files(&s, &["own", "copy"]);
+        capture_image(&mut s, "own", "f1:0000000000000003");
+        let deleted = s.history[0].id.clone();
+        assert!(s.toggle_pin(&deleted));
+        let token = s.delete_reversible(&deleted).unwrap();
+        capture_image(&mut s, "copy", "f1:0000000000000003");
+
+        s.undo_delete(&token).expect("undo succeeds");
+        assert_eq!(
+            s.pinned[0].image_file.as_deref(),
+            Some("own.png"),
+            "its file exists"
+        );
+        assert!(s.history.is_empty(), "the copy left history");
+        assert_eq!(has_files(&s, "own"), (true, true));
+        assert_eq!(has_files(&s, "copy"), (false, false));
+    }
+
+    #[test]
+    fn a_history_undo_folds_into_a_copy_and_its_own_picture_goes() {
+        let mut s = Store::load(temp_dir());
+        picture_files(&s, &["own", "copy"]);
+        capture_image(&mut s, "own", "f1:0000000000000004");
+        let deleted = s.history[0].id.clone();
+        s.find_mut(&deleted).unwrap().copy_count = 3;
+        let token = s.delete_reversible(&deleted).unwrap();
+        capture_image(&mut s, "copy", "f1:0000000000000004");
+        let copy = s.history[0].id.clone();
+
+        s.undo_delete(&token).expect("undo succeeds");
+        assert!(s.find(&deleted).is_none(), "it is back as the copy");
+        assert_eq!(s.find(&copy).unwrap().copy_count, 4);
+        assert_eq!(
+            has_files(&s, "copy"),
+            (true, true),
+            "the survivor's files stay"
+        );
+        assert_eq!(has_files(&s, "own"), (false, false), "its own go");
+        assert_eq!(
+            Store::load(s.dir.clone()).find(&copy).unwrap().copy_count,
+            4
+        );
+    }
+
+    #[test]
+    fn a_history_undo_folds_into_a_copy_pinned_meanwhile() {
+        let mut s = Store::load(temp_dir());
+        picture_files(&s, &["own", "copy"]);
+        capture_image(&mut s, "own", "f1:0000000000000005");
+        let deleted = s.history[0].id.clone();
+        s.find_mut(&deleted).unwrap().copy_count = 3;
+        let token = s.delete_reversible(&deleted).unwrap();
+        capture_image(&mut s, "copy", "f1:0000000000000005");
+        let copy = s.history[0].id.clone();
+        assert!(s.toggle_pin(&copy));
+
+        s.undo_delete(&token).expect("undo succeeds");
+        assert!(s.find(&deleted).is_none());
+        assert!(s.history.is_empty(), "not back in history beside its pin");
+        assert_eq!(s.pinned[0].id, copy);
+        assert_eq!(s.pinned[0].copy_count, 4, "the pin carries both counts");
+        assert_eq!(has_files(&s, "copy"), (true, true));
+        assert_eq!(has_files(&s, "own"), (false, false));
+        let reloaded = Store::load(s.dir.clone());
+        assert_eq!(reloaded.pinned[0].copy_count, 4);
+    }
+
+    #[test]
+    fn a_history_undo_that_cannot_be_written_deletes_nothing_it_would_have_trimmed() {
+        let mut s = Store::load(temp_dir());
+        s.settings.history_limit = 2;
+        picture_files(&s, &["old"]);
+        capture_image(&mut s, "old", "f1:0000000000000006");
+        let old = s.history[0].id.clone();
+        capture_text(&mut s, "a");
+        let a = s.history[0].id.clone();
+        let token = s.delete_reversible(&a).unwrap();
+        capture_text(&mut s, "b"); // b, old: «a» back would push «old» out
+        s.save_history();
+        fs::remove_file(s.dir.join(HISTORY_FILE)).unwrap();
+        fs::create_dir(s.dir.join(HISTORY_FILE)).unwrap();
+
+        assert!(s.undo_delete(&token).is_err());
+        assert!(s.find(&a).is_none(), "memory rolled back");
+        assert!(
+            s.find(&old).is_some(),
+            "the row it would have trimmed stays"
+        );
+        assert_eq!(has_files(&s, "old"), (true, true), "with its files");
+        assert!(
+            s.pending_delete.is_some(),
+            "the receipt stays for another try"
+        );
+    }
+
+    #[test]
+    fn names_outside_are_disarmed_on_the_shelf_and_in_a_pin_journal() {
+        let dir = temp_dir();
+        let outside = dir.join("outside.png");
+        fs::write(&outside, b"keep me").unwrap();
+        let mut shelf = image_row("p1", "../outside.png", "../outside.png", Some("f1:1"));
+        shelf["isPinned"] = serde_json::json!(true);
+        fs::write(
+            dir.join(PINNED_FILE),
+            serde_json::to_vec(&serde_json::json!([shelf])).unwrap(),
+        )
+        .unwrap();
+        let history = serde_json::json!([image_row("p2", "p2.png", "p2.thumb.png", Some("f1:2"))]);
+        fs::write(
+            dir.join(HISTORY_FILE),
+            serde_json::to_vec(&history).unwrap(),
+        )
+        .unwrap();
+        let journal = serde_json::json!({
+            "item": image_row("p2", "p2.png", "p2.thumb.png", Some("f1:2")),
+            "desired": true,
+            "dropped": [image_row("d1", "../outside.png", "../outside.png", None)]
+        });
+        fs::write(
+            dir.join(PENDING_PIN_FILE),
+            serde_json::to_vec(&journal).unwrap(),
+        )
+        .unwrap();
+
+        let s = Store::load(dir.clone());
+        let p1 = s.find("p1").expect("the pinned row stays");
+        assert_eq!(
+            (p1.image_file.as_ref(), p1.thumb_file.as_ref()),
+            (None, None)
+        );
+        assert!(
+            outside.exists(),
+            "finishing the pin deletes nothing outside"
+        );
+        assert!(
+            !dir.join(PENDING_PIN_FILE).exists(),
+            "the journal is retired"
+        );
+    }
+
+    // 016 ج2 ──────────────────────────────────────────────────────────────
+
+    #[test]
+    fn an_unreadable_journal_is_set_aside_then_removed() {
+        let dir = temp_dir();
+        fs::write(dir.join(PENDING_DELETE_FILE), b"{not json").unwrap();
+        fs::write(dir.join(PENDING_PIN_FILE), b"[also not").unwrap();
+
+        let _ = Store::load(dir.clone());
+        for (journal, copy) in [
+            (PENDING_DELETE_FILE, "pending-delete.json.corrupt"),
+            (PENDING_PIN_FILE, "pending-pin.json.corrupt"),
+        ] {
+            assert!(
+                !dir.join(journal).exists(),
+                "{journal} does not linger to the next launch"
+            );
+            assert!(dir.join(copy).exists(), "{journal}'s bytes are kept aside");
+        }
+    }
+
+    #[test]
+    fn an_unreadable_journal_that_could_not_be_set_aside_stays() {
+        let dir = temp_dir();
+        fs::write(dir.join(PENDING_DELETE_FILE), b"{not json").unwrap();
+        // The copy cannot be written: its staging name is taken by a folder.
+        fs::create_dir(dir.join("pending-delete.json.corrupt.tmp")).unwrap();
+
+        let _ = Store::load(dir.clone());
+        assert!(
+            dir.join(PENDING_DELETE_FILE).exists(),
+            "its bytes are nowhere else, so it is not removed"
         );
     }
 }

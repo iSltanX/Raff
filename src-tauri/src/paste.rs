@@ -27,7 +27,8 @@ pub fn write_item_to_clipboard(app: &AppHandle, id: &str, plain: bool) -> bool {
         let png = item
             .image_file
             .as_ref()
-            .and_then(|f| std::fs::read(store.images_dir().join(f)).ok());
+            .and_then(|f| crate::storage::image_path(&store.images_dir(), f))
+            .and_then(|path| std::fs::read(path).ok());
         if plain {
             (item.kind, item.text.clone(), None, None, png)
         } else {

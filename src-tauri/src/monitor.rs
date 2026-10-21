@@ -286,8 +286,9 @@ fn capture_reading(store_lock: &Mutex<Store>, reading: ClipReading) -> bool {
             i.kind == ItemKind::Image
                 && i.hash.as_deref() == Some(hash.as_str())
                 && i.image_file
-                    .as_ref()
-                    .is_some_and(|file| dir.join(file).exists())
+                    .as_deref()
+                    .and_then(|file| crate::storage::image_path(&dir, file))
+                    .is_some_and(|path| path.exists())
         });
 
         let (image_file, thumb_file) = if dup {

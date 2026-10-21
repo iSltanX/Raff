@@ -1300,6 +1300,8 @@ const ERROR_MESSAGES = {
   'raff/not-found': 'لم يعد هذا العنصر موجودًا.',
   'raff/save-failed': 'تعذّر حفظ التغيير. حاول مرة أخرى.',
   'raff/paste-failed': 'تعذّر اللصق. المحتوى على الحافظة، الصقه بـ \u2066⌘V\u2069.',
+  'raff/undo-no-room': 'لم يعد في سجلّك متّسع لهذا العنصر، فلم يُستعد.',
+  'raff/undo-retention': 'انتهت مدة الاحتفاظ بهذا العنصر، فلم يُستعد.',
 };
 
 /**
@@ -1371,8 +1373,11 @@ function undoLastDelete() {
   enqueueMutation(async () => {
     try {
       await api.undoDelete(pending.token);
-      await refresh();
+      // From here the backend is the authority: it may have folded the row
+      // into a newer copy of it (017) rather than bring it back as it was, so
+      // the painted-back snapshot must not outlive the refresh.
       optimisticRestores.delete(pending.snapshot.item.id);
+      await refresh();
     } catch (err) {
       optimisticRestores.delete(pending.snapshot.item.id);
       removeLocalItem(pending.snapshot.item.id);

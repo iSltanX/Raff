@@ -28,6 +28,10 @@ pub mod err {
     pub const HOTKEY_SHARED: &str = "raff/hotkey-shared";
     /// macOS would not register it.
     pub const HOTKEY_UNAVAILABLE: &str = "raff/hotkey-unavailable";
+    /// The deleted item would leave history the moment it came back.
+    pub const UNDO_NO_ROOM: &str = crate::storage::UNDO_NO_ROOM;
+    /// The same, because it is past the retention period.
+    pub const UNDO_RETENTION: &str = crate::storage::UNDO_RETENTION;
 }
 
 /// Keeps the detail where it is useful — the process log — and hands the
@@ -289,7 +293,13 @@ pub fn delete_item(
 pub fn undo_delete(app: AppHandle, state: State<AppState>, token: String) -> Result<(), String> {
     {
         let mut store = crate::lock_store(&state.store);
-        store.undo_delete(&token).map_err(save_failed)?;
+        store.undo_delete(&token).map_err(|e| {
+            if e == err::UNDO_NO_ROOM || e == err::UNDO_RETENTION {
+                e
+            } else {
+                save_failed(e)
+            }
+        })?;
     }
     notify(&app);
     Ok(())
@@ -547,8 +557,11 @@ pub fn get_image(state: State<'_, AppState>, id: String, full: Option<bool>) -> 
 fn image_data_url(store: &Store, id: &str, full: bool) -> Option<String> {
     let item = store.find(id)?;
     let dir = store.images_dir();
+    // Every name goes through `image_path` (005): one outside images/ is skipped.
+    let path = |file: &String| crate::storage::image_path(&dir, file);
     let small = |file: &&String| {
-        std::fs::metadata(dir.join(file)).is_ok_and(|meta| meta.len() <= PREVIEW_IMAGE_MAX_BYTES)
+        path(file)
+            .is_some_and(|p| std::fs::metadata(p).is_ok_and(|m| m.len() <= PREVIEW_IMAGE_MAX_BYTES))
     };
     let candidates: Vec<&String> = if full {
         item.image_file
@@ -564,7 +577,7 @@ fn image_data_url(store: &Store, id: &str, full: bool) -> Option<String> {
     };
     let bytes = candidates
         .into_iter()
-        .find_map(|file| std::fs::read(dir.join(file)).ok())?;
+        .find_map(|file| path(file).and_then(|p| std::fs::read(p).ok()))?;
     Some(format!(
         "data:image/png;base64,{}",
         base64::engine::general_purpose::STANDARD.encode(bytes)

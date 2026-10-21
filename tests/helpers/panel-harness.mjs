@@ -54,6 +54,8 @@ export function createFakeTauri(initialState, { failTimes = 0 } = {}) {
   let searchResults = [];
   /** Commands forced to reject, and with what — for the error-wording suite. */
   const forcedFailures = new Map();
+  /** Commands answered by the test instead of the fake store. */
+  const overrides = new Map();
   let state = structuredClone(initialState);
   let remainingFailures = failTimes;
   const listeners = new Map();
@@ -77,6 +79,9 @@ export function createFakeTauri(initialState, { failTimes = 0 } = {}) {
         invokeCounts.set(cmd, (invokeCounts.get(cmd) || 0) + 1);
         if (forcedFailures.has(cmd)) {
           return Promise.reject(forcedFailures.get(cmd));
+        }
+        if (overrides.has(cmd)) {
+          return Promise.resolve(overrides.get(cmd)(args, state));
         }
         if (cmd === 'get_state') {
           getStateCalls++;
@@ -219,6 +224,11 @@ export function createFakeTauri(initialState, { failTimes = 0 } = {}) {
     /** Ids `search_items` answers with — the rows whose hidden tail matched. */
     setSearchResults(ids) {
       searchResults = ids;
+    },
+    /** Answers `cmd` with `handler(args, state)` — for a backend outcome the
+     *  fake store does not model (an undo folded into a newer copy). */
+    respond(cmd, handler) {
+      overrides.set(cmd, handler);
     },
     /** Makes one command reject with exactly `reason`, as Rust would. */
     failCommand(cmd, reason) {
