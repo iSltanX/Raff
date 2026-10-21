@@ -92,6 +92,12 @@ pub async fn paste_item(app: &AppHandle, id: &str, plain: bool) -> Result<bool, 
     crate::startup_trace::mark_with(|| {
         format!("PASTE previous app remembered={}", previous_pid.is_some())
     });
+    let own = std::process::id() as i32;
+    if opened_over_raff(previous_pid, own) {
+        crate::startup_trace::mark("PASTE STOPPED HERE: the panel was opened over Raff itself — copied only");
+        bump_paste_signals(app, id);
+        return Ok(false);
+    }
 
     let handle = app.clone();
     let id = id.to_string();
@@ -134,7 +140,7 @@ pub async fn paste_item(app: &AppHandle, id: &str, plain: bool) -> Result<bool, 
                         )
                     });
                     let still_trusted = macos::ax_trusted();
-                    let sent = if still_trusted {
+                    let sent = if may_press_paste(still_trusted, front_before_paste.pid, own) {
                         macos::send_cmd_v()
                     } else {
                         false
@@ -171,6 +177,20 @@ pub async fn paste_item(app: &AppHandle, id: &str, plain: bool) -> Result<bool, 
         panel::show(app);
     }
     Ok(pasted)
+}
+
+/// Whether the panel was opened over one of رفّ's own windows — Settings in
+/// front, say (009). There is no other app to paste into then, and ⌘V would
+/// land in رفّ itself, so the item is only copied, exactly as without the
+/// Accessibility permission.
+fn opened_over_raff(previous_pid: Option<i32>, own: i32) -> bool {
+    previous_pid == Some(own)
+}
+
+/// ⌘V is never synthesized into رفّ itself, whatever put it in front by the
+/// time the keystroke would go out.
+fn may_press_paste(still_trusted: bool, front_pid: i32, own: i32) -> bool {
+    still_trusted && front_pid != own
 }
 
 /// Whether a paste may be reported as done.
@@ -250,6 +270,35 @@ mod tests {
     #[test]
     fn nothing_claimed_about_the_target_leaves_nothing_to_contradict() {
         assert!(paste_confirmed(true, true, None, 99));
+    }
+
+    const OWN: i32 = 777;
+
+    /// 009: Settings was in front when the panel opened, so the app to go
+    /// back to is رفّ. It used to activate itself, find itself in front as
+    /// expected, press ⌘V into its own window and call that a paste.
+    #[test]
+    fn a_panel_opened_over_raff_only_copies() {
+        assert!(opened_over_raff(Some(OWN), OWN));
+        assert!(!opened_over_raff(Some(TARGET), OWN));
+        assert!(!opened_over_raff(None, OWN));
+    }
+
+    #[test]
+    fn no_keystroke_is_pressed_into_raff_itself() {
+        assert!(!may_press_paste(true, OWN, OWN));
+        assert!(may_press_paste(true, TARGET, OWN));
+        assert!(!may_press_paste(false, TARGET, OWN));
+    }
+
+    /// And the paste flow asks both before anything moves or is pressed.
+    #[test]
+    fn the_paste_flow_asks_both() {
+        let src = include_str!("paste.rs");
+        let flow = &src[src.find("pub async fn paste_item").unwrap()..src.find("fn opened_over_raff").unwrap()];
+        let asks = flow.find("opened_over_raff(previous_pid, own)").expect("asked");
+        assert!(asks < flow.find("panel::hide").unwrap(), "before the panel hides");
+        assert!(flow.contains("may_press_paste(still_trusted, front_before_paste.pid, own)"));
     }
 
     #[test]
