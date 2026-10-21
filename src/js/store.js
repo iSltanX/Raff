@@ -55,7 +55,9 @@ export const api = {
   axStatus: () => invoke('ax_status'),
   requestAccessibility: () => invoke('request_accessibility'),
   openAccessibilitySettings: () => invoke('open_accessibility_settings'),
-  firstrunDone: () => invoke('firstrun_done'),
+  // `openPanel`: «افتح رفّ» — Rust opens the panel only once the welcome is
+  // marked done, then closes it (026 ج3).
+  firstrunDone: (openPanel = false) => invoke('firstrun_done', { openPanel }),
   listRunningApps: () => invoke('list_running_apps'),
   checkForUpdate: () => invoke('check_for_update'),
   downloadAndInstallUpdate: () => invoke('download_and_install_update'),

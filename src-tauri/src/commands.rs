@@ -789,6 +789,7 @@ pub fn firstrun_done(
     window: tauri::WebviewWindow,
     app: AppHandle,
     state: State<AppState>,
+    open_panel: Option<bool>,
 ) -> Result<(), String> {
     crate::access::require(&window, "firstrun_done")?;
     {
@@ -796,6 +797,10 @@ pub fn firstrun_done(
         store
             .mark_first_run_shown_persisted()
             .map_err(save_failed)?;
+    }
+    // «افتح رفّ»: only now, with the welcome finished, and before it closes.
+    if open_panel == Some(true) {
+        panel::show(&app);
     }
     if let Some(w) = app.get_webview_window("firstrun") {
         w.close().map_err(|err| err.to_string())?;

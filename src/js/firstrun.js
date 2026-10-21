@@ -273,12 +273,12 @@ function renderSummary() {
   );
 }
 
-async function finishFirstRun() {
+async function finishFirstRun({ openPanel = false } = {}) {
   finishBtn.disabled = true;
   openRaffBtn.disabled = true;
   el('finish-error').hidden = true;
   try {
-    await api.firstrunDone();
+    await api.firstrunDone(openPanel);
   } catch (err) {
     console.error('raff: finishing first run failed', err);
     el('finish-error').hidden = false;
@@ -288,10 +288,10 @@ async function finishFirstRun() {
 }
 
 finishBtn.addEventListener('click', () => void finishFirstRun());
-openRaffBtn.addEventListener('click', async () => {
-  await api.showPanel().catch(() => {});
-  void finishFirstRun();
-});
+// The panel opens from Rust, after the welcome is marked done and before it
+// closes: never over a welcome showing that it could not be finished, and
+// not from a page that closing is about to take away (026 ج3).
+openRaffBtn.addEventListener('click', () => void finishFirstRun({ openPanel: true }));
 
 // Watch from the start: the user may grant the permission directly in System
 // Settings without ever pressing the button. Self-scheduling after each
