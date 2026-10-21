@@ -46,6 +46,8 @@ const productionFiles = Object.freeze([
   'assets/app-icon.png',
   'assets/brand/mark-base.svg',
   'assets/brand/mark-card.svg',
+  'assets/brand/mark-micro-base.svg',
+  'assets/brand/mark-micro-card.svg',
   'assets/brand/menubar.svg',
   'assets/icons/about.svg',
   'assets/icons/accessibility.svg',

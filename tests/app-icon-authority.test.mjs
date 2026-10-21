@@ -1,9 +1,13 @@
-// Exactly one application icon may ship, and it must be the canonical Light one.
+// One application icon ships, drawn for each appearance by design.
 //
-// Raff's release policy is that the macOS application icon is ALWAYS the
-// canonical light mark (light plate, ink shelf, sage card), independent of the
-// system appearance and the Dark icon style — only Raff's own interior UI
-// follows Light/Dark. There is no dark app icon, and none may be added.
+// Until 2026-10-21 Raff's policy was that the macOS icon is ALWAYS the light
+// artwork: macOS 26 restyled the light plate black in Dark Mode and the ink
+// shelf vanished on it, so Icon Composer pinned Dark to the light values. The
+// approved Najdi redesign (Figma XCNmucSuAe007qWHnOXQpW, page 04) draws a real
+// Dark icon instead — a dark sand plate, a light shelf and a lighter clay card —
+// and a one-colour Tinted one. What still holds from that policy: the `dark`
+// entry must be PRESENT (without it macOS generates its own dark icon), the
+// legacy .icns stays the light artwork, and nothing swaps icons at runtime.
 //
 // These assertions target the decision points a regression would actually pass
 // through — what the bundle declares, what the generator writes, and what the
@@ -44,54 +48,44 @@ test('the bundle declares exactly one icon set, and no dark variant', () => {
   );
 });
 
-test('the generator derives every shipped icon from the one brand master', () => {
+test('the generator derives every shipped icon from the one brand construction', () => {
   const gen = read('scripts/gen-icons.mjs');
+  assert.match(gen, /import \* as brand from '\.\/brand-geometry\.mjs';/u);
   assert.match(gen, /const MASTER = 'src\/assets\/app-icon\/raff-app-icon-1024\.png';/u);
-  assert.match(gen, /copyFileSync\(join\(generated, 'icon\.icns'\), 'src-tauri\/icons\/icon\.icns'\)/u);
-  assert.doesNotMatch(gen, /dark-1024|icon-dark/u, 'there is no dark app icon to generate');
+  assert.match(gen, /execFileSync\('iconutil', \['-c', 'icns', iconset, '-o', 'src-tauri\/icons\/icon\.icns'\]\)/u);
+  // Below 64 px the 1024 drawing's gaps melt; the two smallest sizes are drawn
+  // on the pixel grid.
+  assert.match(gen, /\['icon_16x16\.png', brand\.microAppIconSvg\(16\), 16\]/u);
+  assert.match(gen, /\['icon_32x32\.png', brand\.microAppIconSvg\(32\), 32\]/u);
+  assert.doesNotMatch(gen, /dark-1024|icon-dark/u, 'the dark icon lives in Icon Composer, not in a second .icns');
 });
 
-test('the Icon Composer asset pins every appearance to the SAME light artwork', () => {
-  // macOS 26 does not just draw a legacy .icns. It splits the icon into a
-  // background plate and a foreground glyph and restyles the plate per
-  // appearance — which turned Raff's light plate black in Dark Mode.
-  // Shipping an Icon Composer asset is what takes that decision back, and it
-  // only helps if its dark appearance is IDENTICAL to its light one.
-  //
-  // The `dark` entry must be PRESENT, not just equal when present: removing it
-  // does not remove a dark icon, it makes Icon Composer generate one (a black
-  // plate on which the ink shelf vanishes — ictool's Dark rendition).
+const srgb = (hex) => `srgb:${[1, 3, 5].map((i) => (parseInt(hex.slice(i, i + 2), 16) / 255).toFixed(5)).join(',')},1.00000`;
+
+test('the Icon Composer asset draws the designed Light, Dark and Tinted icon', () => {
   const icon = JSON.parse(read('src-tauri/icon-composer/AppIcon.icon/icon.json'));
-  const pinsDark = (specs, what) =>
-    assert.ok(specs.some((s) => s.appearance === 'dark'), `${what} must pin its dark appearance to the light value`);
+  const fill = (specs, appearance) => specs.find((s) => (s.appearance ?? null) === appearance)?.value.solid;
 
-  const fills = icon['fill-specializations'] ?? [];
-  assert.ok(fills.length > 0, 'the icon must declare its background fill');
-  pinsDark(fills, 'the plate');
-  const [first, ...rest] = fills;
-  for (const spec of rest) {
-    assert.deepEqual(
-      spec.value,
-      first.value,
-      `appearance "${spec.appearance}" must reuse the canonical light fill`
-    );
+  const plate = icon['fill-specializations'] ?? [];
+  assert.equal(fill(plate, null), srgb('#f5f1ea'), 'light plate: sand/50');
+  assert.equal(fill(plate, 'dark'), srgb('#221e1b'), 'dark plate: sand/900 — present, so macOS does not invent one');
+
+  const layers = Object.fromEntries((icon.groups ?? []).flatMap((g) => g.layers ?? []).map((l) => [l.name, l]));
+  const designed = { shelf: ['#1f1915', '#f5f1ea'], recent: ['#c25a2f', '#ef9d79'] };
+  assert.deepEqual(Object.keys(layers).sort(), Object.keys(designed).sort());
+  for (const [name, [light, dark]] of Object.entries(designed)) {
+    const specs = layers[name]['fill-specializations'] ?? [];
+    assert.equal(fill(specs, null), srgb(light), `${name} in Light`);
+    assert.equal(fill(specs, 'dark'), srgb(dark), `${name} in Dark`);
+    // Tinted is one colour: the system tints by brightness, so the dark shelf
+    // would fade to nothing next to the card.
+    assert.equal(fill(specs, 'tinted'), srgb('#ffffff'), `${name} in Tinted`);
+    assert.notEqual(layers[name].glass, true, `layer "${name}" must be solid, not glass`);
   }
-
   for (const group of icon.groups ?? []) {
-    for (const layer of group.layers ?? []) {
-      const layerFills = layer['fill-specializations'] ?? [];
-      pinsDark(layerFills, `layer "${layer.name}"`);
-      const [base, ...others] = layerFills;
-      for (const spec of others) {
-        assert.deepEqual(
-          spec.value,
-          base.value,
-          `layer "${layer.name}" must not vary by appearance`
-        );
-      }
-      // A translucent "glass" mark disappears against the light plate.
-      assert.notEqual(layer.glass, true, `layer "${layer.name}" must be solid, not glass`);
-    }
+    assert.equal(group.shadow?.opacity, 0, 'flat: the mark casts no shadow on the plate');
+    assert.equal(group.specular, false);
+    assert.notEqual(group.translucency?.enabled, true);
   }
 });
 
