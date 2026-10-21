@@ -846,6 +846,33 @@ function shortcutHint(keys, label) {
   return hint;
 }
 
+/** The row control holding focus, as what to find again after a rebuild:
+ * its row and its classes. `null` when focus is anywhere else. */
+function heldListFocus() {
+  const el = document.activeElement;
+  if (!el || el === searchEl || !listEl.contains(el)) return null;
+  return {
+    id: el.closest('.row[data-id]')?.dataset.id ?? null,
+    classes: [...el.classList],
+  };
+}
+
+/** Puts focus back on the same control of the same row — or on search, when
+ * that row is gone or the control can no longer be pressed. Left alone when
+ * something else has focus by now. */
+function restoreListFocus(held) {
+  if (!held || (document.activeElement && document.activeElement !== document.body)) return;
+  const row = [...listEl.querySelectorAll('.row[data-id]')].find((r) => r.dataset.id === held.id);
+  const target =
+    row &&
+    held.classes.length > 0 &&
+    [...row.querySelectorAll('button, [tabindex]')].find((el) =>
+      held.classes.every((name) => el.classList.contains(name))
+    );
+  if (target && !target.disabled) target.focus({ preventScroll: true });
+  else searchEl.focus({ preventScroll: true });
+}
+
 /** Contextual keyboard legend. It advertises only actions that can run in the
  * current state, and uses the selected item's real pin state for the label. */
 function syncShortcutBar() {
@@ -888,11 +915,15 @@ function syncShortcutBar() {
  * state, and the technical cause goes to `diag` only.
  */
 function render() {
+  // Every render rebuilds the rows, so a row control holding focus is
+  // replaced and focus would fall to <body> (audit 020 ج1).
+  const held = heldListFocus();
   try {
     renderCaptureStrip();
     renderList();
     // The preview shows what is listed: refilled, or closed if it is gone.
     if (previewWant) requestPreview(previewWant);
+    restoreListFocus(held);
   } catch (err) {
     diag('render:threw', err);
     if (phase === 'error') return; // already showing the failure state
