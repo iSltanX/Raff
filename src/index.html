@@ -89,6 +89,30 @@
       <nav class="footer-shortcuts" id="footer-hint" aria-label="اختصارات السياق الحالي"></nav>
     </footer>
   </main>
+
+  <!-- The preview beside the panel (Figma «05 · التفاصيل» 45:5325): the panel
+       window widens towards it, so it lives in this page. Opened by resting
+       on an item, a right-click, Space or ⌘Y; its buttons never take focus. -->
+  <aside class="preview-pane" id="preview" aria-label="معاينة العنصر" hidden>
+    <div class="preview-head">
+      <span class="badge preview-kind" id="preview-kind"></span>
+      <span class="preview-when" id="preview-when"></span>
+      <span class="badge preview-size" id="preview-size"></span>
+    </div>
+    <div class="preview-body scroll-pane" id="preview-body"></div>
+    <div class="preview-notes" id="preview-notes"></div>
+    <div class="preview-actions">
+      <button type="button" class="btn btn-primary" data-action="paste" tabindex="-1"><span>لصق</span><bdi class="btn-keys">↵</bdi></button>
+      <div class="preview-pair">
+        <button type="button" class="btn" data-action="plain" tabindex="-1"><span>لصق كنص عادي</span><bdi class="btn-keys">⌥↵</bdi></button>
+        <button type="button" class="btn" data-action="copy" tabindex="-1"><span class="preview-icon" data-icon="copy"></span><span>نسخ</span><bdi class="btn-keys">⌘C</bdi></button>
+      </div>
+      <div class="preview-pair">
+        <button type="button" class="btn" data-action="pin" tabindex="-1"><span class="preview-icon" data-icon="pin"></span><span id="preview-pin-label">تثبيت</span><bdi class="btn-keys">⌥P</bdi></button>
+        <button type="button" class="btn btn-quiet" data-action="delete" tabindex="-1"><span class="preview-icon" data-icon="trash"></span><span>حذف</span><bdi class="btn-keys">⌘⌫</bdi></button>
+      </div>
+    </div>
+  </aside>
   <script type="module" src="js/panel.js"></script>
 </body>
 </html>

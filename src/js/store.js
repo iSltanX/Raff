@@ -32,7 +32,12 @@ export const api = {
   // Only the fields being changed; the rest stay as the store holds them.
   updateSettings: (patch) => invoke('update_settings', { settings: patch }),
   getImage: (id) => invoke('get_image', { id }),
+  // The original picture, for the preview (the thumbnail past 4 MB).
+  getFullImage: (id) => invoke('get_image', { id, full: true }),
   hidePanel: () => invoke('hide_panel'),
+  // The preview beside the panel: which side has room, then widen/narrow.
+  panelPreviewSide: () => invoke('panel_preview_side'),
+  setPanelPreview: (side) => invoke('set_panel_preview', { side }),
   showPanel: () => invoke('show_panel'),
   openSettings: () => invoke('open_settings'),
   openAbout: () => invoke('open_about'),

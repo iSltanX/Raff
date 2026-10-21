@@ -6,7 +6,8 @@
 // its content type, and the paired Figma actions sit at the trailing edge.
 
 import { api, on } from './store.js';
-import { arabicDigits, filterItems, hotkeyDisplay, hotkeyRefusal, relativeTimeAr } from './logic.js';
+import { arabicCount, arabicDigits, filterItems, hotkeyDisplay, hotkeyRefusal, relativeTimeAr } from './logic.js';
+import { createHoverIntent } from './hover-intent.js';
 import {
   SETTINGS,
   CLOSE,
@@ -23,6 +24,7 @@ import {
   PAUSE,
   CAPTURE_OFF,
   KEYBOARD,
+  COPY,
   contentTypeIcon,
   createIcon,
 } from './icons.js';
@@ -287,29 +289,10 @@ function buildRow(item, index) {
   preview.className = 'row-preview';
   preview.setAttribute('role', 'gridcell');
 
+  if (isGrid()) return buildCard(row, item, index);
+
   if (item.type === 'image') {
-    const thumb = document.createElement('div');
-    thumb.className = 'preview-thumb';
-    thumb.dataset.state = 'loading';
-    thumb.setAttribute('role', 'img');
-    thumb.setAttribute('aria-label', arabicDigits(item.text));
-    const placeholder = document.createElement('span');
-    placeholder.className = 'preview-thumb-placeholder';
-    placeholder.setAttribute('aria-hidden', 'true');
-    placeholder.append(createIcon(IMAGE, 'preview-thumb-icon'));
-    const img = document.createElement('img');
-    img.alt = '';
-    img.decoding = 'async';
-    img.addEventListener('load', () => {
-      thumb.dataset.state = 'ready';
-    });
-    img.addEventListener('error', () => markThumbUnavailable(thumb));
-    if (thumbs.has(item.id)) img.src = thumbs.get(item.id);
-    else if (missingThumbs.has(item.id)) {
-      thumb.dataset.state = 'unavailable';
-      row.classList.add('is-image-missing');
-    } else requestThumb(item.id, img, thumb);
-    thumb.append(placeholder, img);
+    const thumb = buildThumb(row, item);
     const media = document.createElement('div');
     media.className = 'preview-media';
     const missing = document.createElement('span');
@@ -427,6 +410,84 @@ function buildRow(item, index) {
   // (see .row-actions) so a resting row reserves no empty block for it.
   row.append(preview, kind, actions);
 
+  if (item.isPinned) {
+    const flag = document.createElement('span');
+    flag.className = 'row-pin-flag';
+    flag.setAttribute('aria-hidden', 'true');
+    flag.append(createIcon(PIN));
+    row.append(flag);
+  }
+  return row;
+}
+
+/** An image's thumbnail, loaded when it comes into view. */
+function buildThumb(row, item) {
+  const thumb = document.createElement('div');
+  thumb.className = 'preview-thumb';
+  thumb.dataset.state = 'loading';
+  thumb.setAttribute('role', 'img');
+  thumb.setAttribute('aria-label', arabicDigits(item.text));
+  const placeholder = document.createElement('span');
+  placeholder.className = 'preview-thumb-placeholder';
+  placeholder.setAttribute('aria-hidden', 'true');
+  placeholder.append(createIcon(IMAGE, 'preview-thumb-icon'));
+  const img = document.createElement('img');
+  img.alt = '';
+  img.decoding = 'async';
+  img.addEventListener('load', () => {
+    thumb.dataset.state = 'ready';
+  });
+  img.addEventListener('error', () => markThumbUnavailable(thumb));
+  if (thumbs.has(item.id)) img.src = thumbs.get(item.id);
+  else if (missingThumbs.has(item.id)) {
+    thumb.dataset.state = 'unavailable';
+    row.classList.add('is-image-missing');
+  } else requestThumb(item.id, img, thumb);
+  thumb.append(placeholder, img);
+  return thumb;
+}
+
+/** The Images filter draws pictures as cards in a grid of three (Figma Item
+ *  Card 35:301): the picture, then its time and kind. The same row in every
+ *  other respect — selection, click, ⌘1–9, the accessible list. No buttons
+ *  on a card; its actions are the keyboard's and the preview's. */
+function isGrid() {
+  return filter === 'image';
+}
+
+function buildCard(row, item, index) {
+  row.classList.add('is-card');
+  const media = document.createElement('div');
+  media.className = 'card-media';
+  media.setAttribute('role', 'gridcell');
+  media.append(buildThumb(row, item));
+  if (index < QUICK_SLOTS) {
+    const slot = document.createElement('kbd');
+    slot.className = 'row-index';
+    slot.setAttribute('aria-hidden', 'true');
+    slot.textContent = String(index + 1);
+    media.append(slot);
+  }
+
+  const foot = document.createElement('div');
+  foot.className = 'card-foot';
+  const time = document.createElement('span');
+  time.className = 'row-time';
+  time.textContent = relativeTimeAr(item.createdAt);
+  const kind = document.createElement('span');
+  kind.className = 'row-kind';
+  kind.setAttribute('role', 'gridcell');
+  const presentation = contentTypeIcon(item.type);
+  const sourceName = item.sourceApp || 'تطبيق غير معروف';
+  kind.setAttribute('aria-label', `نوع المحتوى: ${presentation.label}. المصدر: ${sourceName}`);
+  kind.append(createIcon(presentation.asset, 'content-type-glyph'));
+  foot.append(kind, time);
+
+  row.addEventListener('click', (e) => {
+    selectedId = item.id;
+    paste(item.id, e.altKey);
+  });
+  row.append(media, foot);
   if (item.isPinned) {
     const flag = document.createElement('span');
     flag.className = 'row-pin-flag';
@@ -555,6 +616,7 @@ function renderList() {
   }
 
   listEl.replaceChildren();
+  listEl.classList.toggle('is-grid', isGrid() && visible.length > 0);
   syncChrome();
 
   if (visible.length === 0) {
@@ -799,6 +861,8 @@ function render() {
   try {
     renderCaptureStrip();
     renderList();
+    // The preview shows what is listed: refilled, or closed if it is gone.
+    if (previewWant) requestPreview(previewWant);
   } catch (err) {
     diag('render:threw', err);
     if (phase === 'error') return; // already showing the failure state
@@ -1351,6 +1415,13 @@ function paste(id, plain) {
     .catch((err) => showToast(errorMessage(err), PIN_TOAST_MS, 'error'));
 }
 
+function copyItem(id) {
+  api
+    .copyItem(id)
+    .then(() => showToast('نُسخ إلى الحافظة'))
+    .catch((err) => showToast(errorMessage(err), PIN_TOAST_MS, 'error'));
+}
+
 function moveSelection(delta) {
   if (visible.length === 0) return;
   const index = visible.findIndex((i) => i.id === selectedId);
@@ -1389,6 +1460,8 @@ function setSelection(id) {
   syncActiveOption();
   syncShortcutBar();
   scrollSelectedIntoView();
+  // An open preview follows the selection — and from now on, the keyboard.
+  if (previewWant && id) requestPreview({ id, mode: 'held' });
 }
 
 // Rows whose match lives past `PREVIEW_MAX_CHARS`, for the query that found
@@ -1621,6 +1694,223 @@ filtersEl.addEventListener('keydown', (e) => {
   next.focus();
 });
 
+// ─── Preview (Figma «05 · التفاصيل» 45:5325; decisions ت٣٢) ─────────────────
+
+const previewEl = document.getElementById('preview');
+const previewKindEl = document.getElementById('preview-kind');
+const previewWhenEl = document.getElementById('preview-when');
+const previewSizeEl = document.getElementById('preview-size');
+const previewBodyEl = document.getElementById('preview-body');
+const previewNotesEl = document.getElementById('preview-notes');
+const previewPinLabelEl = document.getElementById('preview-pin-label');
+const PREVIEW_TEXT_LIMIT = 1000; // what Rust sends of a long text (PREVIEW_MAX_CHARS)
+const GRID_COLUMNS = 3;
+
+for (const slot of previewEl.querySelectorAll('.preview-icon')) {
+  slot.replaceWith(createIcon({ copy: COPY, pin: PIN, trash: TRASH }[slot.dataset.icon]));
+}
+
+/** What the preview should show — `{ id, mode }`, `mode` 'hover' (it closes
+ *  when the pointer leaves) or 'held' (keys or a right-click: it stays). */
+let previewWant = null;
+/** The side the window is widened to while the preview is on screen. */
+let previewSide = null;
+let previewSync = Promise.resolve();
+
+/** Asks for `want` (or none); applied in order, latest request wins. */
+function requestPreview(want) {
+  previewWant = want;
+  previewSync = previewSync.then(applyPreview).catch((err) => diag('preview:failed', err));
+  return previewSync;
+}
+
+async function applyPreview() {
+  const want = previewWant;
+  const item = want && visible.find((candidate) => candidate.id === want.id);
+  if (!item) {
+    if (want) previewWant = null;
+    return closePreviewWindow();
+  }
+  if (!previewSide) {
+    const side = await api.panelPreviewSide();
+    if (previewWant !== want) return; // superseded while measuring
+    if (side !== 'left' && side !== 'right') {
+      previewWant = null; // no room beside the panel on this screen
+      return;
+    }
+    // The panel is pinned to its edge before the window widens away from it.
+    document.documentElement.dataset.preview = side;
+    previewSide = side;
+    fillPreview(item);
+    previewEl.hidden = false;
+    await api.setPanelPreview(side);
+    return;
+  }
+  fillPreview(item);
+}
+
+async function closePreviewWindow() {
+  if (!previewSide) return;
+  previewSide = null;
+  previewEl.hidden = true;
+  delete previewEl.dataset.id;
+  await api.setPanelPreview(null);
+  if (!previewSide) delete document.documentElement.dataset.preview;
+}
+
+/** The panel was hidden, and Rust narrowed its window with it. */
+function resetPreview() {
+  hoverIntent.cancel();
+  previewWant = null;
+  previewSide = null;
+  previewEl.hidden = true;
+  delete previewEl.dataset.id;
+  delete document.documentElement.dataset.preview;
+}
+
+function togglePreviewFromKeys() {
+  if (previewWant) {
+    requestPreview(null);
+    return;
+  }
+  if (!selectedId && visible[0]) setSelection(visible[0].id);
+  if (selectedId) requestPreview({ id: selectedId, mode: 'held' });
+}
+
+const CHARS = ['حرف واحد', 'حرفان', 'أحرف', 'حرفًا'];
+const TIMES = ['مرة', 'مرتين', 'مرات', 'مرة'];
+const DAYS = ['يوم', 'يومين', 'أيام', 'يومًا'];
+
+function fillPreview(item) {
+  const sameItem = previewEl.dataset.id === item.id;
+  previewEl.dataset.id = item.id;
+  previewEl.dataset.type = item.type;
+  previewKindEl.textContent = item.type === 'code' ? 'شفرة' : contentTypeIcon(item.type).label;
+  previewWhenEl.textContent = [
+    relativeTimeAr(item.createdAt),
+    item.sourceApp ? `من \u2068${item.sourceApp}\u2069` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+
+  const chars = [...item.text].length;
+  previewSizeEl.hidden = item.type === 'image';
+  previewSizeEl.textContent =
+    chars > PREVIEW_TEXT_LIMIT
+      ? `أكثر من ${arabicDigits(PREVIEW_TEXT_LIMIT)} حرف`
+      : arabicCount(chars, CHARS);
+
+  if (!sameItem || item.type !== 'image') previewBodyEl.replaceChildren(previewContent(item));
+  previewBodyEl.scrollTop = sameItem ? previewBodyEl.scrollTop : 0;
+
+  const notes = [];
+  const counts = [
+    item.copyCount > 0 ? `نُسخ ${arabicCount(item.copyCount, TIMES)}` : null,
+    item.pasteCount > 0 ? `لُصق ${arabicCount(item.pasteCount, TIMES)}` : null,
+  ].filter(Boolean);
+  if (counts.length > 0) notes.push(`${counts.join(' · ')} (التعلّم)`);
+  const retentionDays = state.settings?.retentionDays ?? 0;
+  if (item.isPinned) {
+    notes.push('مثبّت: لا يُحذف بمرور الوقت');
+  } else if (retentionDays > 0) {
+    const left = Math.ceil((item.createdAt + retentionDays * 86_400_000 - Date.now()) / 86_400_000);
+    notes.push(left < 1 ? 'يُحذف اليوم ما لم يُثبَّت' : `يُحذف بعد ${arabicCount(left, DAYS)} ما لم يُثبَّت`);
+  }
+  previewNotesEl.replaceChildren(
+    ...notes.map((line) => {
+      const p = document.createElement('p');
+      p.textContent = line;
+      return p;
+    })
+  );
+  previewPinLabelEl.textContent = item.isPinned ? 'إلغاء التثبيت' : 'تثبيت';
+}
+
+function previewContent(item) {
+  if (item.type === 'image') {
+    const frame = document.createElement('div');
+    frame.className = 'preview-picture';
+    const img = document.createElement('img');
+    img.alt = arabicDigits(item.text);
+    img.decoding = 'async';
+    const show = (src) => {
+      if (src && previewEl.dataset.id === item.id) img.src = src;
+    };
+    // The thumbnail at once if the list has it, then the original (sharper
+    // at 308pt) in its place.
+    if (thumbs.has(item.id)) show(thumbs.get(item.id));
+    api
+      .getFullImage(item.id)
+      .then(show)
+      .catch((err) => diag('preview:image-failed', err));
+    frame.append(img);
+    return frame;
+  }
+  const text = document.createElement('div');
+  text.className = 'preview-text';
+  if (item.type === 'link') text.classList.add('is-link');
+  else if (item.type === 'code') text.classList.add('is-code');
+  text.dir = 'auto';
+  text.textContent = item.text; // clip content → textContent
+  return text;
+}
+
+// Pressing a preview button never takes the focus from the search.
+previewEl.addEventListener('mousedown', (e) => e.preventDefault());
+previewEl.addEventListener('click', (e) => {
+  const button = e.target.closest?.('[data-action]');
+  const id = previewEl.dataset.id;
+  if (!button || !id) return;
+  switch (button.dataset.action) {
+    case 'paste':
+      paste(id, false);
+      return;
+    case 'plain':
+      paste(id, true);
+      return;
+    case 'copy':
+      copyItem(id);
+      return;
+    case 'pin':
+      togglePinItem(id);
+      return;
+    case 'delete':
+      deleteItem(id);
+      return;
+  }
+});
+
+// Hover previews only: it never selects, focuses, copies or pastes.
+const hoverIntent = createHoverIntent({
+  isOpen: () => Boolean(previewWant),
+  onRest(id) {
+    if (previewWant?.mode === 'held') return; // keys or a right-click own it now
+    requestPreview({ id, mode: 'hover' });
+  },
+  onAway() {
+    if (previewWant?.mode === 'hover') requestPreview(null);
+  },
+});
+
+function onPointer(e) {
+  const target = e.target;
+  if (!target?.closest) return;
+  if (previewEl.contains(target)) {
+    hoverIntent.hold();
+    return;
+  }
+  const row = target.closest('#list .row[data-id]');
+  if (row) hoverIntent.over(row.dataset.id, e.clientX, e.clientY);
+  else if (panelEl.contains(target)) hoverIntent.between();
+}
+document.addEventListener('mouseover', onPointer);
+document.addEventListener('mousemove', onPointer);
+document.addEventListener('mouseout', (e) => {
+  const to = e.relatedTarget;
+  if (to && (panelEl.contains(to) || previewEl.contains(to))) return;
+  hoverIntent.away();
+});
+
 // ─── Keyboard (full control — mouse optional) ─────────────────────────────
 
 function setQuickSlotsVisible(on) {
@@ -1635,6 +1925,22 @@ window.addEventListener('blur', () => setQuickSlotsVisible(false));
 window.addEventListener('keydown', (e) => {
   if (e.key === 'Meta') {
     setQuickSlotsVisible(true);
+    return;
+  }
+  // Esc closes the preview before it closes anything else.
+  if (e.key === 'Escape' && previewWant) {
+    e.preventDefault();
+    requestPreview(null);
+    return;
+  }
+  // ⌘Y toggles the preview of the selection (Quick Look's key); so does Space
+  // while there is nothing typed — with a query, Space is a space.
+  const previewKey =
+    (e.metaKey && !e.altKey && !e.ctrlKey && !e.shiftKey && e.code === 'KeyY') ||
+    (e.key === ' ' && !e.metaKey && !e.altKey && !e.ctrlKey && !query && !isIndependentControl(e.target));
+  if (previewKey) {
+    e.preventDefault();
+    togglePreviewFromKeys();
     return;
   }
   if (e.metaKey && !e.ctrlKey && !e.shiftKey && /^Digit[1-9]$/.test(e.code)) {
@@ -1718,11 +2024,19 @@ window.addEventListener('keydown', (e) => {
   switch (e.key) {
     case 'ArrowDown':
       e.preventDefault();
-      moveSelection(1);
+      moveSelection(isGrid() ? GRID_COLUMNS : 1);
       return;
     case 'ArrowUp':
       e.preventDefault();
-      moveSelection(-1);
+      moveSelection(isGrid() ? -GRID_COLUMNS : -1);
+      return;
+    case 'ArrowLeft':
+    case 'ArrowRight':
+      // Across the grid; RTL, so ← is the next card. A typed query keeps its
+      // caret.
+      if (!isGrid() || (isWritable(document.activeElement) && searchEl.value)) return;
+      e.preventDefault();
+      moveSelection(e.key === 'ArrowLeft' ? 1 : -1);
       return;
     case 'PageDown':
       e.preventDefault();
@@ -1761,12 +2075,7 @@ window.addEventListener('keydown', (e) => {
       if (start !== null && end !== null && start !== end) return;
     }
     e.preventDefault();
-    if (selectedId) {
-      api
-        .copyItem(selectedId)
-        .then(() => showToast('نُسخ إلى الحافظة'))
-        .catch((err) => showToast(errorMessage(err), PIN_TOAST_MS, 'error'));
-    }
+    if (selectedId) copyItem(selectedId);
     return;
   }
   // Route actual printable input only. Modifier keys, navigation keys, dead
@@ -1813,6 +2122,7 @@ on('panel://shown', async () => {
   query = '';
   searchEl.value = '';
   selectedId = null;
+  resetPreview();
   setFilter('all');
   setQuickSlotsVisible(false);
   searchEl.focus();
@@ -1858,6 +2168,13 @@ window.addEventListener('contextmenu', (e) => {
   const selection = window.getSelection?.();
   if (selection && !selection.isCollapsed) return; // text is selected → allow copy
   e.preventDefault();
+  // The panel has no menu of its own to keep: a right-click on an item opens
+  // its preview at once — which carries every action — without selecting it.
+  const row = e.target.closest?.('#list .row[data-id]');
+  if (row) {
+    hoverIntent.cancel();
+    requestPreview({ id: row.dataset.id, mode: 'held' });
+  }
 });
 
 // Anything that escapes every local handler must not leave a silent blank

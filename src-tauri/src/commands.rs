@@ -524,23 +524,34 @@ fn validate_settings(settings: &Settings) -> Result<(), String> {
     Ok(())
 }
 
+/// The preview beside the panel shows the original picture up to this size;
+/// past it, the thumbnail. A data URL crosses the bridge as one string that
+/// the main thread evaluates, so a large screenshot would stall it.
+const PREVIEW_IMAGE_MAX_BYTES: u64 = 4 * 1024 * 1024;
+
+/// `full` is the preview's request for the original picture.
 #[tauri::command]
-pub fn get_image(state: State<AppState>, id: String) -> Option<String> {
+pub fn get_image(state: State<AppState>, id: String, full: Option<bool>) -> Option<String> {
     let store = crate::lock_store(&state.store);
-    image_data_url(&store, &id)
+    image_data_url(&store, &id, full.unwrap_or(false))
 }
 
 /// Prefer the compact preview, but recover from an interrupted/failed
 /// thumbnail write by reading the original image. Older history files can
 /// legitimately contain a stale `thumbFile`, so fallback happens on read
-/// failure rather than only when the field is absent.
-fn image_data_url(store: &Store, id: &str) -> Option<String> {
+/// failure rather than only when the field is absent. With `full`, the
+/// original comes first while it is small enough to send.
+fn image_data_url(store: &Store, id: &str, full: bool) -> Option<String> {
     let item = store.find(id)?;
-    let bytes = item
-        .thumb_file
-        .iter()
+    let dir = store.images_dir();
+    let original = item.image_file.iter().filter(|file| {
+        full && std::fs::metadata(dir.join(file))
+            .is_ok_and(|meta| meta.len() <= PREVIEW_IMAGE_MAX_BYTES)
+    });
+    let bytes = original
+        .chain(item.thumb_file.iter())
         .chain(item.image_file.iter())
-        .find_map(|file| std::fs::read(store.images_dir().join(file)).ok())?;
+        .find_map(|file| std::fs::read(dir.join(file)).ok())?;
     Some(format!(
         "data:image/png;base64,{}",
         base64::engine::general_purpose::STANDARD.encode(bytes)
@@ -560,6 +571,19 @@ pub fn show_panel(app: AppHandle) {
 #[tauri::command]
 pub fn hide_panel(app: AppHandle) {
     panel::hide(&app);
+}
+
+/// The side of the panel with room for the preview, or none (Figma
+/// «05 · التفاصيل» 45:5325).
+#[tauri::command]
+pub fn panel_preview_side(app: AppHandle) -> Option<panel::PreviewSide> {
+    panel::preview_side(&app)
+}
+
+/// Widens the panel window for the preview on `side`, or narrows it back.
+#[tauri::command]
+pub fn set_panel_preview(app: AppHandle, side: Option<panel::PreviewSide>) {
+    panel::set_preview(&app, side);
 }
 
 #[tauri::command]
@@ -1059,8 +1083,29 @@ mod tests {
         let (store, id) = image_store(b"original", Some(("preview.thumb.png", b"thumbnail")));
         let expected = base64::engine::general_purpose::STANDARD.encode(b"thumbnail");
         assert_eq!(
-            image_data_url(&store, &id),
+            image_data_url(&store, &id, false),
             Some(format!("data:image/png;base64,{expected}"))
+        );
+    }
+
+    // The preview beside the panel is 308pt wide: it asks for the original,
+    // which beats a 128×80 thumbnail — up to a size a data URL can carry.
+    #[test]
+    fn the_preview_gets_the_original_picture_up_to_its_limit() {
+        let (store, id) = image_store(b"original", Some(("preview.thumb.png", b"thumbnail")));
+        let original = base64::engine::general_purpose::STANDARD.encode(b"original");
+        assert_eq!(
+            image_data_url(&store, &id, true),
+            Some(format!("data:image/png;base64,{original}"))
+        );
+
+        let huge = vec![0u8; PREVIEW_IMAGE_MAX_BYTES as usize + 1];
+        let (store, id) = image_store(&huge, Some(("preview.thumb.png", b"thumbnail")));
+        let thumbnail = base64::engine::general_purpose::STANDARD.encode(b"thumbnail");
+        assert_eq!(
+            image_data_url(&store, &id, true),
+            Some(format!("data:image/png;base64,{thumbnail}")),
+            "too large for the bridge: the thumbnail instead"
         );
     }
 
@@ -1069,7 +1114,7 @@ mod tests {
         let (store, id) = image_store(b"original", None);
         let expected = base64::engine::general_purpose::STANDARD.encode(b"original");
         assert_eq!(
-            image_data_url(&store, &id),
+            image_data_url(&store, &id, false),
             Some(format!("data:image/png;base64,{expected}"))
         );
     }

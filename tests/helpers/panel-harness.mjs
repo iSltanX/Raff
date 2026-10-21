@@ -192,6 +192,12 @@ export function createFakeTauri(initialState, { failTimes = 0 } = {}) {
         if (cmd === 'search_items') {
           return Promise.resolve([...searchResults]);
         }
+        // The preview widens the panel window towards whichever side has room
+        // (Rust measures the screen); `previewSide: null` stands for none.
+        if (cmd === 'panel_preview_side') {
+          return Promise.resolve(state.previewSide === undefined ? 'left' : state.previewSide);
+        }
+        if (cmd === 'set_panel_preview') return Promise.resolve(null);
         return Promise.resolve(null);
       },
     },

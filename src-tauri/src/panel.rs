@@ -6,6 +6,10 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use objc2::msg_send;
+use objc2::runtime::AnyObject;
+use objc2_foundation::{NSPoint, NSRect, NSSize};
+use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize};
 use tauri_nspanel::cocoa::appkit::NSWindowCollectionBehavior;
 use tauri_nspanel::{panel_delegate, ManagerExt, WebviewWindowExt};
@@ -23,6 +27,27 @@ const PANEL_EDGE_MARGIN: f64 = 12.0;
 const STYLE_MASK_NON_ACTIVATING_PANEL: i32 = 1 << 7;
 /// Just above NSMainMenuWindowLevel (24), like Spotlight.
 const PANEL_LEVEL: i32 = 25;
+/// The preview beside the panel (Figma «05 · التفاصيل» 45:5325): 340pt and a
+/// 16pt gap. The panel window widens by this much towards the preview, so the
+/// list never moves and hover, focus and keys stay in one page.
+const PREVIEW_EXTRA: f64 = 356.0;
+
+/// Where the preview opens: the reading end (left) when there is room.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum PreviewSide {
+    Left,
+    Right,
+}
+
+/// The side the window is widened to while the preview shows.
+static PREVIEW: Mutex<Option<PreviewSide>> = Mutex::new(None);
+
+fn preview_open() -> Option<PreviewSide> {
+    *PREVIEW
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
 
 // Ignore startup movement events until the panel has received its deliberate
 // first position. A short generation-based debounce keeps live dragging fluid
@@ -100,11 +125,173 @@ fn clamp_origin(origin: (f64, f64), window: (f64, f64), area: Rect, margin: f64)
     (origin.0.clamp(min_x, max_x), origin.1.clamp(min_y, max_y))
 }
 
+/// The side with room for the preview beside `panel` (points), or none.
+fn preview_side_for(panel: Rect, visible: Rect, extra: f64, margin: f64) -> Option<PreviewSide> {
+    if panel.x - extra >= visible.x + margin {
+        Some(PreviewSide::Left)
+    } else if panel.x + panel.width + extra <= visible.x + visible.width - margin {
+        Some(PreviewSide::Right)
+    } else {
+        None
+    }
+}
+
+/// The window frame with the preview open on `side`: the panel stays put.
+fn widened(frame: Rect, side: PreviewSide, extra: f64) -> Rect {
+    match side {
+        PreviewSide::Left => Rect {
+            x: frame.x - extra,
+            width: frame.width + extra,
+            ..frame
+        },
+        PreviewSide::Right => Rect {
+            width: frame.width + extra,
+            ..frame
+        },
+    }
+}
+
+/// The panel's own frame again, from the widened one.
+fn narrowed(frame: Rect, side: PreviewSide, extra: f64) -> Rect {
+    match side {
+        PreviewSide::Left => Rect {
+            x: frame.x + extra,
+            width: frame.width - extra,
+            ..frame
+        },
+        PreviewSide::Right => Rect {
+            width: frame.width - extra,
+            ..frame
+        },
+    }
+}
+
+/// The x to remember for a window at `window_x` (physical px): the panel's,
+/// which starts `PREVIEW_EXTRA` further right while the preview is on its left.
+fn remembered_x(window_x: f64, preview: Option<PreviewSide>, scale: f64) -> f64 {
+    match preview {
+        Some(PreviewSide::Left) => window_x + PREVIEW_EXTRA * scale,
+        _ => window_x,
+    }
+}
+
 fn centered_origin(window: (f64, f64), area: Rect) -> (f64, f64) {
     (
         area.x + (area.width - window.0) / 2.0,
         area.y + (area.height - window.1) / 2.0,
     )
+}
+
+/// Runs `work` on the main thread and waits for its answer.
+fn on_main_sync<T: Send + 'static>(work: impl FnOnce() -> T + Send + 'static) -> Option<T> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    on_main(move || {
+        let _ = tx.send(work());
+    });
+    rx.recv_timeout(Duration::from_secs(2)).ok()
+}
+
+fn ns_window(window: &tauri::WebviewWindow) -> Option<*mut AnyObject> {
+    window
+        .ns_window()
+        .ok()
+        .map(|pointer| pointer as *mut AnyObject)
+        .filter(|pointer| !pointer.is_null())
+}
+
+fn rect_from(native: NSRect) -> Rect {
+    Rect {
+        x: native.origin.x,
+        y: native.origin.y,
+        width: native.size.width,
+        height: native.size.height,
+    }
+}
+
+/// The window's frame and its screen's visible frame, in AppKit points. Only
+/// x and width ever change, so the bottom-left origin needs no conversion.
+fn native_frames(ns: *mut AnyObject) -> Option<(Rect, Rect)> {
+    // SAFETY: `ns` is the panel's live NSWindow, used on the main thread.
+    unsafe {
+        let frame: NSRect = msg_send![&*ns, frame];
+        let screen: *mut AnyObject = msg_send![&*ns, screen];
+        if screen.is_null() {
+            return None;
+        }
+        let visible: NSRect = msg_send![&*screen, visibleFrame];
+        Some((rect_from(frame), rect_from(visible)))
+    }
+}
+
+/// One `setFrame:` — origin and width together — so the panel never jumps.
+fn set_native_frame(ns: *mut AnyObject, frame: Rect) {
+    let native = NSRect::new(
+        NSPoint::new(frame.x, frame.y),
+        NSSize::new(frame.width, frame.height),
+    );
+    // SAFETY: as above.
+    unsafe {
+        let _: () = msg_send![&*ns, setFrame: native, display: true];
+    }
+}
+
+/// The side with room for the preview beside the panel, or none. While it is
+/// open, the side it already has.
+pub fn preview_side(app: &AppHandle) -> Option<PreviewSide> {
+    let window = app.get_webview_window(PANEL_LABEL)?;
+    on_main_sync(move || {
+        if let Some(open) = preview_open() {
+            return Some(open);
+        }
+        let (frame, visible) = native_frames(ns_window(&window)?)?;
+        preview_side_for(frame, visible, PREVIEW_EXTRA, PANEL_EDGE_MARGIN)
+    })
+    .flatten()
+}
+
+/// Widens the panel window towards `side` for the preview, or narrows it back.
+pub fn set_preview(app: &AppHandle, side: Option<PreviewSide>) {
+    let Some(window) = app.get_webview_window(PANEL_LABEL) else {
+        return;
+    };
+    let _ = on_main_sync(move || apply_preview(&window, side));
+}
+
+fn apply_preview(window: &tauri::WebviewWindow, side: Option<PreviewSide>) {
+    let current = preview_open();
+    if current == side {
+        return;
+    }
+    let Some(ns) = ns_window(window) else {
+        return;
+    };
+    let Some((frame, _)) = native_frames(ns) else {
+        return;
+    };
+    let panel = match current {
+        Some(open) => narrowed(frame, open, PREVIEW_EXTRA),
+        None => frame,
+    };
+    let target = match side {
+        Some(open) => widened(panel, open, PREVIEW_EXTRA),
+        None => panel,
+    };
+    // Recorded before the frame changes: moving the window reaches
+    // `remember_position`, which must already know where the panel is.
+    *PREVIEW
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner()) = side;
+    set_native_frame(ns, target);
+}
+
+/// The panel closes with its preview; it always reopens at its own size.
+fn collapse_preview(app: &AppHandle) {
+    if preview_open().is_none() {
+        return;
+    }
+    if let Some(window) = app.get_webview_window(PANEL_LABEL) {
+        apply_preview(&window, None);
+    }
 }
 
 pub fn init(app: &AppHandle) -> tauri::Result<()> {
@@ -200,6 +387,7 @@ pub fn show(app: &AppHandle) {
             *crate::lock_previous_app(&state.previous_app) = Some(front.pid);
         }
 
+        collapse_preview(&handle);
         if let Some(window) = handle.get_webview_window(PANEL_LABEL) {
             restore_or_center(&handle, &window);
             PLACEMENT_READY.store(true, Ordering::Release);
@@ -246,6 +434,7 @@ pub fn hide(app: &AppHandle) {
     on_main(move || {
         if let Ok(panel) = handle.get_webview_panel(PANEL_LABEL) {
             if SHOWN.load(Ordering::Acquire) {
+                collapse_preview(&handle);
                 conceal(&panel);
             }
         }
@@ -260,6 +449,7 @@ pub fn toggle(app: &AppHandle) {
             Err(_) => return show(&handle),
         };
         if SHOWN.load(Ordering::Acquire) {
+            collapse_preview(&handle);
             conceal(&panel);
             return;
         }
@@ -375,7 +565,7 @@ fn constrain_and_save(app: &AppHandle) {
     let state = app.state::<AppState>();
     let store = crate::lock_store(&state.store);
     store.save_panel_placement(PanelPlacement {
-        x: corrected.x as f64,
+        x: remembered_x(corrected.x as f64, preview_open(), monitor.scale_factor()),
         y: corrected.y as f64,
     });
 }
@@ -451,6 +641,92 @@ mod tests {
     #[test]
     fn reopen_proceeds_for_an_unrelated_click_long_after_any_resign() {
         assert!(!was_just_dismissed_by_resign(50_000, 900));
+    }
+
+    // The preview (Figma «05 · التفاصيل» 45:5325) opens at the reading end —
+    // the left — when there is room, otherwise on the right, otherwise not.
+    #[test]
+    fn the_preview_prefers_the_left_and_falls_back_to_the_right() {
+        let visible = Rect {
+            x: 0.0,
+            y: 0.0,
+            width: 1440.0,
+            height: 875.0,
+        };
+        let centred = Rect {
+            x: 490.0,
+            y: 167.0,
+            width: 460.0,
+            height: 540.0,
+        };
+        assert_eq!(
+            preview_side_for(centred, visible, PREVIEW_EXTRA, 12.0),
+            Some(PreviewSide::Left)
+        );
+        let at_left_edge = Rect { x: 12.0, ..centred };
+        assert_eq!(
+            preview_side_for(at_left_edge, visible, PREVIEW_EXTRA, 12.0),
+            Some(PreviewSide::Right)
+        );
+        let narrow = Rect {
+            x: 0.0,
+            y: 0.0,
+            width: 800.0,
+            height: 875.0,
+        };
+        let middle = Rect {
+            x: 170.0,
+            ..centred
+        };
+        assert_eq!(preview_side_for(middle, narrow, PREVIEW_EXTRA, 12.0), None);
+    }
+
+    #[test]
+    fn widening_keeps_the_panel_where_it_is() {
+        let frame = Rect {
+            x: 490.0,
+            y: 167.0,
+            width: 460.0,
+            height: 540.0,
+        };
+        let left = widened(frame, PreviewSide::Left, PREVIEW_EXTRA);
+        assert_eq!(
+            left,
+            Rect {
+                x: 134.0,
+                y: 167.0,
+                width: 816.0,
+                height: 540.0
+            }
+        );
+        assert_eq!(
+            left.x + left.width,
+            frame.x + frame.width,
+            "the panel's right edge stays put"
+        );
+        let right = widened(frame, PreviewSide::Right, PREVIEW_EXTRA);
+        assert_eq!(
+            right,
+            Rect {
+                width: 816.0,
+                ..frame
+            }
+        );
+        for side in [PreviewSide::Left, PreviewSide::Right] {
+            assert_eq!(
+                narrowed(widened(frame, side, PREVIEW_EXTRA), side, PREVIEW_EXTRA),
+                frame
+            );
+        }
+    }
+
+    // Dragged while the preview is open, the window starts left of the panel;
+    // the place to remember is the panel's own.
+    #[test]
+    fn the_remembered_place_is_the_panel_not_the_widened_window() {
+        assert_eq!(remembered_x(268.0, Some(PreviewSide::Left), 2.0), 980.0);
+        assert_eq!(remembered_x(980.0, Some(PreviewSide::Right), 2.0), 980.0);
+        assert_eq!(remembered_x(980.0, None, 2.0), 980.0);
     }
 
     #[test]

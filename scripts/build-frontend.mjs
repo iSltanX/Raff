@@ -29,6 +29,7 @@ const productionFiles = Object.freeze([
   'js/about.js',
   'js/diag.js',
   'js/firstrun.js',
+  'js/hover-intent.js',
   'js/icons.js',
   'js/logic.js',
   'js/panel.js',

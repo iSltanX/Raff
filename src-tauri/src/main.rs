@@ -269,6 +269,8 @@ fn main() {
             commands::update_settings,
             commands::get_image,
             commands::hide_panel,
+            commands::panel_preview_side,
+            commands::set_panel_preview,
             commands::show_panel,
             commands::open_settings,
             commands::open_about,

@@ -18,6 +18,19 @@ export function arabicDigits(value) {
  *  is the obvious next candidate and is left out on purpose: it buys a
  *  handful of spelling slips and pays for them in false matches on every
  *  feminine noun. */
+/**
+ * A count with its noun, as Arabic counts: one and two have their own forms,
+ * three to ten take the plural, eleven and up the singular accusative.
+ * `forms` = [one, two, three-to-ten, eleven-and-up], e.g.
+ * ['مرة', 'مرتين', 'مرات', 'مرة'] → «مرة»، «مرتين»، «٣ مرات»، «١١ مرة».
+ */
+export function arabicCount(n, [one, two, few, many]) {
+  if (n === 1) return one;
+  if (n === 2) return two;
+  const mod = n % 100;
+  return `${arabicDigits(n)} ${mod >= 3 && mod <= 10 ? few : many}`;
+}
+
 export function normalizeArabic(s) {
   return s
     .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660))
