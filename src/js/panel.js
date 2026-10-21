@@ -142,13 +142,12 @@ function setListStructure(hasOptions) {
 
 function syncActiveOption() {
   const selected = listEl.querySelector('.row.selected[role="row"]');
-  if (selected) {
-    searchEl.setAttribute('aria-activedescendant', selected.id);
-    searchEl.setAttribute('aria-expanded', 'true');
-  } else {
-    searchEl.removeAttribute('aria-activedescendant');
-    searchEl.setAttribute('aria-expanded', 'false');
-  }
+  if (selected) searchEl.setAttribute('aria-activedescendant', selected.id);
+  else searchEl.removeAttribute('aria-activedescendant');
+  // Expanded is whether the grid has rows to move into, selected or not
+  // (audit 021 ج2).
+  const hasRows = Boolean(listEl.querySelector('.row[role="row"][data-id]'));
+  searchEl.setAttribute('aria-expanded', String(hasRows));
 }
 
 const BRAND = Symbol('brand-mark');
@@ -692,13 +691,21 @@ function renderList() {
   }
 
   setListStructure(true);
-  listEl.setAttribute('aria-rowcount', String(visible.length));
+  listEl.setAttribute('aria-rowcount', String(visible.length + (query ? 1 : 0)));
   const fragment = document.createDocumentFragment();
   visible.forEach((item, index) => fragment.append(buildRow(item, index)));
   if (query) {
+    // A grid owns rows and nothing else: the closing line is a row of its
+    // own, after the results (audit 021 ج2). It has no id, so the keyboard
+    // and the selection, which move over `.row`, never land on it.
     const end = document.createElement('div');
     end.className = 'results-end';
-    end.textContent = `نهاية نتائج البحث عن «${query}»`;
+    end.setAttribute('role', 'row');
+    end.setAttribute('aria-rowindex', String(visible.length + 1));
+    const cell = document.createElement('span');
+    cell.setAttribute('role', 'gridcell');
+    cell.textContent = `نهاية نتائج البحث عن «${query}»`;
+    end.append(cell);
     fragment.append(end);
   }
   listEl.append(fragment);

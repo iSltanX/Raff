@@ -72,7 +72,8 @@ test('panel keyboard contract: navigation, actions, search routing, and native e
     assert.equal(search.getAttribute('role'), 'combobox');
     assert.equal(search.getAttribute('aria-controls'), list.id);
     assert.equal(search.getAttribute('aria-autocomplete'), 'list');
-    assert.equal(search.getAttribute('aria-expanded'), 'false');
+    // Expanded: the grid has rows to move into, selected or not (audit 021 ج2).
+    assert.equal(search.getAttribute('aria-expanded'), 'true');
     assert.equal(search.getAttribute('aria-haspopup'), 'grid');
     assert.equal(list.getAttribute('role'), 'grid');
     assert.equal(list.getAttribute('aria-rowcount'), String(history.length));
