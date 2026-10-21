@@ -1761,6 +1761,7 @@ async function closePreviewWindow() {
 /** The panel was hidden, and Rust narrowed its window with it. */
 function resetPreview() {
   hoverIntent.cancel();
+  disarmHover();
   previewWant = null;
   previewSide = null;
   previewEl.hidden = true;
@@ -1892,9 +1893,25 @@ const hoverIntent = createHoverIntent({
   },
 });
 
+// A panel that appears under a resting pointer has not been pointed at: WebKit
+// re-sends the pointer where it already is when content changes under it.
+// Hover counts again once the pointer has actually moved.
+let hoverArmed = true;
+let armedFrom = null;
+
+function disarmHover() {
+  hoverArmed = false;
+  armedFrom = null;
+}
+
 function onPointer(e) {
   const target = e.target;
   if (!target?.closest) return;
+  if (!hoverArmed) {
+    if (!armedFrom) armedFrom = { x: e.clientX, y: e.clientY };
+    if (Math.hypot(e.clientX - armedFrom.x, e.clientY - armedFrom.y) < 4) return;
+    hoverArmed = true;
+  }
   if (previewEl.contains(target)) {
     hoverIntent.hold();
     return;

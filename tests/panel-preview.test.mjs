@@ -199,6 +199,28 @@ test('panel: the preview opens with intent, previews only, and closes in order',
     await wait(DWELL + 80);
   });
 
+  await t.test('a panel that appears under a resting pointer previews nothing until it moves', async () => {
+    const state = fake.getState();
+    fake.setState({ ...state, previewSide: 'left' });
+    fake.emit('panel://shown', null);
+    await flush(6);
+    const first = doc.querySelector('#list .row');
+    // WebKit re-sends the pointer where it already is when content changes
+    // under it; that is not a person resting on a row.
+    hover(first, { clientX: 300, clientY: 140 });
+    await wait(DWELL + 80);
+    await flush(4);
+    assert.equal(isOpen(), false, 'appearing under the pointer is not intent');
+    hover(first, { clientX: 312, clientY: 141 });
+    hover(first, { clientX: 312, clientY: 141 });
+    await wait(DWELL + 80);
+    await flush(6);
+    assert.equal(isOpen(), true, 'once it moves and rests, it previews');
+    key({ key: 'Escape' });
+    await flush(4);
+    fake.setState(state);
+  });
+
   await t.test('no room on either side: no preview, and nothing breaks', async () => {
     const state = fake.getState();
     fake.setState({ ...state, previewSide: null });

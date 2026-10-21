@@ -240,6 +240,11 @@ fn set_native_frame(ns: *mut AnyObject, frame: Rect) {
 pub fn preview_side(app: &AppHandle) -> Option<PreviewSide> {
     let window = app.get_webview_window(PANEL_LABEL)?;
     on_main_sync(move || {
+        // Hidden, the panel previews nothing: it is still under the pointer
+        // (transparent), and the window must not widen unseen.
+        if !SHOWN.load(Ordering::Acquire) {
+            return None;
+        }
         if let Some(open) = preview_open() {
             return Some(open);
         }
@@ -259,7 +264,7 @@ pub fn set_preview(app: &AppHandle, side: Option<PreviewSide>) {
 
 fn apply_preview(window: &tauri::WebviewWindow, side: Option<PreviewSide>) {
     let current = preview_open();
-    if current == side {
+    if current == side || (side.is_some() && !SHOWN.load(Ordering::Acquire)) {
         return;
     }
     let Some(ns) = ns_window(window) else {
