@@ -66,6 +66,7 @@ const type = (text) => {
 };
 const visible = (id) => !el(id).hidden;
 const called = (command) => calls.filter((call) => call.command === command);
+const footerIds = () => [...el('footer').children].filter((b) => !b.hidden).map((b) => b.id);
 
 async function toPreview() {
   answer = (command) => (command === 'report_prepare' ? Promise.resolve(structuredClone(PREVIEW)) : Promise.resolve(null));
@@ -132,6 +133,19 @@ test('a failed send retries the same frozen payload', async () => {
   assert.match(el('result-problem-text').textContent, /لا اتصال بالخادم/u);
   assert.match(el('result-problem-text').textContent, /فلن يتكرر/u, 'a retry is promised not to duplicate');
   assert.ok(visible('retry'));
+  // Ordered by the state, not four fixed buttons (ت٣٠): retry leads at the
+  // end of the row, editing beside it, closing quiet at its start, and
+  // copying offered inside the box.
+  assert.deepEqual(footerIds(), ['cancel', 'back', 'retry']);
+  assert.equal(el('retry').className, 'btn btn-primary');
+  assert.equal(el('back').className, 'btn', 'the second action, not a third primary');
+  assert.equal(el('back').textContent, 'رجوع للتعديل');
+  assert.equal(el('cancel').textContent, 'إغلاق');
+  assert.ok(!visible('copy-report') && visible('copy-inline'), 'copying is in the box, not a fourth button');
+  answer = () => Promise.resolve(null);
+  click(el('copy-inline'));
+  await flush();
+  assert.equal(called('report_copy').length, 1, 'and copies through Rust like the button did');
 
   const prepared = called('report_prepare').length;
   answer = (command) => (command === 'report_send' ? Promise.resolve({ status: 'failed', reason: 'timeout' }) : Promise.resolve(null));
@@ -147,9 +161,25 @@ test('a rate limit counts down instead of offering a retry that cannot work', as
   click(el('retry'));
   await flush();
   assert.equal(el('result-problem').dataset.tone, 'warning');
-  assert.equal(el('retry').disabled, true);
+  assert.ok(!visible('retry'), 'no button that cannot work while the wait runs');
+  assert.deepEqual(footerIds(), ['cancel', 'back'], 'editing is what can be done meanwhile');
   assert.match(el('result-problem-text').textContent, /بعد ١٠ دقائق/u, 'the wait is in the sentence, with the count agreeing');
   assert.equal(doc.activeElement, el('result-problem-title'), 'focus moves to what just appeared');
+});
+
+test('back to edit after a failure keeps the report as written', async () => {
+  assert.ok(visible('back'), 'offered while the rate limit runs');
+  click(el('back'));
+  assert.ok(visible('view-compose') && !visible('view-result'));
+  assert.equal(el('description').value, PREVIEW.description, 'the text is kept');
+  assert.equal(doc.querySelector('.kind[data-kind="bug"]').getAttribute('aria-checked'), 'true', 'and the kind');
+  assert.equal(el('category').value, 'search', 'and the part');
+  assert.deepEqual(footerIds(), ['cancel', 'next']);
+  assert.equal(el('cancel').textContent, 'إلغاء');
+  assert.equal(el('next').disabled, false, 'ready to be previewed again');
+  await toPreview();
+  assert.ok(visible('view-preview'));
+  assert.deepEqual(called('report_prepare').at(-1).args, { kind: 'bug', category: 'search', description: PREVIEW.description });
 });
 
 test('a rejection names the field, isolated from the Arabic around it', async () => {
@@ -160,6 +190,17 @@ test('a rejection names the field, isolated from the Arabic around it', async ()
   assert.match(el('result-problem-text').textContent, /⁦os_version⁩/u);
   assert.match(el('result-problem-text').textContent, /لن تغيّر النتيجة/u, 'and does not invite a pointless resend');
   assert.ok(visible('back') && !visible('retry'), 'editing leads, sending again is not offered');
+  assert.deepEqual(footerIds(), ['cancel', 'back'], 'a field it can fix: editing is the way forward');
+  assert.ok(visible('copy-inline'));
+});
+
+test('a rejection editing cannot fix leads with copying the report', async () => {
+  backToCompose();
+  await toPreview();
+  await sendWith({ status: 'rejected', code: 404, error: 'unknown_product' });
+  assert.deepEqual(footerIds(), ['cancel', 'back', 'copy-report']);
+  assert.equal(el('copy-report').className, 'btn btn-primary');
+  assert.ok(!visible('copy-inline'), 'not offered twice');
 });
 
 test('Escape keeps what the user wrote', async () => {
