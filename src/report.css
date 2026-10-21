@@ -1,4 +1,6 @@
-/* The problem-report window — 460 × 600 (Figma 276:8, 277:146, 278:243). */
+/* The problem-report window — 460 × 600. Flat: tone and a 1px line. Figma
+   XCNmucSuAe007qWHnOXQpW «08 · نوافذ أخرى» 45:6180 (compose, preview,
+   result). */
 
 html,
 body {
@@ -17,13 +19,15 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 30px;
+  height: 28px;
   flex: none;
 }
 
 .title-bar-title {
+  font-family: var(--font-heading);
   font-size: var(--text-body);
   font-weight: 600;
+  line-height: var(--line-body);
   color: var(--ink-2);
 }
 
@@ -31,9 +35,9 @@ body {
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: var(--space-12);
+  gap: var(--space-16);
   min-height: 0;
-  padding: var(--space-8) var(--space-24) var(--space-16);
+  padding: var(--space-12) var(--space-24);
 }
 
 .view[hidden] {
@@ -53,6 +57,7 @@ body {
 .result-note {
   margin: 0;
   font-size: var(--text-small);
+  line-height: var(--line-body);
   color: var(--ink-2);
 }
 
@@ -60,7 +65,7 @@ body {
 
 .field {
   display: grid;
-  gap: var(--space-6);
+  gap: var(--space-8);
   margin: 0;
   padding: 0;
   border: 0;
@@ -69,84 +74,76 @@ body {
 .field-label {
   padding: 0;
   font-size: var(--text-small);
-  font-weight: 600;
+  font-weight: 700;
+  line-height: var(--line-tight);
   color: var(--ink-2);
 }
 
+/* The kind is one of four pills, the panel's filter segment (Figma Segment
+   33:149): selection in clay, never a box per option. */
 .kinds {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--space-8);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
 }
 
 .kind {
-  display: flex;
-  align-items: center;
-  gap: var(--space-8);
-  height: 40px;
+  height: 28px;
   padding: 0 var(--space-12);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  background: var(--bg-raised);
-  font-size: var(--text-body);
-  text-align: start;
-  transition: background var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease);
-}
-
-.kind::before {
-  content: '';
-  width: 16px;
-  height: 16px;
-  flex: none;
-  border: 1px solid var(--control-off);
+  border: 0;
   border-radius: var(--radius-full);
-  background: var(--bg-raised);
+  background: transparent;
+  font-size: var(--text-small);
+  font-weight: 700;
+  line-height: var(--line-tight);
+  color: var(--ink-2);
+  transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
 }
 
 .kind:hover {
-  background: linear-gradient(var(--bg-hover), var(--bg-hover)), var(--bg-raised);
+  background: var(--bg-hover);
+  color: var(--ink);
 }
 
 .kind:active {
-  background: linear-gradient(var(--bg-pressed), var(--bg-pressed)), var(--bg-raised);
+  background: var(--bg-pressed);
 }
 
 .kind[aria-checked='true'] {
-  border-color: var(--accent);
   background: var(--accent-soft);
-  font-weight: 600;
   color: var(--accent-ink);
-}
-
-.kind[aria-checked='true']::before {
-  border: 5px solid var(--accent);
 }
 
 .select-wrap {
   position: relative;
+  justify-self: start;
 }
 
+/* RTL: the value reads from the start (right); the chevron sits at the end. */
 .select {
-  width: 100%;
+  min-width: 120px;
   height: 28px;
-  padding: 0 var(--space-12) 0 28px;
-  border: 1px solid var(--line-input);
+  padding: 0 var(--space-12) 0 32px;
+  border: 1px solid var(--line);
   border-radius: var(--radius-md);
   background: var(--bg-raised);
-  box-shadow: var(--shadow-control);
-  font-size: var(--text-small);
+  font-size: var(--text-body);
   -webkit-appearance: none;
   appearance: none;
+}
+
+.select:hover:not(:disabled) {
+  background: linear-gradient(var(--bg-hover), var(--bg-hover)), var(--bg-raised);
 }
 
 .select-wrap::after {
   content: '';
   position: absolute;
   top: 50%;
-  left: 9px;
-  width: 12px;
-  height: 12px;
-  margin-top: -6px;
+  left: var(--space-8);
+  width: 16px;
+  height: 16px;
+  margin-top: -8px;
   background: var(--ink-3);
   pointer-events: none;
   -webkit-mask: url('assets/icons/chevron-down.svg') center / contain no-repeat;
@@ -160,7 +157,7 @@ body {
   border-radius: var(--radius-md);
   background: var(--bg-raised);
   font-size: var(--text-body);
-  line-height: 1.6;
+  line-height: var(--line-body);
   resize: none;
   -webkit-user-select: text;
   user-select: text;
@@ -170,6 +167,7 @@ body {
   color: var(--ink-3);
 }
 
+/* Focus and error are a 2px edge: the border plus a 1px ring, no blur. */
 .textarea:focus {
   outline: none;
   border-color: var(--focus);
@@ -186,6 +184,7 @@ body {
   justify-content: space-between;
   gap: var(--space-8);
   font-size: var(--text-caption);
+  line-height: var(--line-tight);
 }
 
 .counter {
@@ -204,22 +203,19 @@ body {
   display: flex;
   align-items: center;
   gap: var(--space-12);
-  min-height: 64px;
-  padding: var(--space-8) var(--space-12);
-  border: 1px dashed var(--line-strong);
-  border-radius: var(--radius-md);
+  min-height: 56px;
+  padding: var(--space-12);
+  border-radius: var(--radius-lg);
   background: var(--bg-sunken);
 }
 
-.attachment[data-state='attached'],
-.attachment[data-state='processing'] {
-  border-style: solid;
-  border-color: transparent;
+.attachment[data-state='error'] {
+  background: var(--danger-soft);
 }
 
-.attachment[data-state='error'] {
-  border-color: transparent;
-  background: var(--danger-soft);
+/* Empty, the words and the button say it all (Figma Attachment). */
+.attachment[data-state='empty'] .attachment-art {
+  display: none;
 }
 
 .attachment-art {
@@ -248,7 +244,7 @@ body {
   width: 64px;
   height: 40px;
   flex: none;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   object-fit: cover;
   box-shadow: inset 0 0 0 1px var(--line);
 }
@@ -262,7 +258,8 @@ body {
 
 .attachment-title {
   font-size: var(--text-small);
-  font-weight: 600;
+  font-weight: 700;
+  line-height: var(--line-tight);
 }
 
 .attachment[data-state='error'] .attachment-title {
@@ -271,7 +268,8 @@ body {
 
 .attachment-detail {
   font-size: var(--text-caption);
-  color: var(--ink-2);
+  line-height: var(--line-tight);
+  color: var(--ink-3);
 }
 
 /* ─── Preview ─────────────────────────────────────────────────────────── */
@@ -287,33 +285,49 @@ body {
   border-radius: var(--radius-full);
   background: var(--warning-soft);
   font-size: var(--text-caption);
-  font-weight: 600;
+  font-weight: 700;
   color: var(--warning-ink);
 }
 
 .section-title {
-  margin: var(--space-4) 0 calc(-1 * var(--space-6));
-  font-size: var(--text-caption);
+  margin: 0 0 calc(-1 * var(--space-4));
+  font-size: var(--text-body);
   font-weight: 600;
-  color: var(--ink-3);
+  line-height: var(--line-body);
+  color: var(--ink);
 }
 
 .card {
   margin: 0;
-  padding: var(--space-8) var(--space-12);
+  padding: var(--space-4) var(--space-16);
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
   background: var(--bg-raised);
 }
 
+/* Label | value rows, a 1px line between them (Figma «Fields»). */
 .fields {
   display: grid;
-  grid-template-columns: auto 1fr;
-  gap: var(--space-4) var(--space-12);
+  grid-template-columns: 96px 1fr;
+  column-gap: var(--space-16);
   font-size: var(--text-small);
+  line-height: var(--line-body);
+}
+
+.fields dt,
+.fields dd {
+  padding: var(--space-8) 0;
+}
+
+.fields dt:not(:first-of-type),
+.fields dt:not(:first-of-type) + dd {
+  border-top: 1px solid var(--line);
 }
 
 .fields dt {
+  font-size: var(--text-caption);
+  font-weight: 700;
+  line-height: var(--line-tight);
   color: var(--ink-3);
 }
 
@@ -322,7 +336,7 @@ body {
 }
 
 .caption {
-  margin-top: calc(-1 * var(--space-6));
+  margin-top: calc(-1 * var(--space-8));
 }
 
 .fields dd {
@@ -331,12 +345,16 @@ body {
   word-break: break-word; /* Safari 15.0–15.3 */
   overflow-wrap: anywhere;
   text-align: left;
-  font-family: var(--font-latin);
+  font-family: var(--font-mono);
+  font-size: var(--text-caption);
+  line-height: var(--line-tight);
   direction: ltr;
 }
 
 .fields dd.is-arabic {
-  font-family: var(--font-ar);
+  font-family: var(--font-ui);
+  font-size: var(--text-small);
+  line-height: var(--line-body);
   direction: rtl;
   text-align: right;
 }
@@ -346,6 +364,7 @@ body {
   border-radius: var(--radius-md);
   background: var(--bg-sunken);
   font-size: var(--text-small);
+  line-height: var(--line-body);
   white-space: pre-wrap;
   word-break: break-word; /* Safari 15.0–15.3 */
   overflow-wrap: anywhere;
@@ -361,7 +380,7 @@ body {
   width: 120px;
   max-height: 120px;
   flex: none;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   object-fit: contain;
   background: var(--bg-sunken);
 }
@@ -370,6 +389,7 @@ body {
 .caption {
   margin: 0;
   font-size: var(--text-caption);
+  line-height: var(--line-tight);
   color: var(--ink-2);
 }
 
@@ -380,7 +400,7 @@ body {
   background: var(--bg-sunken);
   font-family: var(--font-mono);
   font-size: var(--text-caption);
-  line-height: 1.5;
+  line-height: var(--line-tight);
   white-space: pre-wrap;
   word-break: break-word; /* Safari 15.0–15.3 */
   overflow-wrap: anywhere;
@@ -431,27 +451,29 @@ body {
   margin: 0;
   font-size: var(--text-display);
   font-weight: 700;
+  line-height: var(--line-display);
 }
 
+/* The number is the receipt: label, the figure in clay, and its copy. */
 .report-number {
-  display: flex;
-  align-items: center;
-  gap: var(--space-12);
-  padding: var(--space-8) var(--space-12) var(--space-8) var(--space-16);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
-  background: var(--bg-raised);
+  display: grid;
+  justify-items: center;
+  gap: var(--space-8);
 }
 
 .report-number-label {
-  font-size: var(--text-small);
+  font-size: var(--text-caption);
+  font-weight: 700;
+  line-height: var(--line-tight);
   color: var(--ink-3);
 }
 
 .report-number-value {
   font-family: var(--font-latin);
   font-size: var(--text-figure);
-  font-weight: 700;
+  font-weight: 600;
+  line-height: var(--line-figure);
+  color: var(--accent-ink);
   -webkit-user-select: text;
   user-select: text;
 }
@@ -469,6 +491,11 @@ body {
   margin: 0;
 }
 
+.result .callout .link-btn {
+  justify-self: start;
+  margin-top: var(--space-4);
+}
+
 .result-note {
   width: 100%;
   text-align: start;
@@ -484,6 +511,7 @@ body {
   margin: 0;
   padding: 0 var(--space-24) var(--space-8);
   font-size: var(--text-small);
+  line-height: var(--line-body);
   color: var(--success-ink);
 }
 
