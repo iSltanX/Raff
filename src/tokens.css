@@ -278,6 +278,17 @@ bdi,
   mask: var(--icon) center / contain no-repeat;
 }
 
+/* One thin, flat scroll bar in every window, not the system's wide grey one. */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: var(--radius-full);
+  background: var(--line-strong) padding-box;
+}
+
 /* The mark: two masks sharing one 610 × 377 frame, the shelf in ink and the
    card in clay. Its box sets the size; the drawing keeps its proportions. */
 .mark-base,

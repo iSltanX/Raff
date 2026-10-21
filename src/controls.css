@@ -203,12 +203,3 @@ kbd {
   overscroll-behavior: contain;
 }
 
-::-webkit-scrollbar {
-  width: 8px;
-}
-
-::-webkit-scrollbar-thumb {
-  border: 2px solid transparent;
-  border-radius: var(--radius-full);
-  background: var(--line-strong) padding-box;
-}

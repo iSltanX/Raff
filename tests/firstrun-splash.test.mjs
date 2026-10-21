@@ -84,3 +84,10 @@ test('a lifted splash is out of the way: hidden and click-through', () => {
   assert.match(done, /pointer-events:\s*none/u);
   assert.match(firstrunCss, /\.splash\s*\{[^}]*position:\s*absolute;/u);
 });
+
+test('the permission step leads with «منح الإذن…» (Figma 1.4)', () => {
+  const dom = new JSDOM(firstrunHtml);
+  const grant = dom.window.document.getElementById('open-settings');
+  assert.ok(grant.classList.contains('btn-primary'), 'the clay button');
+  assert.equal(dom.window.document.getElementById('later').classList.contains('btn-primary'), false);
+});

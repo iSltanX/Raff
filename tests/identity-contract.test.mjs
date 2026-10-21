@@ -84,6 +84,17 @@ test('the design is flat: no shadow, gradient or frosted glass anywhere', () => 
   }
 });
 
+test('every window draws its own thin, flat scroll bar', () => {
+  // Settings loads tokens.css but not controls.css; with the bar defined only
+  // in controls, its pages showed the system's wide grey bar (live review).
+  const tokens = read('src/tokens.css');
+  assert.match(tokens, /::-webkit-scrollbar\s*\{[^}]*width:\s*8px;/u);
+  assert.match(tokens, /::-webkit-scrollbar-thumb\s*\{[^}]*background:\s*var\(--line-strong\) padding-box;/u);
+  for (const file of HTML) {
+    assert.match(read(`src/${file}`), /href="tokens\.css"/u, `${file} loads tokens.css`);
+  }
+});
+
 test('reading text keeps AA contrast on its surfaces in Light and Dark', () => {
   const tokens = read('src/tokens.css');
   for (const scope of [':root', ":root[data-appearance='dark']"]) {
