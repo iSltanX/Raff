@@ -52,17 +52,13 @@ function fakeTimers(window) {
   };
 }
 
-// `store.js` is evaluated once per test file and keeps the first window's
-// `invoke`; every mount therefore routes through this one mutable handler.
-let currentInvoke = () => Promise.resolve(null);
-
 async function mount(query, { axGranted = false, saveFails = false, ax = () => axGranted } = {}) {
   const calls = [];
   const dom = new JSDOM(firstrunHtml, { url: 'http://localhost/firstrun.html' });
   globalThis.window = dom.window;
   globalThis.document = dom.window.document;
   const timers = fakeTimers(dom.window);
-  currentInvoke = (command, args) => {
+  const invoke = (command, args) => {
     calls.push({ command, args });
     if (command === 'ax_status') return Promise.resolve(ax());
     if (command === 'get_settings') {
@@ -79,7 +75,7 @@ async function mount(query, { axGranted = false, saveFails = false, ax = () => a
     return Promise.resolve(null);
   };
   dom.window.__TAURI__ = {
-    core: { invoke: (command, args) => currentInvoke(command, args) },
+    core: { invoke },
     event: { listen: () => Promise.resolve(() => {}) },
   };
   await import(`../src/js/firstrun.js?${query}`);

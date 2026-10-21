@@ -5,13 +5,22 @@
 // Keep the design-review fixture out of production distributions. Plain-file
 // browser previews load it on demand; Tauri always takes the native branch and
 // never requests `mock.js` from the packaged asset protocol.
-const invoke = window.__TAURI__
-  ? window.__TAURI__.core.invoke
-  : async (command, args) => {
-      const { mockInvoke } = await import('./mock.js');
-      return mockInvoke(command, args);
-    };
-const listen = window.__TAURI__ ? window.__TAURI__.event.listen : () => Promise.resolve(() => {});
+//
+// The bridge is looked up on every call, not once at import: in the app it is
+// the same object either way, but a test file that mounts several windows in
+// turn must reach the one it is mounting now (audit 025).
+const invoke = async (command, args) => {
+  const bridge = window.__TAURI__;
+  if (bridge) return bridge.core.invoke(command, args);
+  const { mockInvoke } = await import('./mock.js');
+  return mockInvoke(command, args);
+};
+const listen = async (event, handler) => {
+  const bridge = window.__TAURI__;
+  if (bridge) return bridge.event.listen(event, handler);
+  const { mockListen } = await import('./mock.js');
+  return mockListen(event, handler);
+};
 
 export const api = {
   getState: () => invoke('get_state'),
