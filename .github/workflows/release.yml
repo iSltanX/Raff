@@ -59,6 +59,11 @@ jobs:
       - name: اختبارات الواجهة
         run: npm test
 
+      # cargo test يضمّن dist/ وقت الترجمة (generate_context!)، و npm test لم
+      # يعد يتركه خلفه منذ أن صار يبني في مجلد مؤقت. فيُبنى هنا قبله.
+      - name: بناء الواجهة
+        run: npm run build:frontend
+
       - name: اختبارات الخلفية
         run: cargo test --manifest-path src-tauri/Cargo.toml
 

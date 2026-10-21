@@ -265,6 +265,7 @@
 | <span dir="ltr">`npm run tauri dev`</span> | تشغيل تطويري |
 | <span dir="ltr">`npm run tauri build`</span> | يبني <span dir="ltr">`Raff.app`</span> وملف DMG |
 | <span dir="ltr">`npm test`</span> | اختبارات الواجهة |
+| <span dir="ltr">`npm run build:frontend`</span> | يبني الواجهة في <span dir="ltr">`dist/`</span>، وتحتاجها اختبارات الخلفية والتشغيل التطويري |
 | <span dir="ltr">`cargo test --manifest-path src-tauri/Cargo.toml`</span> | اختبارات الخلفية |
 
 الواجهة HTML وCSS وJavaScript بلا إطار، والخلفية Rust على Tauri 2. الإصدارات تُبنى عبر GitHub Actions عند دفع وسم بصيغة <span dir="ltr">`vX.Y.Z`</span>، وسجل التغييرات في [CHANGELOG.md](CHANGELOG.md).
