@@ -284,7 +284,9 @@ fn if_claimed(ticket: &PasteTicket, work: impl FnOnce()) {
 /// keystroke within `finish` more is abandoned. Either is reported as failed —
 /// the item is on the clipboard already, which is what the failure message
 /// says — and neither presses anything afterwards. One whose keystroke is out
-/// is waited for once more, for the answer that comes right after it.
+/// is waited for once more, for the answer that comes right after it. Past
+/// that third wait the failure is reported even so; the keystroke, claimed
+/// and beyond recall, takes milliseconds, so that wait is never near spent.
 fn await_paste(
     rx: &Receiver<bool>,
     ticket: &PasteTicket,
@@ -496,6 +498,7 @@ mod tests {
     /// the answer. Returns what the wait answered, and in order what the work
     /// did and when the user was told.
     fn run_paste(
+        patience: Duration,
         start_after: Duration,
         press_after: Duration,
         answer_after: Duration,
@@ -519,7 +522,7 @@ mod tests {
                 }
             });
         });
-        let answer = await_paste(&rx, &ticket, PATIENCE, PATIENCE);
+        let answer = await_paste(&rx, &ticket, patience, patience);
         events.lock().unwrap().push("told");
         work.join().unwrap();
         let events = events.lock().unwrap().clone();
@@ -530,7 +533,7 @@ mod tests {
     /// hidden and nothing pressed, then or later.
     #[test]
     fn a_paste_still_queued_at_the_timeout_never_moves_anything() {
-        let (answer, events) = run_paste(PATIENCE * 3, Duration::ZERO, Duration::ZERO);
+        let (answer, events) = run_paste(PATIENCE, PATIENCE * 3, Duration::ZERO, Duration::ZERO);
         assert!(answer.is_err());
         assert_eq!(events, ["told"]);
     }
@@ -540,7 +543,7 @@ mod tests {
     /// not go out after that — into whatever is in front by then.
     #[test]
     fn a_paste_that_started_and_stalled_presses_nothing_after_the_user_is_told() {
-        let (answer, events) = run_paste(Duration::ZERO, PATIENCE * 4, Duration::ZERO);
+        let (answer, events) = run_paste(PATIENCE, Duration::ZERO, PATIENCE * 4, Duration::ZERO);
         assert!(answer.is_err());
         assert_eq!(events, ["hidden", "told", "held back"]);
     }
@@ -550,7 +553,14 @@ mod tests {
     /// the answer that follows the keystroke.
     #[test]
     fn a_keystroke_that_went_out_is_waited_for_not_reported_failed() {
-        let (answer, events) = run_paste(Duration::ZERO, Duration::ZERO, PATIENCE * 5 / 2);
+        let (answer, events) = run_paste(
+            // Wider here: the answer must land between the second wait's end
+            // (2×) and the third's (3×), with room either side under load.
+            PATIENCE * 4,
+            Duration::ZERO,
+            Duration::ZERO,
+            PATIENCE * 10,
+        );
         assert_eq!(answer, Ok(true));
         assert_eq!(events, ["hidden", "pressed", "told"]);
     }

@@ -403,10 +403,10 @@ pub struct Activation {
     pub app: FrontApp,
 }
 
-/// Activations older than this are dropped on the next write. A capture looks
-/// back to the previous poll (`monitor::Watch`), which is one interval apart
-/// unless a poll was held up — a large image, a wait at the gate for another
-/// app's slow data — so the log keeps far more than any such delay.
+/// The least the log keeps. A capture looks back to the previous poll
+/// (`monitor::Watch`), however long ago a held-up poll makes that, and the
+/// loop says where its next window opens (`keep_activations_since`): nothing
+/// from there on is dropped, whatever its age.
 const ACTIVATION_KEEP: Duration = Duration::from_secs(5 * 60);
 
 fn activation_log() -> &'static Mutex<Vec<Activation>> {
@@ -436,6 +436,13 @@ fn window_opened() -> &'static Mutex<Option<Instant>> {
 /// forgotten, however long the next poll is held up.
 pub fn keep_activations_since(at: Instant) {
     *window_opened().lock().unwrap_or_else(|p| p.into_inner()) = Some(at);
+}
+
+/// Called when the capture loop has given up: no window will ask again, and
+/// a mark left standing would keep every later activation for the life of
+/// the process.
+pub fn stop_keeping_activations() {
+    *window_opened().lock().unwrap_or_else(|p| p.into_inner()) = None;
 }
 
 /// Drops what no capture will ask about any more. The newest activation at or

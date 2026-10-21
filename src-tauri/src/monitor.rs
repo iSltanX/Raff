@@ -43,6 +43,7 @@ pub fn start(app: AppHandle) {
             ControlFlow::Continue(())
         });
         if outcome == Supervision::GaveUp {
+            macos::stop_keeping_activations();
             let state = app.state::<AppState>();
             state.capture_alive.store(false, Ordering::SeqCst);
             // Say it where the user is looking, not only where they might go
@@ -788,6 +789,11 @@ mod tests {
         );
         let start = &src[src.find("pub fn start(").unwrap()..src.find("fn in_pool").unwrap()];
         assert!(start.contains("macos::keep_activations_since(watch.looked_at)"));
+        let gave_up = &start[start.find("Supervision::GaveUp").unwrap()..];
+        assert!(
+            gave_up.contains("macos::stop_keeping_activations()"),
+            "and lets go when it gives up"
+        );
     }
 
     /// And the loop does run every tick that way.
