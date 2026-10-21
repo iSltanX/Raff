@@ -707,7 +707,29 @@ mod tests {
         if glance == *last {
             return "unchanged";
         }
-        match look(board, own, pause, rules(), glance, last).0 {
+        outcome(look(board, own, pause, rules(), glance, last).0, store)
+    }
+
+    /// `poll_once` with its loop state, at a chosen instant: what it found,
+    /// and the window its rules would have been gathered over.
+    fn poll_at(
+        board: &FakeBoard,
+        own: &OwnWrites,
+        pause: &Mutex<Pause>,
+        store: &Mutex<Store>,
+        watch: &mut Watch,
+        at: Instant,
+    ) -> (&'static str, Option<Duration>) {
+        let glance = board.change_count();
+        let Some(window) = watch.notice(glance, at, at) else {
+            return ("unchanged", None);
+        };
+        let found = look(board, own, pause, rules(), glance, &mut watch.last).0;
+        (outcome(found, store), Some(window))
+    }
+
+    fn outcome(found: Look, store: &Mutex<Store>) -> &'static str {
+        match found {
             Look::Own => "own",
             Look::Skipped => "skipped",
             Look::Moved => "moved",
@@ -1001,6 +1023,44 @@ mod tests {
         // And رفّ's next write is still recognised.
         own.write(|| Some(board.write("ما كتبه رفّ", None)));
         assert_eq!(poll(&board, &own, &pause, &store, &mut last), "own");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// 007 ج1 alongside the gate: the loop state changes when a window starts,
+    /// not what the gate decides. رفّ's write is still recognised and spent,
+    /// a copy landing mid-look is still left to the next poll — and that poll
+    /// judges it over a window reaching back to the look that left it.
+    #[test]
+    fn the_watch_keeps_the_gates_outcomes_and_covers_what_a_look_left() {
+        let (dir, store) = empty_store();
+        let board = FakeBoard::new(2, "قديم");
+        let own = OwnWrites::new();
+        let pause = Mutex::new(Pause::Off);
+        let t0 = Instant::now();
+        let mut watch = Watch::from(2, t0);
+        let at = |ms| t0 + MS(ms);
+
+        own.write(|| Some(board.write("ما كتبه رفّ", None)));
+        let (found, window) = poll_at(&board, &own, &pause, &store, &mut watch, at(400));
+        assert_eq!((found, window), ("own", Some(MS(400))));
+        assert_eq!(*own.hold(), None, "the record is spent");
+        let unchanged = poll_at(&board, &own, &pause, &store, &mut watch, at(750));
+        assert_eq!(unchanged, ("unchanged", None));
+
+        board.write("أولى", None);
+        {
+            let b = board.clone();
+            board.at_count_read(3, move || {
+                b.write("ثانية", None);
+            });
+        }
+        let (found, window) = poll_at(&board, &own, &pause, &store, &mut watch, at(1_100));
+        assert_eq!((found, window), ("moved", Some(MS(350))));
+        let (found, window) = poll_at(&board, &own, &pause, &store, &mut watch, at(1_600));
+        assert_eq!(found, "captured");
+        assert_eq!(window, Some(MS(500)), "from the look that left it");
+        assert_eq!(texts(&store), ["ثانية"]);
+        assert_eq!(board.clip_reads.load(Ordering::SeqCst), 1);
         let _ = std::fs::remove_dir_all(dir);
     }
 
