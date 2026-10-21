@@ -325,7 +325,12 @@ pub fn init(app: &AppHandle) -> tauri::Result<()> {
     delegate.set_listener(Box::new(move |delegate_name: String| {
         match delegate_name.as_str() {
             "window_did_resign_key" => {
-                LAST_RESIGN_HIDE_MS.store(now_ms(), Ordering::Release);
+                let stamp = resign_stamp(
+                    SHOWN.load(Ordering::Acquire),
+                    now_ms(),
+                    LAST_RESIGN_HIDE_MS.load(Ordering::Acquire),
+                );
+                LAST_RESIGN_HIDE_MS.store(stamp, Ordering::Release);
                 hide(&handle);
             }
             // Once a Tauri window becomes NSPanel, Tao's ordinary Moved event is
@@ -467,6 +472,18 @@ pub fn toggle(app: &AppHandle) {
             show(&handle);
         }
     });
+}
+
+/// When the panel resigns key status, the moment to remember — only if that
+/// resignation hid a visible panel. Hidden, it can still become key (AppKit
+/// hands it the key when another رفّ window closes) and lose it to the very
+/// click on the icon; that click closed nothing and must open the panel.
+fn resign_stamp(shown: bool, now_ms: u64, previous_ms: u64) -> u64 {
+    if shown {
+        now_ms
+    } else {
+        previous_ms
+    }
 }
 
 fn was_just_dismissed_by_resign(now_ms: u64, last_resign_hide_ms: u64) -> bool {
@@ -732,6 +749,24 @@ mod tests {
         assert_eq!(remembered_x(268.0, Some(PreviewSide::Left), 2.0), 980.0);
         assert_eq!(remembered_x(980.0, Some(PreviewSide::Right), 2.0), 980.0);
         assert_eq!(remembered_x(980.0, None, 2.0), 980.0);
+    }
+
+    // The guard exists for the click that closes an OPEN panel. A panel that
+    // was already hidden and merely lost key status (it can become key while
+    // invisible, e.g. when Settings closes) closed nothing — the next click
+    // on the icon must open it (live review, 2026-10-21).
+    #[test]
+    fn only_a_visible_panel_resigning_arms_the_reopen_guard() {
+        assert_eq!(resign_stamp(true, 5_000, 900), 5_000);
+        assert_eq!(resign_stamp(false, 5_000, 900), 900);
+        assert!(!was_just_dismissed_by_resign(
+            5_010,
+            resign_stamp(false, 5_000, 0)
+        ));
+        assert!(was_just_dismissed_by_resign(
+            5_010,
+            resign_stamp(true, 5_000, 0)
+        ));
     }
 
     #[test]
