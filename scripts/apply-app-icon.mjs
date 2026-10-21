@@ -1,27 +1,23 @@
 #!/usr/bin/env node
-// Stamps the canonical Light app icon onto a built Raff.app.
+// Stamps the Icon Composer app icon (Light, Dark and Tinted) onto a built Raff.app.
 //
 // WHY THIS EXISTS
 // ---------------
 // macOS 26 does not simply display a legacy `.icns`. It decomposes the icon
 // into a background "plate" and a foreground glyph and re-renders the plate
 // with system material — which in Dark Mode, or with the Dark icon style,
-// means a near-black plate. Raff's plate is part of the mark, so the app
-// showed up black, no matter that the shipped `.icns` contained only light
-// artwork. Verified by resolving the icon through
-// `NSWorkspace.icon(forFile:)`: the same `.icns` rendered black, while a
-// control app's legacy icns kept its colour because that app ships a modern
-// icon asset.
+// means a near-black plate on which an ink mark vanishes. Verified by
+// resolving the icon through `NSWorkspace.icon(forFile:)`.
 //
-// The only supported way to pin appearance is to ship an Icon Composer asset
-// (`.icon` compiled to `Assets.car`, named by `CFBundleIconName`). Raff's
-// declares the SAME light plate, ink and sage for the default and `dark`
-// appearances. That `dark` entry is not a dark icon: it is what stops macOS
-// generating one — without it, Icon Composer darkens the plate itself (checked
-// with ictool's Dark rendition). So the application icon is the light one in
-// Light, Dark and the Dark icon style alike. Raff's interior UI keeps
-// following its own appearance setting.
-//
+// The only supported way to decide those appearances is to ship an Icon
+// Composer asset (`.icon` compiled to `Assets.car`, named by
+// `CFBundleIconName`). Raff's draws each one by design (Najdi redesign,
+// 2026-10-21): a sand plate with the ink shelf and clay card in Light; a dark
+// sand plate, a light shelf and a lighter clay card in Dark; one colour in
+// Tinted. The `dark` entry must stay present — without it, Icon Composer
+// darkens the plate itself (checked with ictool's Dark rendition). The legacy
+// `.icns` remains the Light artwork for systems before macOS 26.
+
 // WHY IT IS A POST-BUILD STEP
 // ---------------------------
 // Listing the `.icon` in tauri.conf.json makes `tauri build` drive `actool`
@@ -111,7 +107,7 @@ try {
     // Not fatal: the shipped artefacts are already correct.
   }
 
-  console.log(`apply-app-icon: canonical Light icon applied to ${appPath}`);
+  console.log(`apply-app-icon: Icon Composer icon (Light, Dark, Tinted) applied to ${appPath}`);
 } finally {
   rmSync(work, { recursive: true, force: true });
 }
