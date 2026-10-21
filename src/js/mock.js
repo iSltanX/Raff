@@ -4,6 +4,11 @@
 //
 // The sample content is neutral, realistic Arabic and Latin clipboard content,
 // so README screenshots never carry anyone's real clipboard.
+//
+// It answers the way Rust answers, `raff://changed` included: a page under
+// review in a state the app never reaches is reviewing the wrong page.
+
+import { normalizeArabic } from './logic.js';
 
 const MIN = 60_000;
 const HOUR = 60 * MIN;
@@ -46,6 +51,44 @@ let MOCK_UNREADABLE_SETTINGS = params.get('settings') === 'unreadable';
 
 let pendingDelete = null;
 let deleteSequence = 0;
+// The only way into the update window is `request_check_from_menu`, which
+// leaves one check for the window to claim before opening it (`updater.rs`):
+// a freshly loaded update page always finds one.
+let updateIntent = true;
+
+const listeners = new Map();
+
+export function mockListen(event, handler) {
+  if (!listeners.has(event)) listeners.set(event, new Set());
+  listeners.get(event).add(handler);
+  return Promise.resolve(() => listeners.get(event)?.delete(handler));
+}
+
+function announce(event = 'raff://changed') {
+  for (const handler of [...(listeners.get(event) ?? [])]) handler({ event, payload: null });
+}
+
+// What Rust follows with `raff://changed` once it succeeds; a paste or copy
+// announces only the use it counted (`count_use`).
+const CHANGES = new Set([
+  'toggle_pin',
+  'delete_item',
+  'undo_delete',
+  'reorder_pinned',
+  'update_settings',
+  'clear_history',
+  'clear_learning',
+  'resume_capture',
+]);
+
+function countUse(id, counter) {
+  if (!SETTINGS.learningEnabled) return;
+  const entry = [...PINNED, ...RECENT].find((candidate) => candidate.id === id);
+  if (!entry) return;
+  entry[counter] += 1;
+  entry.lastUsedAt = Math.max(Date.now(), entry.lastUsedAt + 1);
+  announce();
+}
 
 const SETTINGS = {
   hotkey: 'shift+super+v',
@@ -102,6 +145,15 @@ const MOCK_IMAGE = {
 let mockImage = null;
 
 export function mockInvoke(cmd, args = {}) {
+  return Promise.resolve()
+    .then(() => answer(cmd, args))
+    .then((result) => {
+      if (CHANGES.has(cmd)) announce();
+      return result;
+    });
+}
+
+function answer(cmd, args) {
   switch (cmd) {
     case 'get_state':
       return Promise.resolve(structuredClone({
@@ -130,7 +182,46 @@ export function mockInvoke(cmd, args = {}) {
     case 'restart_app':
       return Promise.resolve(null);
     case 'paste_item':
+      countUse(args.id, 'pasteCount');
       return Promise.resolve(true);
+    case 'copy_item':
+      countUse(args.id, 'copyCount');
+      return Promise.resolve(null);
+    // The full text, folded and trimmed the way the panel's own filter does.
+    case 'search_items': {
+      const needle = normalizeArabic(String(args.query ?? '').trim());
+      if (!needle) return Promise.resolve([]);
+      return Promise.resolve(
+        [...PINNED, ...RECENT]
+          .filter((entry) => normalizeArabic(entry.text).includes(needle))
+          .map((entry) => entry.id)
+      );
+    }
+    case 'reorder_pinned': {
+      const ids = args.ids ?? [];
+      const matchesShelf =
+        ids.length === PINNED.length &&
+        new Set(ids).size === ids.length &&
+        ids.every((id) => PINNED.some((entry) => entry.id === id));
+      if (!matchesShelf) return Promise.reject(new Error('ترتيب المثبتات لا يطابق المحفوظ'));
+      const reordered = ids.map((id, order) => ({
+        ...PINNED.find((entry) => entry.id === id),
+        pinnedOrder: order,
+      }));
+      PINNED.splice(0, PINNED.length, ...reordered);
+      return Promise.resolve(null);
+    }
+    case 'clear_history':
+      pendingDelete = null;
+      RECENT.length = 0;
+      return Promise.resolve(null);
+    case 'clear_learning':
+      for (const entry of [...PINNED, ...RECENT]) {
+        entry.copyCount = 0;
+        entry.pasteCount = 0;
+        entry.lastUsedAt = entry.createdAt;
+      }
+      return Promise.resolve(null);
     case 'toggle_pin': {
       const pinnedIndex = PINNED.findIndex((entry) => entry.id === args.id);
       if (pinnedIndex >= 0 && args.isPinned === false) {
@@ -230,8 +321,14 @@ export function mockInvoke(cmd, args = {}) {
     case 'download_and_install_update':
     case 'restart_to_update':
       return Promise.resolve(null);
-    case 'consume_update_intent':
-      return Promise.resolve(false); // no tray in the browser
+    case 'open_updates':
+      updateIntent = true;
+      return Promise.resolve(null);
+    case 'consume_update_intent': {
+      const claimed = updateIntent;
+      updateIntent = false;
+      return Promise.resolve(claimed);
+    }
 
     // Report window. `?send=sent|failed|limited|rejected` picks the answer.
     case 'report_prepare':
