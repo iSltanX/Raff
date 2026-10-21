@@ -30,7 +30,7 @@
 // the existing signature.
 
 import { execFileSync } from 'node:child_process';
-import { copyFileSync, existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -40,8 +40,14 @@ const project = path.join(here, '..');
 
 const ICON_SOURCE = path.join(project, 'src-tauri/icon-composer/AppIcon.icon');
 const ICON_NAME = 'AppIcon';
-/** Matches `bundle.macOS.minimumSystemVersion`'s modern-icon requirement. */
-const DEPLOYMENT_TARGET = '26.0';
+/** The catalogue is stamped with the system it is built for: the app's own
+ * minimum, read from `bundle.macOS.minimumSystemVersion`, not a newer one
+ * (026 ج1). Compiled for 12.0 or 26.0 the catalogue holds the same renditions
+ * — the legacy sizes and the Icon Composer layers alike — and differs only in
+ * that stamp (evidence/2026-10-22-m7/actool-26-vs-12.diff). */
+const DEPLOYMENT_TARGET = JSON.parse(
+  readFileSync(path.join(project, 'src-tauri/tauri.conf.json'), 'utf8')
+).bundle.macOS.minimumSystemVersion;
 
 const appPath = process.argv[2]
   ?? path.join(project, 'src-tauri/target/release/bundle/macos/Raff.app');
