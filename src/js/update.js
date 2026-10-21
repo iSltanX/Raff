@@ -13,6 +13,7 @@ window.addEventListener('contextmenu', (e) => e.preventDefault());
 const el = (id) => document.getElementById(id);
 const updateWindowEl = el('update-window');
 const statusEl = el('u-status');
+const subEl = el('u-sub');
 const availableEl = el('u-available');
 const newVersionEl = el('u-new-version');
 const dateEl = el('u-date');
@@ -21,11 +22,13 @@ const progressEl = el('u-progress');
 const barEl = el('u-bar');
 const barFillEl = el('u-bar-fill');
 const okBtn = el('u-ok');
+const laterBtn = el('u-later');
 const downloadBtn = el('u-download');
 const restartBtn = el('u-restart');
 const retryBtn = el('u-retry');
 
 let lastErrorFrom = 'check';
+const CHECKING_SUB = 'يتصل رفّ بإصدارات المستودع فقط.';
 
 // ─── Window sizing ─────────────────────────────────────────────────────────
 // Two fixed heights, never a continuous per-pixel resize: the "compact" tier
@@ -90,6 +93,8 @@ function render(state, data = {}) {
   barEl.removeAttribute('aria-valuenow');
   barEl.removeAttribute('aria-valuetext');
   okBtn.hidden = true;
+  laterBtn.hidden = true;
+  subEl.textContent = '';
   downloadBtn.hidden = true;
   restartBtn.hidden = true;
   retryBtn.hidden = true;
@@ -100,6 +105,7 @@ function render(state, data = {}) {
   switch (state) {
     case 'checking':
       statusEl.textContent = 'جارٍ التحقق من وجود تحديثات…';
+      subEl.textContent = CHECKING_SUB;
       break;
 
     case 'uptodate':
@@ -110,7 +116,8 @@ function render(state, data = {}) {
       break;
 
     case 'available':
-      statusEl.textContent = '';
+      statusEl.textContent = 'إصدار جديد متاح';
+      subEl.textContent = 'الحزمة موقّعة، ويرفض رفّ ما لا يطابق توقيعه.';
       availableEl.hidden = false;
       newVersionEl.textContent = `الإصدار ${arabicDigits(data.version)}`;
       dateEl.hidden = !data.date;
@@ -118,6 +125,7 @@ function render(state, data = {}) {
       notesEl.hidden = !data.notes;
       notesEl.textContent = data.notes || ''; // textContent → untrusted-safe
       downloadBtn.hidden = false;
+      laterBtn.hidden = false;
       break;
 
     case 'downloading':
@@ -136,7 +144,9 @@ function render(state, data = {}) {
 
     case 'installed':
       statusEl.textContent = 'اكتمل التثبيت';
+      subEl.textContent = 'أعد تشغيل رفّ لإكمال التثبيت. لا يُفقد شيء من سجلّك.';
       restartBtn.hidden = false;
+      laterBtn.hidden = false;
       break;
 
     case 'error':
@@ -157,12 +167,15 @@ function render(state, data = {}) {
 
     default:
       statusEl.textContent = 'جارٍ التحقق من وجود تحديثات…';
+      subEl.textContent = CHECKING_SUB;
   }
 }
 
 const flow = createUpdateFlow({ onChange: render });
 
-okBtn.addEventListener('click', () => window.__TAURI__?.window.getCurrentWindow().close());
+const closeWindow = () => window.__TAURI__?.window.getCurrentWindow().close();
+okBtn.addEventListener('click', closeWindow);
+laterBtn.addEventListener('click', closeWindow);
 downloadBtn.addEventListener('click', () => flow.download());
 restartBtn.addEventListener('click', () => flow.restart());
 retryBtn.addEventListener('click', () => {
