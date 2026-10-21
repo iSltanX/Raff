@@ -188,6 +188,16 @@ kbd {
 .callout[data-tone='danger'] .callout-icon { color: var(--danger); }
 .callout[data-tone='danger'] .callout-title { color: var(--danger-ink); }
 
+/* The webview covers the native overlay title bar, so a window with no title
+   of its own (the welcome, the update) marks the strip to drag it by. The
+   traffic lights stay above it. */
+.title-drag {
+  position: fixed;
+  inset: 0 0 auto;
+  z-index: 3;
+  height: 28px;
+}
+
 .scroll-pane {
   overflow-y: auto;
   overscroll-behavior: contain;

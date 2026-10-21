@@ -1,0 +1,12 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "title-drag",
+  "description": "The welcome and update windows have no title bar of their own over the native overlay one, so their pages mark a strip to drag by; starting that native drag is all this adds.",
+  "windows": [
+    "firstrun",
+    "update"
+  ],
+  "permissions": [
+    "core:window:allow-start-dragging"
+  ]
+}
