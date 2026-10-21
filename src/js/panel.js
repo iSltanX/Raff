@@ -412,7 +412,10 @@ function buildRow(item, index) {
      twice, which would paste twice. Copy-without-pasting stays available as
      the secondary action on ⌘C. */
   row.addEventListener('click', (e) => {
-    selectedId = item.id;
+    // Through `setSelection`, not behind the list's back: when the panel
+    // stays open after the paste, the row shown as chosen must be this one
+    // (audit 012).
+    setSelection(item.id);
     paste(item.id, e.altKey);
   });
 
@@ -506,7 +509,10 @@ function buildCard(row, item, index) {
   foot.append(kind, time);
 
   row.addEventListener('click', (e) => {
-    selectedId = item.id;
+    // Through `setSelection`, not behind the list's back: when the panel
+    // stays open after the paste, the row shown as chosen must be this one
+    // (audit 012).
+    setSelection(item.id);
     paste(item.id, e.altKey);
   });
   row.append(media, foot);
@@ -2108,7 +2114,7 @@ window.addEventListener('keydown', (e) => {
     const item = visible[Number(e.code.slice(5)) - 1];
     e.preventDefault();
     if (item) {
-      selectedId = item.id;
+      setSelection(item.id);
       paste(item.id, e.altKey);
     }
     return;
