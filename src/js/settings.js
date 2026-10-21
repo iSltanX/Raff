@@ -148,7 +148,6 @@ diagnosticsBtn.addEventListener('click', async () => {
     diagnosticsTimer = window.setTimeout(() => showDiagnosticsStatus(''), 4000);
   }
 });
-el('confirm-icon').replaceChildren(createIcon(ALERT));
 
 // ─── Load / sync ──────────────────────────────────────────────────────────
 
@@ -445,6 +444,7 @@ function renderHotkeyWarning(accel) {
   const box = el('hotkey-warning');
   const refusal = hotkeyRefusal(accel);
   box.hidden = !refusal;
+  hotkeyChip.classList.toggle('is-refused', Boolean(refusal));
   if (!refusal) return false;
   const keys = `\u2066${hotkeyDisplay(accel)}\u2069`;
   const why =

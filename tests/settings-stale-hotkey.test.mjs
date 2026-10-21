@@ -99,6 +99,7 @@ test('settings: a stale refused hotkey is called out, with a way to change it', 
   assert.match(warning.textContent, /\u2066⌘V\u2069/u, 'naming the shortcut, isolated from the Arabic');
   assert.match(warning.textContent, /لم يُغيَّر تلقائيًا/u);
   assert.equal(doc.getElementById('hotkey-chip').textContent, '⌘V', 'still what it is');
+  assert.ok(doc.getElementById('hotkey-chip').classList.contains('is-refused'), 'the badge itself reads as refused (Figma Hotkey Badge «Refused»)');
   assert.deepEqual(fake.hotkeyWrites(), [], 'and not changed behind the user\'s back');
 
   doc.getElementById('launch-toggle').click();
@@ -108,4 +109,13 @@ test('settings: a stale refused hotkey is called out, with a way to change it', 
 
   doc.getElementById('hotkey-warning-action').click();
   assert.ok(doc.getElementById('hotkey-chip').classList.contains('recording'), 'the way to change it starts the recorder');
+
+  dom.window.dispatchEvent(
+    new dom.window.KeyboardEvent('keydown', { key: 'v', code: 'KeyV', metaKey: true, altKey: true, bubbles: true })
+  );
+  await flush();
+  await flush();
+  assert.equal(fake.hotkeyWrites().length, 1, 'the new shortcut is saved');
+  assert.equal(warning.hidden, true, 'and the warning goes');
+  assert.ok(!doc.getElementById('hotkey-chip').classList.contains('is-refused'), 'with the refused look');
 });
