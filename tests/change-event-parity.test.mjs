@@ -207,3 +207,13 @@ test('the browser mock announces after exactly the commands Rust does', async ()
   }
   assert.deepEqual(wrong, []);
 });
+
+test('the hourly retention sweep announces only when a row went', () => {
+  // An announcement makes a shown panel fetch and redraw everything; an hour
+  // with nothing past its limit has nothing to show (audit 2026-10-21 §٤-هـ).
+  const monitor = read('src-tauri/src/monitor.rs');
+  const sweeper = monitor.slice(monitor.indexOf('fn start_retention_sweeper'));
+  const body = sweeper.slice(0, sweeper.indexOf('\n}\n'));
+  assert.match(body, /let trimmed = [^;]*\.trim_history\(\);\s*if trimmed \{\s*let _ = app\.emit\("raff:\/\/changed"/u);
+  assert.equal(body.match(/raff:\/\/changed/gu).length, 1);
+});

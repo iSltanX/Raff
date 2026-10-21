@@ -246,7 +246,9 @@ fn main() {
         // `raff --settings` surfaces the settings window; any other relaunch
         // surfaces the panel.
         builder = builder.plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
-            eprintln!("raff: relaunch forwarded, argv: {argv:?}");
+            // The arguments are not logged: nothing a launch was handed belongs
+            // in a log that ships in the release build.
+            eprintln!("raff: relaunch forwarded");
             startup_trace::mark("SINGLE_INSTANCE_FORWARD");
             if argv.iter().any(|a| a == "--settings") {
                 commands::open_settings_window(app);

@@ -296,3 +296,20 @@ test('panel: the preview opens with intent, previews only, and closes in order',
     assert.match(doc.getElementById('toast-message').textContent, /لا متّسع للمعاينة/u, 'asked by a key, it says why not');
   });
 });
+
+test('the preview buttons tell assistive technology their shortcuts', async () => {
+  // The keys are printed on each button; a screen reader gets them as a
+  // property too, in the form the toast's «تراجع» already uses (audit
+  // 2026-10-21 §٤-هـ). Each one matches the key printed beside it.
+  const { readFileSync } = await import('node:fs');
+  const { JSDOM } = await import('jsdom');
+  const html = readFileSync(new URL('../src/index.html', import.meta.url), 'utf8');
+  const doc = new JSDOM(html).window.document;
+  const printed = { '↵': 'Enter', '⌥↵': 'Alt+Enter', '⌘C': 'Meta+C', '⌥P': 'Alt+P', '⌘⌫': 'Meta+Backspace' };
+  const buttons = [...doc.querySelectorAll('#preview .preview-actions button')];
+  assert.equal(buttons.length, 5);
+  for (const button of buttons) {
+    const keys = button.querySelector('.btn-keys').textContent;
+    assert.equal(button.getAttribute('aria-keyshortcuts'), printed[keys], button.dataset.action);
+  }
+});

@@ -32,3 +32,13 @@ test('no surface claims رفّ never uses the network', () => {
 test('the clipboard promise itself is still made', () => {
   present(read('README.md'), /ما تنسخه لا يغادر جهازك/u, 'README');
 });
+
+test('nothing a launch was handed is logged', () => {
+  // A relaunch forwards its arguments to the running رفّ; the log line that
+  // records it says so without them (audit 2026-10-21 §٤-هـ). Release builds
+  // keep stderr, so it is held to the same rule as clipboard content.
+  const main = readFileSync(new URL('../src-tauri/src/main.rs', import.meta.url), 'utf8');
+  for (const line of main.split('\n').filter((l) => /eprintln!/u.test(l))) {
+    assert.doesNotMatch(line, /argv|args|_cwd/u, line.trim());
+  }
+});

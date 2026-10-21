@@ -60,12 +60,16 @@ pub fn start(app: AppHandle) {
 /// clipboard for a fortnight.
 const RETENTION_SWEEP_MS: u64 = 60 * 60 * 1000;
 
-/// Re-applies the retention policy on a timer.
+/// Re-applies the retention policy on a timer, and tells the windows only
+/// when a row went: an announcement makes a shown panel fetch and redraw
+/// everything, which an hour with nothing past its limit does not need.
 fn start_retention_sweeper(app: AppHandle) {
     std::thread::spawn(move || loop {
         std::thread::sleep(Duration::from_millis(RETENTION_SWEEP_MS));
-        crate::lock_store(&app.state::<AppState>().store).trim_history();
-        let _ = app.emit("raff://changed", ());
+        let trimmed = crate::lock_store(&app.state::<AppState>().store).trim_history();
+        if trimmed {
+            let _ = app.emit("raff://changed", ());
+        }
     });
 }
 

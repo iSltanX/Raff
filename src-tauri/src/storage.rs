@@ -1209,9 +1209,14 @@ impl Store {
         store.resolve_interrupted_pin();
         // A toast cannot survive a process restart, so a journal from the
         // previous process is resolved immediately. Transaction ordering makes
-        // this safe in both crash windows:
-        // - item still on disk => delete never committed; preserve its files
-        // - item absent on disk => deletion committed; clean up its files
+        // this safe in both crash windows, judged on the layers as decoded:
+        // - item in a layer => delete never committed; preserve its files
+        // - item in neither => deletion committed; clean up its files
+        // A layer that could not be decoded reads as empty, so its rows count
+        // as absent and the deletion is completed, files and all — although
+        // the recovery copy kept of that layer still names them. That is
+        // deliberate (ت٤٦(د)): the user asked for this item to go, and a
+        // recovery copy is not a reason to keep its files.
         store.resolve_interrupted_delete();
         // Before anything is shown: the age limit has no capture to ride on.
         store.trim_history();
@@ -2038,15 +2043,19 @@ impl Store {
     /// copy followed by a fortnight away from the machine is precisely the
     /// case the promise was made for, and precisely the case with no capture
     /// to hang a prune on.
-    pub fn trim_history(&mut self) {
+    ///
+    /// Returns whether anything went, so the hourly sweep only tells the
+    /// windows when there is something new to show.
+    pub fn trim_history(&mut self) -> bool {
         let dropped = self.prune_history();
         if dropped.is_empty() {
-            return;
+            return false;
         }
         self.save_history();
         for item in &dropped {
             self.delete_files(item);
         }
+        true
     }
 
     /// Rewrites the pinned shelf into exactly this order.
@@ -2907,7 +2916,10 @@ mod tests {
         capture_text(&mut s, "قديم");
         s.history[0].created_at = now_ms() - 400 * 24 * 60 * 60 * 1000;
 
-        s.trim_history();
+        assert!(
+            !s.trim_history(),
+            "nothing went, so the sweep announces nothing"
+        );
 
         assert_eq!(s.history.len(), 1, "0 means the age limit is not in play");
     }
@@ -2919,7 +2931,7 @@ mod tests {
             capture_text(&mut s, &format!("item {i}"));
         }
         s.settings.history_limit = 2;
-        s.trim_history();
+        assert!(s.trim_history(), "rows went: the windows are told");
         assert_eq!(s.history.len(), 2);
         assert_eq!(s.history[0].text, "item 4");
         assert_eq!(s.history[1].text, "item 3");
