@@ -264,6 +264,7 @@
 | <span dir="ltr">`npm install`</span> | يثبّت الاعتماديات |
 | <span dir="ltr">`npm run tauri dev`</span> | تشغيل تطويري |
 | <span dir="ltr">`npm run tauri build`</span> | يبني <span dir="ltr">`Raff.app`</span> وملف DMG |
+| <span dir="ltr">`node scripts/preview-server.mjs src`</span> | معاينة الصفحات في المتصفح على <span dir="ltr">`127.0.0.1:5179`</span>، ببيانات <span dir="ltr">`mock.js`</span> وبلا تخزين مؤقت |
 | <span dir="ltr">`npm test`</span> | اختبارات الواجهة |
 | <span dir="ltr">`npm run build:frontend`</span> | يبني الواجهة في <span dir="ltr">`dist/`</span>، وتحتاجها اختبارات الخلفية والتشغيل التطويري |
 | <span dir="ltr">`cargo test --manifest-path src-tauri/Cargo.toml`</span> | اختبارات الخلفية |
