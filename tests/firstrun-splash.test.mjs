@@ -57,10 +57,12 @@ test('the welcome opens on the splash: the mark, «رفّ» and its line, nothin
 });
 
 test('the splash gives way by itself', async () => {
-  const dom = await mount('splash-timer', { duration: 30 });
+  // Long enough that mounting under a loaded parallel run (seen past 30ms)
+  // does not outlast it before the first look.
+  const dom = await mount('splash-timer', { duration: 300 });
   const splash = dom.window.document.getElementById('splash');
   assert.equal(splash.classList.contains('is-done'), false);
-  await wait(80);
+  await wait(450);
   assert.equal(splash.classList.contains('is-done'), true);
 });
 
