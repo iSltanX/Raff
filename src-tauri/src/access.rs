@@ -56,7 +56,10 @@ pub const WINDOWS: &[(&str, &[&str])] = &[
 ];
 
 /// Commands any window may call: they open a window, open one fixed page in
-/// the browser, or answer whether Accessibility is granted.
+/// the browser, or answer whether Accessibility is granted. Nothing checks
+/// it at run time; the tests on both sides read it, so no command is left out
+/// of both lists by accident.
+#[cfg_attr(not(test), allow(dead_code))]
 pub const OPEN: &[&str] = &[
     "show_panel",
     "open_settings",
