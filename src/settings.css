@@ -609,6 +609,12 @@ body {
   display: none;
 }
 
+/* Until the user's preferences are read the controls hold the page's own
+   defaults; shown, they would read as the user's (ت٤٠). */
+.settings-window[aria-busy='true'] .settings-body {
+  visibility: hidden;
+}
+
 .settings-load-state.is-error {
   color: var(--danger-ink);
 }
