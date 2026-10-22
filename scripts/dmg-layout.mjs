@@ -1,7 +1,7 @@
 // Gives the installer DMG its designed window: the background from
-// src-tauri/dmg/background.tiff (see gen-dmg-background.mjs), Raff.app and the
-// Applications link centred in the two dashed frames, no toolbar or status bar,
-// and رفّ's icon on the volume.
+// src-tauri/dmg/background.tiff (see gen-dmg-background.mjs), Raff.app set on
+// the shelf the mark draws there and the Applications link to its left, no
+// toolbar or status bar, and رفّ's icon on the volume.
 //
 // Used by build-candidate.mjs (local) and ci-fix-release-icon.mjs (release),
 // on the read-write image they already create from the patched app, before it
@@ -24,10 +24,13 @@ const project = path.join(here, '..');
 export const BACKGROUND = path.join(project, 'src-tauri/dmg/background.tiff');
 export const VOLUME_ICON = path.join(project, 'src-tauri/icons/icon.icns');
 /** The background's size in points; the window shows exactly this. */
-export const WINDOW = { width: 660, height: 420 };
-/** Icon centres, matching the dashed frames in background.html. */
-export const ICON_CENTRES = { 'Raff.app': [170, 187], Applications: [490, 187] };
-export const ICON_SIZE = 128;
+export const WINDOW = { width: 660, height: 400 };
+/** Icon centres (Figma «05 — DMG & README»). At ICON_SIZE 144 the icon's plate
+ *  is 144 × 824/1024 = 115.875, the 233-unit square of the mark at the shelf's
+ *  scale in background.html, so Raff.app rests on the shelf. The drag runs right
+ *  to left, away from the curve of «ر». */
+export const ICON_CENTRES = { 'Raff.app': [358, 190], Applications: [150, 190] };
+export const ICON_SIZE = 144;
 export const TEXT_SIZE = 14;
 /** Finder's window bounds include its title bar: 32 pt on macOS 26 and 27
  *  (measured on the opened DMG). The path and status bars are hidden. */

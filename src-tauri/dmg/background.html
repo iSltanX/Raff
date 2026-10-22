@@ -1,86 +1,75 @@
 <!doctype html>
 <!--
-  The DMG window background — رفّ's installer, 660 × 420 pt.
+  The DMG window background — رفّ's installer, 660 × 400 pt (Figma
+  XCNmucSuAe007qWHnOXQpW «05 — DMG & README», DMG/Background 71:97).
   Design source only: `npm run dmg:background` renders it (1× and 2×) and
   packs background.tiff, which scripts/dmg-layout.mjs puts in the DMG.
-  Colours, fonts, radii and the marks come from the app itself (src/).
-  Finder draws Raff.app and the Applications link on top, at the centres
-  of the two dashed frames (dmg-layout.mjs: ICON_CENTRES), with their labels.
+  Colours, fonts and the mark come from the app itself (src/).
+
+  The idea: رفّ's mark is the shelf, without its card. Finder draws the real
+  Raff.app where the card would be: at icon size 144 its plate is 115.875 pt,
+  the mark's 233-unit square at this scale, so it fills that square and rests
+  on the shelf (dmg-layout.mjs: ICON_SIZE, ICON_CENTRES). Applications sits to
+  its left on the same line, and the drag runs right to left.
+
+  Light only: Finder takes one background picture, never one per appearance.
+  Reports (DropDMG, 2018 and 2020; not yet checked on macOS 27) say Finder also
+  draws such a window light, with dark labels, so the shelf is a sand tone a
+  dark label reads on, and the window behind Applications too.
 -->
 <html lang="ar" dir="rtl" data-appearance="light">
 <head>
 <meta charset="utf-8">
 <link rel="stylesheet" href="../../src/tokens.css">
 <style>
-  html, body { margin: 0; width: 660px; height: 420px; overflow: hidden; }
+  html, body { margin: 0; width: 660px; height: 400px; overflow: hidden; }
   body {
     position: relative;
-    background: var(--bg-window);
+    background: var(--line-strong);
     color: var(--ink);
     font-family: var(--font-ar);
     -webkit-font-smoothing: antialiased;
   }
   .abs { position: absolute; }
 
-  /* Header: the Latin name at the start of a Latin reader's eye, the Arabic one at ours. */
-  .brand { top: 22px; display: flex; align-items: center; gap: 9px; height: 32px; }
-  .brand-latin { left: 30px; direction: ltr; font: 600 21px var(--font-latin); letter-spacing: -0.2px; }
-  .brand-latin .glyph { width: 28px; height: 28px; }
-  .brand-ar { right: 30px; font: 700 25px var(--font-heading); }
-  .brand-ar img { width: 30px; height: 30px; }
-
-  /* Where Finder puts the two icons. Flat: a dashed outline, no fill. */
-  .frame {
-    width: 148px; height: 148px; top: 113px; box-sizing: border-box;
-    border-radius: 30px;
-    border: 1.5px dashed var(--line-strong);
+  /* The mark as the shelf: its own outline, scaled 115.875 / 233. */
+  .shelf { left: 300.0625px; top: 132.0625px; width: 303.3637px; height: 187.4887px;
+    background: var(--ink-disabled);
+    -webkit-mask: url('../../src/assets/brand/mark-base.svg') 0 0 / 100% 100% no-repeat;
+    mask: url('../../src/assets/brand/mark-base.svg') 0 0 / 100% 100% no-repeat;
   }
-  .frame.app { left: 96px; }
-  .frame.apps { left: 416px; }
+  /* Where the plate meets the shelf. Flat: a tone, no blur. */
+  .contact { left: 314px; top: 247.9375px; width: 88px; height: 4px; border-radius: 2px; background: var(--line-input); }
 
-  /* The idea, behind everything: a shelf the two items rest above. */
-  .shelf { left: 64px; right: 64px; top: 283px; height: 3px; border-radius: 2px; background: var(--line); }
+  /* The drag, right to left: seven dots and a chevron. */
+  .dot { top: 188px; width: 4px; height: 4px; border-radius: 50%; background: var(--brand-accent); }
+  .chevron { left: 214px; top: 182px; width: 10px; height: 16px; }
 
-  .arrow { left: 0; top: 0; width: 660px; height: 420px; }
-
-  /* Three steps, read right to left. Flat: a raised tone and a 1px line. */
-  .steps {
-    left: 24px; right: 24px; top: 296px; height: 104px; box-sizing: border-box;
-    display: flex; direction: rtl;
-    background: var(--bg-raised);
-    border: 1px solid var(--line);
-    border-radius: var(--radius-lg);
-  }
-  .step { flex: 1; min-width: 0; padding: 12px 12px 0; display: grid; grid-template-columns: 20px 1fr; column-gap: 8px; align-content: start; }
-  .step + .step { border-right: 1px solid var(--line); }
-  .num {
-    width: 20px; height: 20px; border-radius: 50%;
-    display: grid; place-items: center;
-    background: var(--accent); color: var(--on-accent);
-    font: 600 11px var(--font-latin);
-  }
-  .ar { font-size: 12px; font-weight: 600; line-height: 1.5; text-align: right; margin-top: -1px; }
-  .en { grid-column: 2; margin-top: 3px; direction: ltr; text-align: right; font: 400 10px/1.4 var(--font-latin); color: var(--ink-3); }
+  .line { left: 40px; width: 580px; text-align: center; }
+  .instruction { top: 40px; font: 700 22px/34px var(--font-heading); color: var(--ink); }
+  .instruction-en { top: 78px; direction: ltr; font: 500 12px/16px var(--font-latin); color: var(--ink-2); }
+  .gatekeeper { top: 356px; font: 400 11.5px/18px var(--font-ar); color: var(--ink-2); }
   bdi { font-family: var(--font-latin); }
 </style>
 </head>
 <body>
-  <div class="abs brand brand-latin"><span class="glyph" style="display:inline-block;background:url('../../src/assets/brand/mark.svg') center/contain no-repeat"></span>Raff</div>
-  <div class="abs brand brand-ar"><img src="../../src/assets/app-icon/raff-app-icon-1024.png" alt="">رفّ</div>
+  <div class="abs line instruction">اسحب رفّ إلى التطبيقات</div>
+  <div class="abs line instruction-en">Drag Raff to Applications</div>
 
   <div class="abs shelf"></div>
-  <div class="abs frame app"></div>
-  <div class="abs frame apps"></div>
+  <div class="abs contact"></div>
 
-  <svg class="abs arrow" viewBox="0 0 660 420" aria-hidden="true">
-    <path d="M 262 206 Q 330 158 396 196" fill="none" stroke="var(--accent)" stroke-width="3.5" stroke-linecap="round"/>
-    <path d="M 381 182 L 398 197 L 377 202" fill="none" stroke="var(--accent)" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <div class="abs dot" style="left: 284px"></div>
+  <div class="abs dot" style="left: 275px"></div>
+  <div class="abs dot" style="left: 266px"></div>
+  <div class="abs dot" style="left: 257px"></div>
+  <div class="abs dot" style="left: 248px"></div>
+  <div class="abs dot" style="left: 239px"></div>
+  <div class="abs dot" style="left: 230px"></div>
+  <svg class="abs chevron" viewBox="0 0 10 16" aria-hidden="true">
+    <path d="M8.5 1.5L2 8L8.5 14.5" fill="none" style="stroke: var(--brand-accent)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
   </svg>
 
-  <div class="abs steps">
-    <div class="step"><span class="num">1</span><div class="ar">اسحب رفّ إلى «التطبيقات»</div><div class="en">Drag Raff to Applications</div></div>
-    <div class="step"><span class="num">2</span><div class="ar">افتحه من «التطبيقات»</div><div class="en">Open it from Applications</div></div>
-    <div class="step"><span class="num">3</span><div class="ar">إن نبّهك <bdi>macOS</bdi>: «افتح على أي حال» من الخصوصية والأمن</div><div class="en">If macOS warns: Privacy &amp; Security → Open Anyway</div></div>
-  </div>
+  <div class="abs line gatekeeper">إن نبّهك <bdi>macOS</bdi> أول مرة: الإعدادات ← الخصوصية والأمن ← «افتح على أي حال»</div>
 </body>
 </html>

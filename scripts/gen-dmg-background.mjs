@@ -1,7 +1,7 @@
 // Renders the DMG window background from its design source.
 //
-//   src-tauri/dmg/background.html  →  background.png (660×420, 1×)
-//                                     background@2x.png (1320×840, Retina)
+//   src-tauri/dmg/background.html  →  background.png (660×400, 1×)
+//                                     background@2x.png (1320×800, Retina)
 //                                     background.tiff (both, one file: Finder
 //                                       picks the right one for the screen)
 //
@@ -19,11 +19,12 @@ import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { WINDOW } from './dmg-layout.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const dir = path.join(here, '..', 'src-tauri', 'dmg');
 const source = pathToFileURL(path.join(dir, 'background.html')).href;
-const [WIDTH, HEIGHT] = [660, 420];
+const [WIDTH, HEIGHT] = [WINDOW.width, WINDOW.height];
 
 const chrome = process.env.CHROME ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 if (!existsSync(chrome)) {
