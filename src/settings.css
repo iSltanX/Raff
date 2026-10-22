@@ -123,10 +123,6 @@ body {
   margin-top: var(--space-8);
 }
 
-.page-heading {
-  display: none;
-}
-
 .settings-groups {
   display: grid;
   gap: var(--space-16);
