@@ -5,7 +5,12 @@
 // to grant one they may already have.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
 import { click, flush, mountPanel, sampleItem } from './helpers/panel-harness.mjs';
+
+const here = path.dirname(fileURLToPath(import.meta.url));
 
 test('a copy made because رفّ was in front says so', async () => {
   const { dom, fake } = await mountPanel({
@@ -19,8 +24,14 @@ test('a copy made because رفّ was in front says so', async () => {
   await flush(10);
   const message = dom.window.document.getElementById('toast-message').textContent;
   assert.match(message, /نُسخ إلى الحافظة/u);
-  assert.match(message, /رفّ كان في الواجهة/u, `the reason: ${message}`);
+  assert.match(message, /رفّ كان في المقدمة/u, `the reason: ${message}`);
   assert.match(message, /⁦⌘V⁩/u);
   assert.equal(fake.invokeCount('ax_status'), 0, 'not asked about a permission that is not the reason');
   assert.equal(fake.invokeCount('hide_panel'), 0);
+});
+
+test('and it stays long enough to read', () => {
+  const panel = readFileSync(path.join(here, '../src/js/panel.js'), 'utf8');
+  const call = panel.slice(panel.indexOf("pasted === 'copiedOverRaff'"));
+  assert.match(call.slice(0, call.indexOf(');')), /ACCESS_TOAST_MS/u);
 });

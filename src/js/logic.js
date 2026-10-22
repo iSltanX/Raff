@@ -24,15 +24,20 @@ export function releaseDate(iso, lang = 'ar') {
   if (at.getUTCFullYear() !== year || at.getUTCMonth() !== month - 1 || at.getUTCDate() !== day) {
     return null;
   }
-  if (String(lang).toLowerCase().startsWith('ar')) {
-    return `${arabicDigits(day)} ${ARABIC_MONTHS[month - 1]} ${arabicDigits(year)}`;
+  const arabic = `${arabicDigits(day)} ${ARABIC_MONTHS[month - 1]} ${arabicDigits(year)}`;
+  if (/^ar(-|$)/iu.test(String(lang ?? ''))) return arabic;
+  try {
+    return new Intl.DateTimeFormat(lang, {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      timeZone: 'UTC',
+    }).format(at);
+  } catch {
+    // An empty or malformed `lang` makes Intl throw; the date still shows,
+    // in the interface's own language.
+    return arabic;
   }
-  return new Intl.DateTimeFormat(lang, {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-    timeZone: 'UTC',
-  }).format(at);
 }
 
 /**

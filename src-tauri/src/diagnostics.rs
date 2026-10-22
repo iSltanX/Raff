@@ -82,7 +82,8 @@ pub struct StorageState {
 pub struct Outcome {
     /// "paste" | "copy" | "update-check" | "report"
     pub op: &'static str,
-    /// "ok" | "clipboard-only" | "not-found" | "available" | "error"
+    /// "ok" | "clipboard-only" | "clipboard-only-over-raff" | "not-found" |
+    /// "available" | "error"
     pub result: &'static str,
     pub ms: u64,
     pub ago_s: u64,

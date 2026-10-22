@@ -111,6 +111,9 @@ body {
 
 .settings-page {
   outline: none;
+  /* The hidden page heading (sr-only) is placed within its page, so the
+     VoiceOver cursor on it scrolls to where the page begins. */
+  position: relative;
 }
 
 .settings-page:focus-visible {

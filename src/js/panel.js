@@ -1491,7 +1491,11 @@ function paste(id, plain) {
       // Copied only because رفّ itself was in front — Settings, or the
       // welcome's «افتح رفّ» (009): say that, not «grant Accessibility».
       if (pasted === 'copiedOverRaff') {
-        showToast('نُسخ إلى الحافظة، ولم يُلصق لأن رفّ كان في الواجهة. الصقه بـ \u2066⌘V\u2069 حيث تريد.');
+        // A reason and an instruction: the reading time of the longer toasts.
+        showToast(
+          'نُسخ إلى الحافظة — لم يُلصق لأن رفّ كان في المقدمة. الصقه بـ \u2066⌘V\u2069.',
+          ACCESS_TOAST_MS
+        );
         return;
       }
       // `pasted: false` always means the item is safely on the clipboard —

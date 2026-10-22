@@ -28,6 +28,9 @@ export const api = {
   getSettings: () => invoke('get_settings'),
   // Ids of rows matching beyond the preview the panel holds.
   searchItems: (query) => invoke('search_items', { query }),
+  // `true` pasted, `false` copied only, or a string naming why it was only
+  // copied (`'copiedOverRaff'`, paste.rs `PasteOutcome`): a new reason must be
+  // worded in panel.js, or it reads as the Accessibility fallback.
   pasteItem: (id, plain = false) => invoke('paste_item', { id, plain }),
   copyItem: (id) => invoke('copy_item', { id }),
   togglePin: (id, isPinned) => invoke('toggle_pin', { id, isPinned }),
