@@ -27,6 +27,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { styleDmg } from './dmg-layout.mjs';
 
+import { checkFreshApp } from './release-guards.mjs';
+
 const here = path.dirname(fileURLToPath(import.meta.url));
 const project = path.join(here, '..');
 const bundleMacos = path.join(project, 'src-tauri/target/release/bundle/macos');
@@ -45,6 +47,8 @@ function readVersion() {
 
 // ── 1. tauri build — compiles, code-signs, produces the base .app (and a
 //      DMG + tar.gz this script immediately discards and regenerates). ──────
+// Taken before building: an app older than this is not this build's (013 ج1).
+const startedAt = Date.now();
 try {
   run('npm', ['run', 'tauri', 'build'], { cwd: project });
 } catch {
@@ -59,6 +63,13 @@ try {
 
 if (!existsSync(appPath)) {
   console.error(`build-candidate: tauri build did not produce ${appPath}`);
+  process.exit(1);
+}
+// An app being there is not enough: a build that failed early leaves the
+// last one in place. It must be this build's, at the declared version.
+const stale = checkFreshApp({ appPath, startedAt, version: readVersion() });
+if (stale) {
+  console.error(`build-candidate: ${stale}`);
   process.exit(1);
 }
 console.log('tauri build: app produced (its own DMG/tar.gz will be discarded and regenerated below)');

@@ -1,7 +1,8 @@
 # يبني «رفّ» وينشر حزمه في إصدارات هذا المستودع نفسه — لا مستودع إصدارات منفصل.
 #
-# التشغيل: ادفع وسمًا بصيغة vX.Y.Z (مطابقًا للنسخة في package.json و tauri.conf.json)،
-# أو شغّل التدفّق يدويًا من تبويب Actions.
+# التشغيل: ادفع وسمًا بصيغة vX.Y.Z (مطابقًا للنسخة في package.json و tauri.conf.json
+# و Cargo.toml)، أو شغّل التدفّق يدويًا من تبويب Actions واختر الوسم نفسه في
+# «Use workflow from». التشغيل من فرع، أو من وسم يسمّي نسخة أخرى، يتوقف قبل البناء.
 #
 # المُخرَجات المرفوعة إلى الإصدار:
 #   Raff_<version>_aarch64.dmg   حزمة التثبيت
@@ -44,6 +45,11 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 24
+
+      # قبل أي شيء: الإصدار يُبنى من وسم يسمّي النسخة التي تعلنها الملفات كلها،
+      # لا من فرع يصير اسمُه اسمَ الإصدار (013 ج2).
+      - name: مطابقة الوسم والنسخة
+        run: node scripts/release-guards.mjs tag "${{ github.ref_type }}" "${{ github.ref_name }}"
 
       - uses: dtolnay/rust-toolchain@stable
         with:
