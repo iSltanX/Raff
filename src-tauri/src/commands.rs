@@ -35,6 +35,9 @@ pub mod err {
     pub const UNDO_NO_ROOM: &str = crate::storage::UNDO_NO_ROOM;
     /// The same, because it is past the retention period.
     pub const UNDO_RETENTION: &str = crate::storage::UNDO_RETENTION;
+    /// A pinned item's name over its cap, or a name for what is not pinned.
+    pub const LABEL_TOO_LONG: &str = crate::storage::LABEL_TOO_LONG;
+    pub const LABEL_NOT_PINNED: &str = crate::storage::LABEL_NOT_PINNED;
     /// The delete was already made final (ت٤٥ ب٣).
     pub const UNDO_EXPIRED: &str = crate::storage::UNDO_EXPIRED;
     /// A test run of رفّ: it has no clipboard to copy to or paste from (ت٤٨).
@@ -67,6 +70,8 @@ pub struct ItemDto {
     pub paste_count: u32,
     pub last_used_at: u64,
     pub has_image: bool,
+    /// A pinned item's name (IMP-07).
+    pub label: Option<String>,
 }
 
 impl ItemDto {
@@ -88,6 +93,7 @@ impl ItemDto {
             paste_count: item.paste_count,
             last_used_at: item.last_used_at,
             has_image: item.image_file.is_some(),
+            label: item.label.clone(),
         }
     }
 }
@@ -230,7 +236,11 @@ fn rows_to_search(store: &Store) -> Vec<(String, String)> {
         .pinned
         .iter()
         .chain(store.history.iter())
-        .map(|item| (item.id.clone(), item.text.clone()))
+        // A pinned item's name is searched with its text (IMP-07).
+        .map(|item| match &item.label {
+            Some(label) => (item.id.clone(), format!("{label}\n{}", item.text)),
+            None => (item.id.clone(), item.text.clone()),
+        })
         .collect()
 }
 
@@ -330,6 +340,33 @@ pub fn reorder_pinned(
     {
         let mut store = crate::lock_store(&state.store);
         store.reorder_pinned_persisted(&ids).map_err(save_failed)?;
+    }
+    notify(&app);
+    Ok(())
+}
+
+/// Names a pinned item, or clears its name (IMP-07). Off the main thread:
+/// it writes the shelf.
+#[tauri::command(async)]
+pub fn set_label(
+    window: tauri::WebviewWindow,
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: String,
+    label: Option<String>,
+) -> Result<(), String> {
+    crate::access::require(&window, "set_label")?;
+    {
+        let mut store = crate::lock_store(&state.store);
+        store
+            .set_label_persisted(&id, label.as_deref())
+            .map_err(|e| {
+                if e == err::LABEL_TOO_LONG || e == err::LABEL_NOT_PINNED {
+                    e
+                } else {
+                    save_failed(e)
+                }
+            })?;
     }
     notify(&app);
     Ok(())
@@ -1193,6 +1230,21 @@ mod tests {
         });
         assert_eq!(overtaken, None, "overtaken, it answers nothing");
         assert!(seen.get() <= 11, "and stops there, not after every row");
+    }
+
+    /// IMP-07: a pinned item is found by its name as by its text.
+    #[test]
+    fn the_deep_search_finds_a_pinned_item_by_its_name() {
+        let mut store = store_with_rows(&["نص لا يذكر الاسم"]);
+        let id = store.history[0].id.clone();
+        assert!(store.toggle_pin(&id));
+        store.save_pinned();
+        store.save_history();
+        store
+            .set_label_persisted(&id, Some("عنوان المكتب"))
+            .unwrap();
+        assert_eq!(ids_matching(&store, "المكتب"), vec![id.clone()]);
+        assert_eq!(ids_matching(&store, "يذكر"), vec![id]);
     }
 
     /// The store-side half of `search_items`: everything except taking the lock.

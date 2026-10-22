@@ -62,6 +62,10 @@ pub struct ClipItem {
     pub copy_count: u32,
     pub paste_count: u32,
     pub last_used_at: u64,
+    /// A pinned item's own name (IMP-07), shown above its text and searched
+    /// with it. Pinned items only: unpinning drops it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug, Default)]
@@ -443,6 +447,12 @@ pub(crate) const UNDO_NO_ROOM: &str = "raff/undo-no-room";
 /// The same, because its age is past the retention period, not the count —
 /// not the undo window running out, which is another thing.
 pub(crate) const UNDO_RETENTION: &str = "raff/undo-retention";
+/// A pinned item's name is a few words, not a note (IMP-07).
+pub(crate) const LABEL_MAX_CHARS: usize = 40;
+pub(crate) const LABEL_TOO_LONG: &str = "raff/label-too-long";
+/// Only the shelf has names: the item is not pinned, or is gone.
+pub(crate) const LABEL_NOT_PINNED: &str = "raff/label-not-pinned";
+
 /// That other thing: the delete was made final — its five seconds ran out, or
 /// «مسح السجل» settled it — before the undo arrived (ت٤٥ ب٣).
 pub(crate) const UNDO_EXPIRED: &str = "raff/undo-expired";
@@ -1495,6 +1505,7 @@ impl Store {
             copy_count: 1,
             paste_count: 0,
             last_used_at: now,
+            label: None,
         };
         let id = item.id.clone();
         self.history.insert(0, item);
@@ -1914,6 +1925,8 @@ impl Store {
         let mut item = pending.item.clone();
         item.is_pinned = false;
         item.pinned_order = None;
+        // A name belongs to the shelf (IMP-07): history rows have none.
+        item.label = None;
         self.return_to_history(item)
     }
 
@@ -2071,6 +2084,27 @@ impl Store {
     /// The whole layer is copied for the rollback. That is fine here and not
     /// in `capture`: pinning is a deliberate, rare act on a short list, not a
     /// cost paid on every copy the user makes.
+    /// Names a pinned item, or clears its name with `None` or blank text
+    /// (IMP-07). Persisted before it answers; on a failed write the shelf
+    /// stays as it was.
+    pub fn set_label_persisted(&mut self, id: &str, label: Option<&str>) -> Result<(), String> {
+        self.try_finish_pending_pin()?;
+        let label = label.map(str::trim).filter(|l| !l.is_empty());
+        if label.is_some_and(|l| l.chars().count() > LABEL_MAX_CHARS) {
+            return Err(LABEL_TOO_LONG.into());
+        }
+        let Some(index) = self.pinned.iter().position(|item| item.id == id) else {
+            return Err(LABEL_NOT_PINNED.into());
+        };
+        let previous = self.pinned[index].label.clone();
+        self.pinned[index].label = label.map(str::to_string);
+        if let Err(err) = try_save_json(&self.dir.join(PINNED_FILE), &self.pinned) {
+            self.pinned[index].label = previous;
+            return Err(err);
+        }
+        Ok(())
+    }
+
     pub fn reorder_pinned_persisted(&mut self, ids: &[String]) -> Result<(), String> {
         self.try_finish_pending_pin()?;
 
@@ -2133,6 +2167,8 @@ impl Store {
         let mut item = self.pinned.remove(pos);
         item.is_pinned = false;
         item.pinned_order = None;
+        // A name belongs to the shelf (IMP-07): history rows have none.
+        item.label = None;
         let dropped = self.return_to_history(item.clone());
         Some(PendingPin {
             item,
@@ -5955,6 +5991,54 @@ mod data_safety_tests {
     }
 
     // 017 ────────────────────────────────────────────────────────────────
+
+    /// IMP-07: a pinned item takes a name, which is kept, trimmed, capped,
+    /// and gone with the pin.
+    #[test]
+    fn a_pinned_item_is_named_and_unpinning_drops_the_name() {
+        let mut s = Store::load(temp_dir());
+        capture_text(&mut s, "x");
+        let id = s.history[0].id.clone();
+        assert_eq!(
+            s.set_label_persisted(&id, Some("اسم")),
+            Err(LABEL_NOT_PINNED.to_string())
+        );
+        assert!(s.toggle_pin(&id));
+        s.save_pinned();
+        s.save_history();
+
+        s.set_label_persisted(&id, Some("  عنوان المكتب  "))
+            .unwrap();
+        assert_eq!(s.pinned[0].label.as_deref(), Some("عنوان المكتب"));
+        let reloaded = Store::load(s.dir.clone());
+        assert_eq!(
+            reloaded.pinned[0].label.as_deref(),
+            Some("عنوان المكتب"),
+            "persisted"
+        );
+
+        let long = "ب".repeat(LABEL_MAX_CHARS + 1);
+        assert_eq!(
+            s.set_label_persisted(&id, Some(&long)),
+            Err(LABEL_TOO_LONG.to_string())
+        );
+        assert_eq!(
+            s.pinned[0].label.as_deref(),
+            Some("عنوان المكتب"),
+            "unchanged by a refusal"
+        );
+
+        s.set_label_persisted(&id, Some("   ")).unwrap();
+        assert_eq!(s.pinned[0].label, None, "blank clears it");
+        s.set_label_persisted(&id, Some("اسم")).unwrap();
+        assert!(s.toggle_pin(&id));
+        let row = s
+            .history
+            .iter()
+            .find(|i| i.id == id)
+            .expect("back in history");
+        assert_eq!(row.label, None, "unpinned, it has no name");
+    }
 
     /// ت٤٥ ب٣: «مسح السجل» made the delete final while its «تراجع» was on
     /// screen. The undo then says the window is over, as a kind the panel can

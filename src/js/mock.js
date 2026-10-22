@@ -74,6 +74,7 @@ function announce(event = 'raff://changed') {
 // What Rust follows with `raff://changed` once it succeeds; a paste or copy
 // announces only the use it counted (`count_use`).
 const CHANGES = new Set([
+  'set_label',
   'toggle_pin',
   'delete_item',
   'undo_delete',
@@ -199,6 +200,16 @@ function answer(cmd, args) {
           .filter((entry) => normalizeArabic(entry.text).includes(needle))
           .map((entry) => entry.id)
       );
+    }
+    // IMP-07, as Rust: pinned items only, trimmed, capped, blank clears.
+    case 'set_label': {
+      const entry = PINNED.find((item) => item.id === args.id);
+      if (!entry) return Promise.reject('raff/label-not-pinned');
+      const label = String(args.label ?? '').trim();
+      if ([...label].length > 40) return Promise.reject('raff/label-too-long');
+      if (label) entry.label = label;
+      else delete entry.label;
+      return Promise.resolve(null);
     }
     case 'reorder_pinned': {
       const ids = args.ids ?? [];

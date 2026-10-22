@@ -278,6 +278,7 @@ fn main() {
             commands::copy_item,
             commands::toggle_pin,
             commands::reorder_pinned,
+            commands::set_label,
             commands::delete_item,
             commands::undo_delete,
             commands::commit_delete,

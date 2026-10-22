@@ -314,9 +314,14 @@ test('the preview buttons tell assistive technology their shortcuts', async () =
     '⌃↵': 'Control+Enter', // «الصق بلا تشكيل» (IMP-06)
   };
   const buttons = [...doc.querySelectorAll('#preview .preview-actions button')];
-  assert.equal(buttons.length, 6);
-  for (const button of buttons) {
+  const keyed = buttons.filter((button) => button.querySelector('.btn-keys'));
+  assert.equal(keyed.length, 6);
+  for (const button of keyed) {
     const keys = button.querySelector('.btn-keys').textContent;
     assert.equal(button.getAttribute('aria-keyshortcuts'), printed[keys], button.dataset.action);
+  }
+  // «تسمية…» and its «حفظ» have no key, and claim none (IMP-07).
+  for (const button of buttons.filter((b) => !keyed.includes(b))) {
+    assert.equal(button.hasAttribute('aria-keyshortcuts'), false, button.textContent);
   }
 });

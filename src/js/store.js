@@ -38,6 +38,8 @@ export const api = {
   copyItem: (id) => invoke('copy_item', { id }),
   togglePin: (id, isPinned) => invoke('toggle_pin', { id, isPinned }),
   reorderPinned: (ids) => invoke('reorder_pinned', { ids }),
+  // A pinned item's name (IMP-07); null or blank clears it.
+  setLabel: (id, label) => invoke('set_label', { id, label }),
   deleteItem: (id) => invoke('delete_item', { id }),
   undoDelete: (token) => invoke('undo_delete', { token }),
   commitDelete: (token) => invoke('commit_delete', { token }),

@@ -1016,3 +1016,27 @@ html[data-preview='right'] .preview-pane {
   font-family: var(--font-latin);
   font-weight: 600;
 }
+
+/* IMP-07: a pinned item's name, above its text. */
+.row-label {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: var(--text-caption);
+  font-weight: 700;
+  color: var(--ink-2);
+}
+
+.preview-label-form {
+  display: flex;
+  gap: var(--space-8);
+}
+
+.preview-label-form[hidden] {
+  display: none;
+}
+
+.preview-label-form .text-input {
+  flex: 1;
+  min-width: 0;
+}

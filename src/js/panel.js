@@ -306,6 +306,15 @@ function buildRow(item, index) {
 
   if (isGrid()) return buildCard(row, item, index);
 
+  // A pinned item's name, above what it holds (IMP-07).
+  if (item.isPinned && item.label) {
+    const name = document.createElement('div');
+    name.className = 'row-label';
+    name.dir = 'auto';
+    name.textContent = item.label; // user-typed → textContent
+    preview.append(name);
+  }
+
   if (item.type === 'image') {
     const thumb = buildThumb(row, item);
     const media = document.createElement('div');
@@ -1394,6 +1403,8 @@ const ERROR_MESSAGES = {
   'raff/undo-no-room': 'لم يعد في سجلّك متّسع لهذا العنصر، فلم يُستعد.',
   'raff/undo-retention': 'انتهت مدة الاحتفاظ بهذا العنصر، فلم يُستعد.',
   'raff/undo-expired': 'انتهت مهلة التراجع، وحُذف العنصر نهائيًا.',
+  'raff/label-too-long': 'الاسم أطول من ٤٠ حرفًا.',
+  'raff/label-not-pinned': 'الاسم للعناصر المثبّتة وحدها.',
   'raff/clipboard-off': 'هذه نسخة تجربة من رفّ، فلا تصل إلى الحافظة.',
 };
 
@@ -1868,6 +1879,10 @@ filtersEl.addEventListener('keydown', (e) => {
 const previewEl = document.getElementById('preview');
 const previewKindEl = document.getElementById('preview-kind');
 const previewBareEl = previewEl.querySelector('[data-action="bare"]');
+const previewLabelBtn = previewEl.querySelector('[data-action="label"]');
+const previewLabelText = document.getElementById('preview-label-text');
+const labelForm = document.getElementById('preview-label-form');
+const labelInput = document.getElementById('preview-label-input');
 const previewWhenEl = document.getElementById('preview-when');
 const previewSizeEl = document.getElementById('preview-size');
 const previewBodyEl = document.getElementById('preview-body');
@@ -1987,6 +2002,10 @@ function fillPreview(item) {
   previewEl.dataset.type = item.type;
   // Only where there is something for it to drop.
   previewBareEl.hidden = item.type === 'image' || !hasTashkeel(item.text);
+  // A name is the shelf's (IMP-07). Another item closes an open field.
+  previewLabelBtn.hidden = !item.isPinned;
+  previewLabelText.textContent = item.label ? 'تغيير الاسم…' : 'تسمية…';
+  if (!sameItem) closeLabelField({ refocus: false });
   previewKindEl.textContent = item.type === 'code' ? 'شفرة' : contentTypeIcon(item.type).label;
   previewWhenEl.textContent = [
     relativeTimeAr(item.createdAt),
@@ -2098,8 +2117,55 @@ function previewContent(item) {
   return text;
 }
 
-// Pressing a preview button never takes the focus from the search.
-previewEl.addEventListener('mousedown', (e) => e.preventDefault());
+// Pressing a preview button never takes the focus from the search — the
+// name field excepted, which is typed in.
+previewEl.addEventListener('mousedown', (e) => {
+  if (!isWritable(e.target)) e.preventDefault();
+});
+
+function openLabelField(id) {
+  const item = [...state.pinned, ...state.history].find((entry) => entry.id === id);
+  if (!item?.isPinned) return;
+  labelInput.value = item.label ?? '';
+  labelForm.hidden = false;
+  labelInput.focus({ preventScroll: true });
+  labelInput.select();
+}
+
+function closeLabelField({ refocus = true } = {}) {
+  if (labelForm.hidden) return;
+  labelForm.hidden = true;
+  if (refocus) searchEl.focus({ preventScroll: true });
+}
+
+labelForm.addEventListener('submit', (e) => {
+  e.preventDefault();
+  const id = previewEl.dataset.id;
+  const label = labelInput.value.trim();
+  closeLabelField();
+  if (!id) return;
+  enqueueMutation(async () => {
+    try {
+      await api.setLabel(id, label || null);
+      await refresh();
+    } catch (err) {
+      deliverFeedback(errorMessage(err), { duration: PIN_TOAST_MS, kind: 'error' });
+    }
+  });
+});
+
+// The field's keys are the field's: Enter saves (submit), Escape cancels;
+// none reaches the panel's own keys (paste, close the preview…).
+labelInput.addEventListener('keydown', (e) => {
+  e.stopPropagation();
+  if (e.key === 'Escape') {
+    e.preventDefault();
+    closeLabelField();
+  } else if (e.key === 'Enter' && !e.isComposing) {
+    e.preventDefault();
+    labelForm.requestSubmit();
+  }
+});
 previewEl.addEventListener('click', (e) => {
   const button = e.target.closest?.('[data-action]');
   const id = previewEl.dataset.id;
@@ -2113,6 +2179,9 @@ previewEl.addEventListener('click', (e) => {
       return;
     case 'bare':
       paste(id, false, true);
+      return;
+    case 'label':
+      openLabelField(id);
       return;
     case 'copy':
       copyItem(id);

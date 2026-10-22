@@ -22,6 +22,7 @@ pub const WINDOWS: &[(&str, &[&str])] = &[
     ("copy_item", &["panel"]),
     ("toggle_pin", &["panel"]),
     ("reorder_pinned", &["panel"]),
+    ("set_label", &["panel"]),
     ("delete_item", &["panel"]),
     ("undo_delete", &["panel"]),
     ("commit_delete", &["panel"]),
