@@ -5,6 +5,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod access;
+mod backup;
 mod commands;
 mod diagnostics;
 mod macos;
@@ -283,6 +284,8 @@ fn main() {
             commands::undo_delete,
             commands::commit_delete,
             commands::clear_history,
+            backup::export_backup,
+            backup::import_backup,
             commands::clear_learning,
             commands::learning_summary,
             commands::update_settings,

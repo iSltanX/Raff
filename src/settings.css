@@ -760,3 +760,10 @@ body {
   width: 48px;
   height: 48px;
 }
+
+/* Two actions for one row (IMP-05 النسخ الاحتياطي). */
+.row-buttons {
+  display: flex;
+  flex: none;
+  gap: var(--space-8);
+}

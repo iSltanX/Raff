@@ -704,6 +704,16 @@ fn hotkey_refusal(accel: &str) -> Option<&'static str> {
     None
 }
 
+/// `validate_settings` for a backup's settings (IMP-05).
+pub(crate) fn check_settings(settings: &Settings) -> Result<(), String> {
+    validate_settings(settings)
+}
+
+/// A storage failure as the code the pages word (`save_failed`).
+pub(crate) fn save_failed_code(detail: &str) -> String {
+    save_failed(detail.to_string())
+}
+
 fn validate_settings(settings: &Settings) -> Result<(), String> {
     if !matches!(settings.history_limit, 200 | 500 | 1000) {
         return Err("حد السجل غير صالح".into());

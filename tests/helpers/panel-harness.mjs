@@ -56,6 +56,7 @@ export function sampleItem(id, overrides = {}) {
  *  by `change-event-parity.test.mjs`). A paste or copy announces only the use
  *  it counted, so it is handled where it is answered. */
 const ANNOUNCES = new Set([
+  'import_backup',
   'set_label',
   'toggle_pin',
   'delete_item',
@@ -220,6 +221,11 @@ export function createFakeTauri(initialState, { failTimes = 0 } = {}) {
         pendingDelete = null;
       }
       return Promise.resolve(null);
+    }
+    // IMP-05: a backup with one item new to this shelf.
+    if (cmd === 'import_backup') {
+      state.pinned = [...state.pinned, { id: `imported-${state.pinned.length}`, type: 'text', text: 'مستورد', isPinned: true }];
+      return Promise.resolve({ imported: true, added: 1, skipped: 0, settings: null });
     }
     // IMP-07, as Rust: pinned items only, trimmed, capped, blank clears.
     if (cmd === 'set_label') {

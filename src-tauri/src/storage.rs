@@ -76,7 +76,7 @@ pub enum Appearance {
     Dark,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Settings {
     /// tauri global-shortcut accelerator string.
@@ -2084,6 +2084,63 @@ impl Store {
     /// The whole layer is copied for the rollback. That is fine here and not
     /// in `capture`: pinning is a deliberate, rare act on a short list, not a
     /// cost paid on every copy the user makes.
+    /// Adds a backup's items to the end of the shelf (IMP-05), each with a new
+    /// id, skipping any whose content is pinned already. Persisted before it
+    /// answers; on a failed write the shelf stays as it was. Answers how many
+    /// were added and how many skipped.
+    pub fn import_pinned(
+        &mut self,
+        items: &[crate::backup::BackupItem],
+    ) -> Result<(usize, usize), String> {
+        self.try_finish_pending_pin()?;
+        let previous = self.pinned.clone();
+        let mut next_order = self
+            .pinned
+            .iter()
+            .filter_map(|item| item.pinned_order)
+            .max()
+            .map_or(0, |order| order + 1);
+        let (mut added, mut skipped) = (0, 0);
+        for item in items {
+            if self
+                .pinned
+                .iter()
+                .any(|pinned| Self::same_content(pinned, item.kind, &item.text, None))
+            {
+                skipped += 1;
+                continue;
+            }
+            self.pinned.push(ClipItem {
+                id: uuid::Uuid::new_v4().to_string(),
+                kind: item.kind,
+                text: item.text.clone(),
+                html: item.html.clone(),
+                rtf: item.rtf.clone(),
+                image_file: None,
+                thumb_file: None,
+                hash: None,
+                source_app_bundle_id: String::new(),
+                source_app: "نسخة احتياطية".into(),
+                created_at: item.created_at,
+                is_pinned: true,
+                pinned_order: Some(next_order),
+                copy_count: 0,
+                paste_count: 0,
+                last_used_at: item.created_at,
+                label: item.label.clone(),
+            });
+            next_order += 1;
+            added += 1;
+        }
+        if added > 0 {
+            if let Err(err) = try_save_json(&self.dir.join(PINNED_FILE), &self.pinned) {
+                self.pinned = previous;
+                return Err(err);
+            }
+        }
+        Ok((added, skipped))
+    }
+
     /// Names a pinned item, or clears its name with `None` or blank text
     /// (IMP-07). Persisted before it answers; on a failed write the shelf
     /// stays as it was.

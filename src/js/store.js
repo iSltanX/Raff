@@ -44,6 +44,9 @@ export const api = {
   undoDelete: (token) => invoke('undo_delete', { token }),
   commitDelete: (token) => invoke('commit_delete', { token }),
   clearHistory: () => invoke('clear_history'),
+  // IMP-05: Rust runs the native panels and handles the file.
+  exportBackup: () => invoke('export_backup'),
+  importBackup: () => invoke('import_backup'),
   clearLearning: () => invoke('clear_learning'),
   learningSummary: () => invoke('learning_summary'),
   // Only the fields being changed; the rest stay as the store holds them.

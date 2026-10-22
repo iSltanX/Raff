@@ -100,6 +100,7 @@ test('the list read from Rust is the one this suite expects', () => {
       'clear_learning',
       'copy_item',
       'delete_item',
+      'import_backup',
       'paste_item',
       'reorder_pinned',
       'resume_capture',

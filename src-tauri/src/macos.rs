@@ -12,7 +12,7 @@ use objc2::runtime::AnyObject;
 use objc2::{define_class, msg_send, sel, AnyThread};
 use objc2_app_kit::{
     NSApplication, NSApplicationActivationOptions, NSModalResponseOK, NSOpenPanel, NSPasteboard,
-    NSRunningApplication, NSWorkspace, NSWorkspaceApplicationKey,
+    NSRunningApplication, NSSavePanel, NSWorkspace, NSWorkspaceApplicationKey,
     NSWorkspaceDidActivateApplicationNotification,
 };
 use objc2_foundation::{
@@ -336,6 +336,38 @@ pub fn choose_image_file() -> Option<String> {
     // `allowedContentTypes` takes UTType, a crate رفّ does not ship; the
     // extension list filters the same, and the bytes are sniffed regardless.
     let extensions = ["png", "jpg", "jpeg"].map(NSString::from_str);
+    #[allow(deprecated)]
+    panel.setAllowedFileTypes(Some(&NSArray::from_retained_slice(&extensions)));
+    if panel.runModal() != NSModalResponseOK {
+        return None;
+    }
+    panel.URL()?.path().map(|p| p.to_string())
+}
+
+/// «تصدير…» (IMP-05): a native save panel, proposing `name`. The path never
+/// reaches the webview. Main thread; `None` when cancelled.
+pub fn choose_backup_destination(name: &str) -> Option<String> {
+    let mtm = MainThreadMarker::new()?;
+    let panel = NSSavePanel::savePanel(mtm);
+    panel.setNameFieldStringValue(&NSString::from_str(name));
+    panel.setPrompt(Some(&NSString::from_str("تصدير")));
+    panel.setCanCreateDirectories(true);
+    if panel.runModal() != NSModalResponseOK {
+        return None;
+    }
+    panel.URL()?.path().map(|p| p.to_string())
+}
+
+/// «استيراد…» (IMP-05): a native open panel for one JSON file. Main thread;
+/// `None` when cancelled.
+pub fn choose_backup_file() -> Option<String> {
+    let mtm = MainThreadMarker::new()?;
+    let panel = NSOpenPanel::openPanel(mtm);
+    panel.setCanChooseFiles(true);
+    panel.setCanChooseDirectories(false);
+    panel.setAllowsMultipleSelection(false);
+    panel.setPrompt(Some(&NSString::from_str("استيراد")));
+    let extensions = [NSString::from_str("json")];
     #[allow(deprecated)]
     panel.setAllowedFileTypes(Some(&NSArray::from_retained_slice(&extensions)));
     if panel.runModal() != NSModalResponseOK {

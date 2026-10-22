@@ -36,6 +36,8 @@ pub const WINDOWS: &[(&str, &[&str])] = &[
     ("resume_capture", &["panel", "settings"]),
     ("restart_app", &["panel", "settings"]),
     ("clear_history", &["settings"]),
+    ("export_backup", &["settings"]),
+    ("import_backup", &["settings"]),
     ("clear_learning", &["settings"]),
     ("learning_summary", &["settings"]),
     ("list_running_apps", &["settings"]),
@@ -184,10 +186,11 @@ mod tests {
 
     /// The body of `fn name` in whichever source file defines it.
     fn body_of(name: &str) -> &'static str {
-        const SOURCES: [&str; 3] = [
+        const SOURCES: [&str; 4] = [
             include_str!("commands.rs"),
             include_str!("report.rs"),
             include_str!("updater.rs"),
+            include_str!("backup.rs"),
         ];
         let header = format!("fn {name}(");
         for src in SOURCES {

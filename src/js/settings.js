@@ -747,6 +747,50 @@ addExcludedBtn.addEventListener('click', async () => {
   if (saved) await populateRunningApps();
 });
 
+// ─── Backup (IMP-05) ──────────────────────────────────────────────────────
+
+const backupStatus = el('backup-status');
+const BACKUP_ERRORS = {
+  'raff/backup-invalid': 'هذا ليس ملف نسخة احتياطية من رفّ، أو أنه تالف. لم يُستورد شيء.',
+  'raff/backup-too-large': 'الملف أكبر من أن يكون نسخة احتياطية من رفّ. لم يُستورد شيء.',
+  'raff/backup-write-failed': 'تعذّر حفظ الملف في المكان المختار.',
+};
+const backupError = (err) => BACKUP_ERRORS[String(err)] ?? 'تعذّر إتمام العملية. حاول مرة أخرى.';
+
+async function runBackup(button, work) {
+  button.disabled = true;
+  try {
+    const said = await work();
+    if (said) backupStatus.textContent = said;
+  } catch (err) {
+    backupStatus.textContent = backupError(err);
+  } finally {
+    button.disabled = false;
+  }
+}
+
+el('export-backup').addEventListener('click', (e) =>
+  runBackup(e.currentTarget, async () => {
+    const result = await api.exportBackup();
+    if (!result?.saved) return null; // cancelled: nothing to say
+    const left = result.pictures > 0 ? ` وتُركت الصور المثبّتة (${arabicDigits(result.pictures)}).` : '';
+    return `صُدّر ${arabicDigits(result.items)} عنصرًا مثبّتًا مع الإعدادات.${left}`;
+  })
+);
+
+el('import-backup').addEventListener('click', (e) =>
+  runBackup(e.currentTarget, async () => {
+    const result = await api.importBackup();
+    if (!result?.imported) return null;
+    // The file's settings, through the path every setting takes. Not the
+    // welcome's flag: an import does not bring the welcome back.
+    const { firstRunShown, ...rest } = result.settings ?? {};
+    const saved = Object.keys(rest).length > 0 ? await save(() => rest) : true;
+    const settingsLine = saved ? 'وطُبّقت إعداداته.' : 'ولم تُطبَّق إعداداته.';
+    return `أُضيف ${arabicDigits(result.added)}، وتُرك ${arabicDigits(result.skipped)} موجود من قبل. ${settingsLine}`;
+  })
+);
+
 // ─── Two-step destructive buttons ─────────────────────────────────────────
 
 function confirmButton(id, action, errorMessage) {

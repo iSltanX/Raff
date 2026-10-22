@@ -74,6 +74,7 @@ function announce(event = 'raff://changed') {
 // What Rust follows with `raff://changed` once it succeeds; a paste or copy
 // announces only the use it counted (`count_use`).
 const CHANGES = new Set([
+  'import_backup',
   'set_label',
   'toggle_pin',
   'delete_item',
@@ -201,6 +202,13 @@ function answer(cmd, args) {
           .map((entry) => entry.id)
       );
     }
+    // IMP-05: the browser has no save or open panel; a sample answer.
+    case 'export_backup':
+      return Promise.resolve({ saved: true, items: PINNED.length, pictures: 0 });
+    // As Rust, it announces when it added something: the sample adds one.
+    case 'import_backup':
+      PINNED.push({ ...PINNED[0], id: `imported-${PINNED.length}`, text: 'عنصر مستورد', label: undefined });
+      return Promise.resolve({ imported: true, added: 1, skipped: 0, settings: { ...SETTINGS } });
     // IMP-07, as Rust: pinned items only, trimmed, capped, blank clears.
     case 'set_label': {
       const entry = PINNED.find((item) => item.id === args.id);
