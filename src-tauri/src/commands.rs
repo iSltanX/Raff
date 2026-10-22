@@ -35,6 +35,8 @@ pub mod err {
     pub const UNDO_NO_ROOM: &str = crate::storage::UNDO_NO_ROOM;
     /// The same, because it is past the retention period.
     pub const UNDO_RETENTION: &str = crate::storage::UNDO_RETENTION;
+    /// The delete was already made final (ت٤٥ ب٣).
+    pub const UNDO_EXPIRED: &str = crate::storage::UNDO_EXPIRED;
     /// A test run of رفّ: it has no clipboard to copy to or paste from (ت٤٨).
     pub const CLIPBOARD_OFF: &str = "raff/clipboard-off";
     /// The picture is there — it still pastes — but no thumbnail exists and
@@ -110,6 +112,9 @@ pub struct StatePayload {
     pub capture_alive: bool,
     /// A pause in force, if any — its kind and minutes left, nothing it skipped.
     pub capture_pause: crate::PauseView,
+    /// The delete receipt Rust still holds, if any: a panel showing «تراجع»
+    /// for another one, or for none, drops it (ت٤٥ ب٣).
+    pub undo_token: Option<String>,
 }
 
 /// What the Settings window actually needs: the preferences and the two states
@@ -176,6 +181,7 @@ pub fn get_state(
             .capture_alive
             .load(std::sync::atomic::Ordering::SeqCst),
         capture_pause: pause_view(&state),
+        undo_token: store.pending_delete_token(),
     })
 }
 
@@ -399,7 +405,7 @@ pub fn undo_delete(
     let standing = {
         let mut store = crate::lock_store(&state.store);
         store.undo_delete(&token).map_err(|e| {
-            if e == err::UNDO_NO_ROOM || e == err::UNDO_RETENTION {
+            if e == err::UNDO_NO_ROOM || e == err::UNDO_RETENTION || e == err::UNDO_EXPIRED {
                 e
             } else {
                 save_failed(e)

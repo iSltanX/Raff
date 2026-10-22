@@ -1385,6 +1385,7 @@ const ERROR_MESSAGES = {
   'raff/paste-failed': 'تعذّر اللصق. المحتوى على الحافظة، الصقه بـ \u2066⌘V\u2069.',
   'raff/undo-no-room': 'لم يعد في سجلّك متّسع لهذا العنصر، فلم يُستعد.',
   'raff/undo-retention': 'انتهت مدة الاحتفاظ بهذا العنصر، فلم يُستعد.',
+  'raff/undo-expired': 'انتهت مهلة التراجع، وحُذف العنصر نهائيًا.',
   'raff/clipboard-off': 'هذه نسخة تجربة من رفّ، فلا تصل إلى الحافظة.',
 };
 
@@ -1422,7 +1423,8 @@ function deleteItem(id, { restoreFocus = false } = {}) {
       // refresh ever finds it neither — and drops its picture before «تراجع».
       await refresh();
       optimisticDeletedIds.delete(id);
-      activeDelete = { token: receipt.token, snapshot };
+      // `after`: refreshes begun from here on know of this receipt.
+      activeDelete = { token: receipt.token, snapshot, after: refreshToken };
       presentToast('تم حذف العنصر', {
         duration: DELETE_TOAST_MS,
         undo: true,
@@ -1473,7 +1475,10 @@ function undoLastDelete() {
       optimisticRestores.delete(pending.snapshot.item.id);
       removeLocalItem(pending.snapshot.item.id);
       render();
-      presentToast(errorMessage(err), { duration: PIN_TOAST_MS, kind: 'error' });
+      // An undo after the delete was made final is information about that
+      // delete, not a failure (ت٤٥ ب٣).
+      const kind = String(err) === 'raff/undo-expired' ? 'delete' : 'error';
+      presentToast(errorMessage(err), { duration: PIN_TOAST_MS, kind });
     }
   });
 }
@@ -1698,6 +1703,21 @@ async function refresh({ retry = false } = {}) {
         if (optimistic) item.isPinned = optimistic.value;
       }
       for (const snapshot of optimisticRestores.values()) restoreSnapshot(state, snapshot);
+      // Rust no longer holds this receipt — «مسح السجل» made the delete final
+      // (ت٤٥ ب٣): «تراجع» would offer what cannot come back. Only a refresh
+      // begun after the receipt is trusted to know of it.
+      if (
+        activeDelete &&
+        token > activeDelete.after &&
+        next.undoToken !== undefined &&
+        next.undoToken !== activeDelete.token
+      ) {
+        activeDelete = null;
+        // Gone at once, not after the exit: nothing to press in the meantime.
+        toastUndoEl.hidden = true;
+        dismissFeedback({ animate: true });
+        scheduleFeedbackDrain();
+      }
       forgetPicturesOfGoneItems(next);
       phase = 'ready';
       diag('refresh:ok', {

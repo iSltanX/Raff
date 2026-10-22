@@ -443,6 +443,9 @@ pub(crate) const UNDO_NO_ROOM: &str = "raff/undo-no-room";
 /// The same, because its age is past the retention period, not the count —
 /// not the undo window running out, which is another thing.
 pub(crate) const UNDO_RETENTION: &str = "raff/undo-retention";
+/// That other thing: the delete was made final — its five seconds ran out, or
+/// «مسح السجل» settled it — before the undo arrived (ت٤٥ ب٣).
+pub(crate) const UNDO_EXPIRED: &str = "raff/undo-expired";
 
 /// Adds `from`'s use to `into`: both were the same copy.
 fn fold_counts(into: &mut ClipItem, from: &ClipItem) {
@@ -2403,6 +2406,11 @@ impl Store {
         }
     }
 
+    /// The token of the delete still waiting on its undo window, if any.
+    pub fn pending_delete_token(&self) -> Option<String> {
+        self.pending_delete.as_ref().map(|p| p.token.clone())
+    }
+
     /// Restores the one pending receipt according to its saved chronological
     /// or pinned order, so capture de-duplication and concurrent pin mutations
     /// cannot make a numeric index or neighbor position stale. Answers the id
@@ -2414,10 +2422,10 @@ impl Store {
         // back afterwards — two of one item.
         self.try_finish_pending_pin()?;
         let Some(pending) = self.pending_delete.as_ref() else {
-            return Err("انتهت مهلة التراجع عن الحذف".into());
+            return Err(UNDO_EXPIRED.into());
         };
         if pending.token != token || self.find(&pending.item.id).is_some() {
-            return Err("انتهت مهلة التراجع عن الحذف".into());
+            return Err(UNDO_EXPIRED.into());
         }
         let pending = pending.clone();
         let deleted = &pending.item;
@@ -5947,6 +5955,23 @@ mod data_safety_tests {
     }
 
     // 017 ────────────────────────────────────────────────────────────────
+
+    /// ت٤٥ ب٣: «مسح السجل» made the delete final while its «تراجع» was on
+    /// screen. The undo then says the window is over, as a kind the panel can
+    /// word, not a raw sentence that reached the user as «تعذّر حفظ التغيير».
+    #[test]
+    fn an_undo_after_the_delete_was_made_final_says_the_window_is_over() {
+        let mut s = Store::load(temp_dir());
+        capture_text(&mut s, "x");
+        let id = s.history[0].id.clone();
+        let token = s.delete_reversible(&id).unwrap();
+        s.clear_history_persisted().unwrap();
+        assert_eq!(s.undo_delete(&token), Err(UNDO_EXPIRED.to_string()));
+        assert_eq!(
+            s.undo_delete("no-such-token"),
+            Err(UNDO_EXPIRED.to_string())
+        );
+    }
 
     #[test]
     fn undoing_a_delete_folds_into_the_same_text_copied_meanwhile() {
