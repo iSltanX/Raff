@@ -26,6 +26,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { styleDmg } from './dmg-layout.mjs';
+import { makeUpdateArchive } from './update-archive.mjs';
 
 import { checkFreshApp } from './release-guards.mjs';
 
@@ -103,8 +104,8 @@ try {
 
 // ── 4. Regenerate the updater archive from the same patched app. ────────
 const tarPath = path.join(bundleMacos, 'Raff.app.tar.gz');
-if (existsSync(tarPath)) rmSync(tarPath, { force: true });
-run('tar', ['-czf', tarPath, '-C', bundleMacos, 'Raff.app']);
+// The helper keeps macOS metadata out of it: the updater cannot unpack `._` entries.
+makeUpdateArchive({ cwd: bundleMacos, appName: 'Raff.app', out: tarPath });
 
 console.log('\nbuild-candidate: done.');
 console.log(`  app: ${appPath}`);

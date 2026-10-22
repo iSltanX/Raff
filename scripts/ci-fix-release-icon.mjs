@@ -24,6 +24,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { styleDmg } from './dmg-layout.mjs';
+import { makeUpdateArchive } from './update-archive.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const project = path.join(here, '..');
@@ -99,8 +100,8 @@ const dmgPath = path.join(bundleDmg, dmgName);
 //      it — the OLD .sig is for different bytes and is now invalid. ────────
 const tarAssetName = 'Raff_aarch64.app.tar.gz'; // the exact name already live in existing latest.json URLs
 const tarPath = path.join(bundleMacos, tarAssetName);
-if (existsSync(tarPath)) rmSync(tarPath, { force: true });
-run('tar', ['-czf', tarPath, '-C', bundleMacos, 'Raff.app']);
+// The helper keeps macOS metadata out of it: the updater cannot unpack `._` entries.
+makeUpdateArchive({ cwd: bundleMacos, appName: 'Raff.app', out: tarPath });
 
 run('npx', ['tauri', 'signer', 'sign', tarPath], {
   cwd: project,

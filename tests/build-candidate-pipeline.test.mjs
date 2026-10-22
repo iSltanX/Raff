@@ -33,7 +33,7 @@ test('icon patching happens before DMG creation, and before the updater archive'
   // The actual invocation, not the docstring above that names the same file.
   const iconPatched = stepIndex(/run\(['"]node['"],\s*\[path\.join\(here,\s*['"]apply-app-icon\.mjs['"]/);
   const dmgCreated = stepIndex(/hdiutil['"],\s*\[\s*\n?\s*['"]create['"]/);
-  const tarCreated = stepIndex(/tar['"],\s*\[['"]-czf['"]/);
+  const tarCreated = stepIndex(/makeUpdateArchive\(\{\s*cwd: bundleMacos/); // the helper runs tar (scripts/update-archive.mjs)
 
   assert.ok(appBuilt < iconPatched, 'tauri build must run before the icon is patched (nothing to patch yet)');
   assert.ok(iconPatched < dmgCreated, 'the icon must be patched before the DMG is created from it');
