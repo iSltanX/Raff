@@ -1,13 +1,13 @@
-// One application icon ships, drawn for each appearance by design.
+// One application icon ships, and it is the light artwork in every appearance.
 //
-// Until 2026-10-21 Raff's policy was that the macOS icon is ALWAYS the light
-// artwork: macOS 26 restyled the light plate black in Dark Mode and the ink
-// shelf vanished on it, so Icon Composer pinned Dark to the light values. The
-// approved Najdi redesign (Figma XCNmucSuAe007qWHnOXQpW, page 04) draws a real
-// Dark icon instead — a dark sand plate, a light shelf and a lighter clay card —
-// and a one-colour Tinted one. What still holds from that policy: the `dark`
-// entry must be PRESENT (without it macOS generates its own dark icon), the
-// legacy .icns stays the light artwork, and nothing swaps icons at runtime.
+// Sultan's decision of 2026-10-22 (ت٦٨): the icon is light in the app, the DMG
+// and the README, and never follows the system appearance; Raff's dark UI
+// stays. It supersedes the designed Dark icon of 2026-10-21 (ت٣٥). macOS 26
+// restyles a light plate black in Dark Mode unless the Icon Composer asset says
+// otherwise, so the `dark` entry must be PRESENT and carry the light values
+// (without it macOS generates its own dark icon and the ink shelf vanishes).
+// Tinted stays one colour: the system tints it in the style the person chose.
+// The legacy .icns is the light artwork, and nothing swaps icons at runtime.
 //
 // These assertions target the decision points a regression would actually pass
 // through — what the bundle declares, what the generator writes, and what the
@@ -57,26 +57,26 @@ test('the generator derives every shipped icon from the one brand construction',
   // on the pixel grid.
   assert.match(gen, /\['icon_16x16\.png', brand\.microAppIconSvg\(16\), 16\]/u);
   assert.match(gen, /\['icon_32x32\.png', brand\.microAppIconSvg\(32\), 32\]/u);
-  assert.doesNotMatch(gen, /dark-1024|icon-dark/u, 'the dark icon lives in Icon Composer, not in a second .icns');
+  assert.doesNotMatch(gen, /dark-1024|icon-dark/u, 'appearances live in Icon Composer, never in a second .icns');
 });
 
 const srgb = (hex) => `srgb:${[1, 3, 5].map((i) => (parseInt(hex.slice(i, i + 2), 16) / 255).toFixed(5)).join(',')},1.00000`;
 
-test('the Icon Composer asset draws the designed Light, Dark and Tinted icon', () => {
+test('the Icon Composer asset draws the light icon in Light and Dark, and one colour in Tinted', () => {
   const icon = JSON.parse(read('src-tauri/icon-composer/AppIcon.icon/icon.json'));
   const fill = (specs, appearance) => specs.find((s) => (s.appearance ?? null) === appearance)?.value.solid;
 
   const plate = icon['fill-specializations'] ?? [];
   assert.equal(fill(plate, null), srgb('#f5f1ea'), 'light plate: sand/50');
-  assert.equal(fill(plate, 'dark'), srgb('#221e1b'), 'dark plate: sand/900 — present, so macOS does not invent one');
+  assert.equal(fill(plate, 'dark'), srgb('#f5f1ea'), 'dark plate: the light sand/50 — present, so macOS does not invent one');
 
   const layers = Object.fromEntries((icon.groups ?? []).flatMap((g) => g.layers ?? []).map((l) => [l.name, l]));
-  const designed = { shelf: ['#1f1915', '#f5f1ea'], recent: ['#c25a2f', '#ef9d79'] };
-  assert.deepEqual(Object.keys(layers).sort(), Object.keys(designed).sort());
-  for (const [name, [light, dark]] of Object.entries(designed)) {
+  const artwork = { shelf: ['#1f1915', '#1f1915'], recent: ['#c25a2f', '#c25a2f'] };
+  assert.deepEqual(Object.keys(layers).sort(), Object.keys(artwork).sort());
+  for (const [name, [light, dark]] of Object.entries(artwork)) {
     const specs = layers[name]['fill-specializations'] ?? [];
     assert.equal(fill(specs, null), srgb(light), `${name} in Light`);
-    assert.equal(fill(specs, 'dark'), srgb(dark), `${name} in Dark`);
+    assert.equal(fill(specs, 'dark'), srgb(dark), `${name} in Dark is the light artwork`);
     // Tinted is one colour: the system tints by brightness, so the dark shelf
     // would fade to nothing next to the card.
     assert.equal(fill(specs, 'tinted'), srgb('#ffffff'), `${name} in Tinted`);

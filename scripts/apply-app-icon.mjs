@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-// Stamps the Icon Composer app icon (Light, Dark and Tinted) onto a built Raff.app.
+// Stamps the Icon Composer app icon (light in Light and Dark, one colour in
+// Tinted) onto a built Raff.app.
 //
 // WHY THIS EXISTS
 // ---------------
@@ -11,12 +12,13 @@
 //
 // The only supported way to decide those appearances is to ship an Icon
 // Composer asset (`.icon` compiled to `Assets.car`, named by
-// `CFBundleIconName`). Raff's draws each one by design (Najdi redesign,
-// 2026-10-21): a sand plate with the ink shelf and clay card in Light; a dark
-// sand plate, a light shelf and a lighter clay card in Dark; one colour in
-// Tinted. The `dark` entry must stay present — without it, Icon Composer
-// darkens the plate itself (checked with ictool's Dark rendition). The legacy
-// `.icns` remains the Light artwork for systems before macOS 26.
+// `CFBundleIconName`). Raff's icon is the light artwork in every appearance
+// (Sultan, 2026-10-22, ت٦٨): a sand plate with the ink shelf and clay card in
+// Light, and the same in Dark; one colour in Tinted, which the system tints.
+// The `dark` entry must stay present, with the light values — without it,
+// Icon Composer darkens the plate itself (checked with ictool's Dark
+// rendition). The legacy `.icns` remains the Light artwork for systems before
+// macOS 26.
 
 // WHY IT IS A POST-BUILD STEP
 // ---------------------------
@@ -113,7 +115,7 @@ try {
     // Not fatal: the shipped artefacts are already correct.
   }
 
-  console.log(`apply-app-icon: Icon Composer icon (Light, Dark, Tinted) applied to ${appPath}`);
+  console.log(`apply-app-icon: Icon Composer icon (light in Light and Dark, Tinted) applied to ${appPath}`);
 } finally {
   rmSync(work, { recursive: true, force: true });
 }

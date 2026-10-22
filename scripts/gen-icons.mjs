@@ -11,7 +11,8 @@
 //       shelf in ink and the card in clay. No shadow of its own;
 //   src/assets/brand/icon-layer-*.svg     Icon Composer masks for the macOS 26+
 //       asset catalog (src-tauri/icon-composer/AppIcon.icon), which colours
-//       them per appearance (Light, Dark).
+//       them the light way in Light and Dark alike, and in one colour for
+//       Tinted (ت٦٨).
 //
 // Every PNG is rendered from the vectors at its own size. 16 and 32 px use the
 // pixel-grid drawing, because the 1024 drawing's gaps melt below 64 px.
