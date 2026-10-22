@@ -882,6 +882,75 @@ pub fn ax_prompt() -> bool {
 mod tests {
     use super::*;
 
+    /// The hypothesis behind the SIGSEGV of 2026-10-22 (05:45), tested on its
+    /// own: AppKit pasteboards — private ones too — used from several threads
+    /// at once crash in their type cache, and used one at a time do not. The
+    /// crash report had three test threads inside NSPasteboard/CFPasteboard at
+    /// once, the faulting one in `-[NSPasteboard _updateTypeCacheIfNeeded]`
+    /// and another in the class-wide `+_oldStyleTypeNameForIdentifier:`.
+    ///
+    /// Each worker makes the AppKit calls `test_clipboard::run` and
+    /// `read_clip`/`write_clip` make (not those functions themselves): a
+    /// unique pasteboard, clear, set text and HTML, read text and an absent
+    /// type, release. Measured 2026-10-22: unserialised, 24 of 30 processes
+    /// failed (SIGSEGV with the reported stack, SIGTRAP from a collection
+    /// mutated while enumerated, or a read that came back empty); serialised,
+    /// 0 of 30 (`evidence/2026-10-22-m10/sigsegv-test-pasteboard.txt`). `RAFF_STRESS_SERIAL=1` takes one lock around
+    /// each round, as `test_clipboard::run` now does. Run by hand, one process
+    /// per run, so a crash is counted rather than ending the suite:
+    /// `RAFF_STRESS_SERIAL=0 cargo test pasteboard_concurrency -- --ignored`.
+    #[test]
+    #[ignore = "a stress measurement, run by hand in its own process"]
+    fn pasteboard_concurrency_stress() {
+        let env = |key: &str, default: usize| {
+            std::env::var(key)
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(default)
+        };
+        let threads = env("RAFF_STRESS_THREADS", 8);
+        let rounds = env("RAFF_STRESS_ROUNDS", 400);
+        let serial = match std::env::var("RAFF_STRESS_SERIAL").as_deref() {
+            Ok("1") => true,
+            Ok("0") | Err(_) => false,
+            Ok(other) => panic!("RAFF_STRESS_SERIAL is 0 or 1, not {other:?}"),
+        };
+        static ONE: Mutex<()> = Mutex::new(());
+        let workers: Vec<_> = (0..threads)
+            .map(|worker| {
+                std::thread::spawn(move || {
+                    for round in 0..rounds {
+                        let _turn = serial.then(|| ONE.lock().unwrap_or_else(|p| p.into_inner()));
+                        objc2::rc::autoreleasepool(|_| {
+                            let pb = NSPasteboard::pasteboardWithUniqueName();
+                            pb.clearContents();
+                            let text = format!("worker {worker} round {round}");
+                            pb.setString_forType(
+                                &NSString::from_str(&text),
+                                &NSString::from_str(TYPE_TEXT),
+                            );
+                            pb.setString_forType(
+                                &NSString::from_str("<b>x</b>"),
+                                &NSString::from_str(TYPE_HTML),
+                            );
+                            let back = pb
+                                .stringForType(&NSString::from_str(TYPE_TEXT))
+                                .map(|s| s.to_string());
+                            assert_eq!(back.as_deref(), Some(text.as_str()));
+                            let _ = pb.dataForType(&NSString::from_str(TYPE_PNG));
+                            // SAFETY: as in `test_clipboard::run`.
+                            let _: () = unsafe { msg_send![&*pb, releaseGlobally] };
+                        });
+                    }
+                })
+            })
+            .collect();
+        for worker in workers {
+            worker.join().unwrap();
+        }
+        println!("stress: threads={threads} rounds={rounds} serial={serial} — no crash");
+    }
+
     // ت٤٨ ─────────────────────────────────────────────────────────────────
 
     #[test]
