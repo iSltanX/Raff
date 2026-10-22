@@ -186,30 +186,68 @@ pub fn get_state(
 /// text back so it could search it would undo the very cap this exists to work
 /// around. The scan is linear over the shelf; the byte budget on the layer is
 /// what keeps that bounded.
+///
+/// Off the main thread and out of the store lock (IMP-01): over the largest
+/// history the scan measured 256–295 ms in release, once per keystroke. The
+/// lock is held only to copy the rows out (~2 ms), and a newer search stops
+/// an older one, whose answer the panel would drop anyway.
 #[tauri::command]
-pub fn search_items(
+pub async fn search_items(
     window: tauri::WebviewWindow,
-    state: State<AppState>,
+    state: State<'_, AppState>,
     query: String,
 ) -> Result<Vec<String>, String> {
     crate::access::require(&window, "search_items")?;
-    Ok(matching_ids(&crate::lock_store(&state.store), &query))
+    let generation = SEARCH_GENERATION.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
+    let rows = rows_to_search(&crate::lock_store(&state.store));
+    let current = move || SEARCH_GENERATION.load(std::sync::atomic::Ordering::SeqCst) == generation;
+    let found = tauri::async_runtime::spawn_blocking(move || matching_in(&rows, &query, current))
+        .await
+        .map_err(|err| err.to_string())?;
+    // Overtaken: the panel has already asked again, and drops this answer.
+    Ok(found.unwrap_or_default())
 }
 
-/// `search_items` without the lock: the query trimmed and folded the way the
-/// panel's own filter does it, then every row's full text.
-fn matching_ids(store: &Store, query: &str) -> Vec<String> {
-    let needle = crate::storage::normalize_for_search(crate::storage::trim_query(query));
-    if needle.is_empty() {
-        return Vec::new();
-    }
+/// Bumped by every deep search; a search still running when it moves on stops.
+static SEARCH_GENERATION: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Every row, shelf first, as (id, full text): what a search reads.
+fn rows_to_search(store: &Store) -> Vec<(String, String)> {
     store
         .pinned
         .iter()
         .chain(store.history.iter())
-        .filter(|item| crate::storage::normalize_for_search(&item.text).contains(&needle))
-        .map(|item| item.id.clone())
+        .map(|item| (item.id.clone(), item.text.clone()))
         .collect()
+}
+
+/// The query trimmed and folded the way the panel's own filter does it, then
+/// every row's full text. `None` once `keep_going` says a newer search began.
+fn matching_in(
+    rows: &[(String, String)],
+    query: &str,
+    keep_going: impl Fn() -> bool,
+) -> Option<Vec<String>> {
+    let needle = crate::storage::normalize_for_search(crate::storage::trim_query(query));
+    if needle.is_empty() {
+        return Some(Vec::new());
+    }
+    let mut ids = Vec::new();
+    for (id, text) in rows {
+        if !keep_going() {
+            return None;
+        }
+        if crate::storage::normalize_for_search(text).contains(&needle) {
+            ids.push(id.clone());
+        }
+    }
+    Some(ids)
+}
+
+/// `search_items` over a store, as the tests hold one.
+#[cfg(test)]
+fn matching_ids(store: &Store, query: &str) -> Vec<String> {
+    matching_in(&rows_to_search(store), query, || true).unwrap_or_default()
 }
 
 #[tauri::command]
@@ -1046,6 +1084,93 @@ mod tests {
         assert_eq!(crossed, err::SAVE_FAILED);
         assert!(!crossed.contains("/Users/"), "no path survives");
         assert!(!crossed.contains("history"), "and no file name either");
+    }
+
+    /// IMP-01's measurement, before anything is changed for it: the deep
+    /// search over the largest history رفّ keeps — 1000 rows near the 64 MB
+    /// cap — for a query found nowhere (every row read to its end) and one
+    /// found early. Run in release: `cargo test --release search_probe --
+    /// --ignored --nocapture`. A number, not a pass: it decides whether the
+    /// command leaves the main thread (roadmap: past ~16 ms).
+    #[test]
+    #[ignore = "a measurement, run by hand in release"]
+    fn search_probe() {
+        let unit = "نصّ عربي طويل يتكرر مع English words و١٢٣ أرقام، ";
+        let row = unit.repeat(60_000 / unit.len());
+        let dir = std::env::temp_dir().join(format!("raff-search-probe-{}", uuid::Uuid::new_v4()));
+        let mut store = Store::load(dir.clone());
+        store.settings.history_limit = 1000;
+        for i in 0..1000 {
+            store.capture(
+                ItemKind::Text,
+                format!("{i} {row}"),
+                None,
+                None,
+                None,
+                None,
+                None,
+                ("Notes".into(), "com.apple.Notes".into()),
+            );
+        }
+        let rows = store.history.len();
+        let bytes: usize = store.history.iter().map(|i| i.text.len()).sum();
+        for (label, query) in [("nowhere", "لا يوجد هذا أبدًا"), ("early", "999 نص")]
+        {
+            let mut times: Vec<f64> = (0..7)
+                .map(|_| {
+                    let began = std::time::Instant::now();
+                    let found = matching_ids(&store, query).len();
+                    std::hint::black_box(found);
+                    began.elapsed().as_secs_f64() * 1000.0
+                })
+                .collect();
+            times.sort_by(f64::total_cmp);
+            println!(
+                "search_probe {label}: rows={rows} bytes={bytes} median={:.1}ms min={:.1}ms max={:.1}ms",
+                times[3], times[0], times[6]
+            );
+        }
+        // What holding the lock only to copy the rows out would cost.
+        let mut copies: Vec<f64> = (0..7)
+            .map(|_| {
+                let began = std::time::Instant::now();
+                let rows: Vec<(String, String)> = store
+                    .pinned
+                    .iter()
+                    .chain(store.history.iter())
+                    .map(|i| (i.id.clone(), i.text.clone()))
+                    .collect();
+                std::hint::black_box(rows.len());
+                began.elapsed().as_secs_f64() * 1000.0
+            })
+            .collect();
+        copies.sort_by(f64::total_cmp);
+        println!(
+            "search_probe copy-out: median={:.1}ms max={:.1}ms",
+            copies[3], copies[6]
+        );
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// A newer search stops an older one where it is: typing fast does not
+    /// pile up full scans of a large history (IMP-01).
+    #[test]
+    fn a_search_overtaken_by_a_newer_one_stops() {
+        let rows: Vec<(String, String)> = (0..100)
+            .map(|i| (format!("id{i}"), format!("نص {i}")))
+            .collect();
+        assert_eq!(
+            matching_in(&rows, "نص 5", || true).map(|ids| ids.len()),
+            Some(1 + 10), // «نص 5» and «نص 50» … «نص 59»
+            "a search left alone runs to the end"
+        );
+        let seen = std::cell::Cell::new(0);
+        let overtaken = matching_in(&rows, "نص", || {
+            seen.set(seen.get() + 1);
+            seen.get() < 10
+        });
+        assert_eq!(overtaken, None, "overtaken, it answers nothing");
+        assert!(seen.get() <= 11, "and stops there, not after every row");
     }
 
     /// The store-side half of `search_items`: everything except taking the lock.

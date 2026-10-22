@@ -31,6 +31,20 @@ test('the panel’s delete, undo, final delete and pin leave the main thread', (
   }
 });
 
+// IMP-01, measured (evidence/2026-10-22-m8): the deep search over the
+// largest history رفّ keeps took 256–295 ms per keystroke in release, on the
+// main thread, with the store locked throughout. It leaves the main thread,
+// and holds the lock only to copy the rows out (~2 ms).
+test('the deep search leaves the main thread and the store lock', () => {
+  const rust = read('src-tauri/src/commands.rs');
+  assert.equal(commandThreads(rust).get('search_items'), true, 'search_items runs off the main thread');
+  const body = rust.slice(rust.indexOf('pub async fn search_items('), rust.indexOf('fn matching_ids('));
+  const locked = body.indexOf('lock_store');
+  const searched = body.indexOf('spawn_blocking');
+  assert.ok(locked > 0 && searched > locked, 'the rows are copied out, then searched elsewhere');
+  assert.doesNotMatch(body.slice(searched), /lock_store/u, 'and not under the lock');
+});
+
 test('and the panel still sends them one at a time', () => {
   const panel = read('src/js/panel.js');
   for (const call of ['api.deleteItem(', 'api.undoDelete(', 'api.commitDelete(', 'api.togglePin(']) {
