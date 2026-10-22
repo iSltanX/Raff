@@ -440,44 +440,66 @@ fn capture_reading(store_lock: &Mutex<Store>, reading: ClipReading) -> bool {
     let Some((png, decoded)) = decode_capture(raw.png, raw.tiff) else {
         return false;
     };
+    capture_image(store_lock, png, decoded, front, || {})
+}
 
+/// Stores a decoded picture. `between` runs after the files are written ahead
+/// and before the capture is applied: nothing in production, a racing capture
+/// in a test.
+///
+/// The picture and its thumbnail are written before the store is locked for
+/// the capture (IMP-02 أ): a 5K screenshot held the lock 40–150 ms writing
+/// them, and the panel opening meanwhile waited on it on the main thread. The
+/// lock is taken briefly first to ask whether the picture is already stored;
+/// under the lock for the capture that is asked again, since a delete or
+/// another capture may have changed the answer meanwhile.
+fn capture_image(
+    store_lock: &Mutex<Store>,
+    png: Vec<u8>,
+    decoded: image::DynamicImage,
+    front: macos::FrontApp,
+    between: impl FnOnce(),
+) -> bool {
     let hash = content_hash(&png);
     let (w, h) = (decoded.width(), decoded.height());
     let label = format!("صورة {w}×{h}");
 
-    // Files written for this capture, to take back if it does not persist.
-    let mut created: Vec<std::path::PathBuf> = Vec::new();
-    let persisted = capture_and_persist(store_lock, |store| {
+    let (dir, stored) = {
+        let store = crate::lock_store(store_lock);
         let dir = store.images_dir();
-        // Identical image already stored, *and* its file is still there? Then
-        // bump it without touching the disk. Asking the metadata alone let a
-        // row whose file had vanished swallow the re-copy as a duplicate, so
-        // no replacement was ever written and the row stayed broken for good —
-        // while copying it back out failed with «العنصر غير موجود».
-        let dup = store.pinned.iter().chain(store.history.iter()).any(|i| {
-            i.kind == ItemKind::Image
-                && i.hash.as_deref() == Some(hash.as_str())
-                && i.image_file
-                    .as_deref()
-                    .and_then(|file| crate::storage::image_path(&dir, file))
-                    .is_some_and(|path| path.exists())
-        });
-
-        let (image_file, thumb_file) = if dup {
-            (None, None)
-        } else {
-            let id_base = uuid::Uuid::new_v4().to_string();
-            let image_file = format!("{id_base}.png");
-            let thumb_name = format!("{id_base}.thumb.png");
-            if std::fs::write(dir.join(&image_file), &png).is_err() {
-                return CaptureResult::failed();
-            }
-            created.push(dir.join(&image_file));
-            let thumb_file = write_thumbnail(&dir, thumb_name, &decoded);
-            created.extend(thumb_file.iter().map(|name| dir.join(name)));
-            (Some(image_file), thumb_file)
+        let stored = has_live_copy(&store, &dir, &hash);
+        (dir, stored)
+    };
+    // Files written for this capture, to take back if it does not use them.
+    let mut created: Vec<std::path::PathBuf> = Vec::new();
+    let mut ahead = if stored {
+        None
+    } else {
+        let Some(files) = write_image_files(&dir, &png, &decoded) else {
+            return false;
         };
+        created.extend(files.paths(&dir));
+        Some(files)
+    };
+    between();
 
+    let mut used = false;
+    let persisted = capture_and_persist(store_lock, |store| {
+        let files = if has_live_copy(store, &dir, &hash) {
+            None
+        } else if let Some(files) = ahead.take() {
+            Some(files)
+        } else {
+            // The copy that made a write unnecessary went in between: the one
+            // case written under the lock, as every capture used to be.
+            let Some(files) = write_image_files(&dir, &png, &decoded) else {
+                return CaptureResult::failed();
+            };
+            created.extend(files.paths(&dir));
+            Some(files)
+        };
+        used = files.is_some();
+        let (image_file, thumb_file) = files.map_or((None, None), |f| (Some(f.image), f.thumb));
         store.capture(
             ItemKind::Image,
             label,
@@ -490,16 +512,61 @@ fn capture_reading(store_lock: &Mutex<Store>, reading: ClipReading) -> bool {
         )
     });
 
-    if persisted.is_err() {
-        // The capture was taken back or never made it, so nothing in the model
-        // refers to these files. (One that moved to the other layer while its
-        // write was in flight is settled as `Ok`, and keeps them.)
+    // Taken back or never made, the capture names none of these files; one
+    // that landed on a picture already stored never used them. (One that moved
+    // to the other layer while its write was in flight is settled as `Ok`, and
+    // keeps them.)
+    if persisted.is_err() || !used {
         for file in created {
             let _ = std::fs::remove_file(file);
         }
-        return false;
     }
-    true
+    persisted.is_ok()
+}
+
+/// Whether this picture is stored already, *and* its file is still there.
+/// Asking the metadata alone let a row whose file had vanished swallow the
+/// re-copy as a duplicate, so no replacement was ever written and the row
+/// stayed broken for good — while copying it back out failed with «العنصر غير
+/// موجود».
+fn has_live_copy(store: &Store, dir: &std::path::Path, hash: &str) -> bool {
+    store.pinned.iter().chain(store.history.iter()).any(|i| {
+        i.kind == ItemKind::Image
+            && i.hash.as_deref() == Some(hash)
+            && i.image_file
+                .as_deref()
+                .and_then(|file| crate::storage::image_path(dir, file))
+                .is_some_and(|path| path.exists())
+    })
+}
+
+/// A picture's files, written and named.
+struct ImageFiles {
+    image: String,
+    thumb: Option<String>,
+}
+
+impl ImageFiles {
+    fn paths(&self, dir: &std::path::Path) -> Vec<std::path::PathBuf> {
+        std::iter::once(&self.image)
+            .chain(self.thumb.iter())
+            .map(|name| dir.join(name))
+            .collect()
+    }
+}
+
+/// Writes the picture and its thumbnail under fresh names. `None` when the
+/// picture itself could not be written; a thumbnail that fails is left out.
+fn write_image_files(
+    dir: &std::path::Path,
+    png: &[u8],
+    decoded: &image::DynamicImage,
+) -> Option<ImageFiles> {
+    let id_base = uuid::Uuid::new_v4().to_string();
+    let image = format!("{id_base}.png");
+    std::fs::write(dir.join(&image), png).ok()?;
+    let thumb = write_thumbnail(dir, format!("{id_base}.thumb.png"), decoded);
+    Some(ImageFiles { image, thumb })
 }
 
 /// The PNG bytes to store and the decoded image they came from.
@@ -1258,6 +1325,72 @@ mod tests {
         }
     }
 
+    /// IMP-02 أ, measured (image_lock_probe): a 5K screenshot kept the store
+    /// locked 40–150 ms while its picture and thumbnail were written — the
+    /// panel opening meanwhile waited on `get_state`, on the main thread. The
+    /// files are written before the lock is taken for the capture.
+    #[test]
+    fn a_picture_is_written_with_the_store_unlocked() {
+        let src = include_str!("monitor.rs");
+        let image =
+            &src[src.find("fn capture_image(").unwrap()..src.find("fn decode_capture(").unwrap()];
+        let apply = &image[image.find("capture_and_persist(store_lock").unwrap()..];
+        let apply = &apply[..apply.find("\n    });").unwrap()];
+        let first_write = image.find("write_image_files(").unwrap();
+        assert!(
+            first_write < image.find("capture_and_persist(store_lock").unwrap(),
+            "written first"
+        );
+        // Under the lock only when the copy that made a write unnecessary
+        // vanished in between: the one fallback.
+        assert_eq!(apply.matches("write_image_files(").count(), 1, "{apply}");
+        assert!(!apply.contains("std::fs::write"));
+    }
+
+    /// The same picture captured by something else while this one's files
+    /// were being written: the capture lands on that row, and the files
+    /// written for nothing are taken back.
+    #[test]
+    fn files_written_ahead_for_a_picture_already_there_are_taken_back() {
+        let dir = std::env::temp_dir().join(format!("raff-ahead-test-{}", uuid::Uuid::new_v4()));
+        let store = Mutex::new(Store::load(dir.clone()));
+        let png = encode_png(&image::DynamicImage::new_rgba8(12, 9)).unwrap();
+        let images = dir.join(crate::storage::IMAGES_DIR);
+        let decoded = image::load_from_memory(&png).unwrap();
+
+        let landed = capture_image(
+            &store,
+            png.clone(),
+            decoded,
+            macos::FrontApp::default(),
+            || {
+                // Between the write ahead and the capture: the same picture lands.
+                assert!(capture_reading(&store, image_reading(png.clone())));
+            },
+        );
+        assert!(landed);
+        let guard = store.lock().unwrap();
+        assert_eq!(guard.history.len(), 1, "one row for the picture");
+        let named: Vec<String> = guard
+            .history
+            .iter()
+            .flat_map(|i| i.image_file.iter().chain(i.thumb_file.iter()).cloned())
+            .collect();
+        let on_disk: Vec<String> = std::fs::read_dir(&images)
+            .unwrap()
+            .flatten()
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(
+            on_disk.len(),
+            named.len(),
+            "no orphan left: {on_disk:?} vs {named:?}"
+        );
+        assert!(named.iter().all(|f| images.join(f).exists()));
+        drop(guard);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
     #[test]
     fn recopying_an_image_whose_file_vanished_writes_it_again() {
         let dir = std::env::temp_dir().join(format!("raff-heal-test-{}", uuid::Uuid::new_v4()));
@@ -1394,6 +1527,50 @@ mod tests {
 
         assert!(capture_reading(&store, reading(42, 42, "نصّ عادي")));
         assert_eq!(store.lock().unwrap().history.len(), 1);
+    }
+
+    /// IMP-02 أ's measurement: what a 5K screenshot keeps the store locked
+    /// for today — the picture written, its thumbnail made and written, all
+    /// inside `capture_and_persist`'s `apply`. Run in release:
+    /// `cargo test --release image_lock_probe -- --ignored --nocapture`.
+    #[test]
+    #[ignore = "a measurement, run by hand in release"]
+    fn image_lock_probe() {
+        let (w, h) = (5120u32, 2880u32);
+        let mut seed = 7u32;
+        let pixels: Vec<u8> = (0..w * h * 4)
+            .map(|i| {
+                seed = seed.wrapping_mul(1_103_515_245).wrapping_add(12_345);
+                // A screenshot is mostly flat with detail: noise on every 8th byte.
+                if i % 8 == 0 {
+                    (seed >> 16) as u8
+                } else {
+                    200
+                }
+            })
+            .collect();
+        let decoded =
+            image::DynamicImage::ImageRgba8(image::RgbaImage::from_raw(w, h, pixels).unwrap());
+        let png = encode_png(&decoded).unwrap();
+        let dir = std::env::temp_dir().join(format!("raff-image-probe-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut held: Vec<f64> = (0..5)
+            .map(|n| {
+                let began = std::time::Instant::now();
+                std::fs::write(dir.join(format!("{n}.png")), &png).unwrap();
+                write_thumbnail(&dir, format!("{n}.thumb.png"), &decoded).unwrap();
+                began.elapsed().as_secs_f64() * 1000.0
+            })
+            .collect();
+        held.sort_by(f64::total_cmp);
+        println!(
+            "image_lock_probe: png={} bytes, held median={:.1}ms min={:.1}ms max={:.1}ms",
+            png.len(),
+            held[2],
+            held[0],
+            held[4]
+        );
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]
