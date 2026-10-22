@@ -43,6 +43,9 @@
       "dmg"
     ],
     "category": "Productivity",
+    "resources": {
+      "../THIRD-PARTY-NOTICES.md": "THIRD-PARTY-NOTICES.md"
+    },
     "shortDescription": "رفّ — مدير الحافظة الشخصي والخاص لنظام macOS",
     "icon": [
       "icons/32x32.png",

@@ -12,6 +12,7 @@
     "build:frontend": "node scripts/build-frontend.mjs",
     "icons": "node scripts/gen-icons.mjs",
     "dmg:background": "node scripts/gen-dmg-background.mjs",
+    "notices": "node scripts/gen-third-party-notices.mjs",
     "test": "node --test --test-force-exit tests/*.test.mjs"
   },
   "devDependencies": {
