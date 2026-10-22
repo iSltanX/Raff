@@ -2074,42 +2074,92 @@ impl Store {
         true
     }
 
-    /// Rewrites the pinned shelf into exactly this order.
+    /// Adds a backup's items to the shelf (IMP-05), and answers how many were
+    /// added and how many were there already.
     ///
-    /// `ids` has to be the pinned set exactly: same ids, none missing, none
-    /// extra, none repeated. A caller working from a stale view would
-    /// otherwise drop a row — or list one twice — while calling it a reorder,
-    /// and the shelf is the one layer nothing ever prunes for the user.
+    /// - Content in the history is pinned from there, through the pin's own
+    ///   transaction: the shelf and the history never hold the same text
+    ///   twice. Each such pin is durable as it lands; a later failure leaves
+    ///   those pinned, and reports the failure.
+    /// - Content already pinned is skipped; it takes the file's name only when
+    ///   it has none.
+    /// - Anything else goes at the end of the shelf with a new id, and a stamp
+    ///   no later than now: a stamp from the future would lift every later
+    ///   capture's past it (`next_stamp`) and keep them from retention.
     ///
-    /// The whole layer is copied for the rollback. That is fine here and not
-    /// in `capture`: pinning is a deliberate, rare act on a short list, not a
-    /// cost paid on every copy the user makes.
-    /// Adds a backup's items to the end of the shelf (IMP-05), each with a new
-    /// id, skipping any whose content is pinned already. Persisted before it
-    /// answers; on a failed write the shelf stays as it was. Answers how many
-    /// were added and how many skipped.
+    /// The rest is one write of the shelf; when it fails the shelf stays as
+    /// it was after the pins from the history.
     pub fn import_pinned(
         &mut self,
         items: &[crate::backup::BackupItem],
     ) -> Result<(usize, usize), String> {
         self.try_finish_pending_pin()?;
+        let now = now_ms();
+        let name_of = |item: &crate::backup::BackupItem| {
+            item.label
+                .as_deref()
+                .map(str::trim)
+                .filter(|l| !l.is_empty())
+                .map(String::from)
+        };
+        let (mut added, mut skipped) = (0, 0);
+
+        // From the history first, each through its own pin transaction.
+        let mut named_from_history = Vec::new();
+        let mut handled = vec![false; items.len()];
+        for (index, item) in items.iter().enumerate() {
+            let pinned_already = self
+                .pinned
+                .iter()
+                .any(|pinned| Self::same_content(pinned, item.kind, &item.text, None));
+            if pinned_already {
+                continue;
+            }
+            let Some(id) = self
+                .history
+                .iter()
+                .find(|row| Self::same_content(row, item.kind, &item.text, None))
+                .map(|row| row.id.clone())
+            else {
+                continue;
+            };
+            self.set_pin_persisted(&id, true)?;
+            named_from_history.push((id, name_of(item)));
+            handled[index] = true;
+            added += 1;
+        }
+
+        // The rest, and the names, in one write of the shelf.
         let previous = self.pinned.clone();
+        let mut changed = false;
         let mut next_order = self
             .pinned
             .iter()
             .filter_map(|item| item.pinned_order)
             .max()
             .map_or(0, |order| order + 1);
-        let (mut added, mut skipped) = (0, 0);
-        for item in items {
-            if self
+        for (id, name) in named_from_history {
+            if let (Some(name), Some(row)) = (name, self.pinned.iter_mut().find(|p| p.id == id)) {
+                row.label = Some(name);
+                changed = true;
+            }
+        }
+        for (item, _) in items.iter().zip(&handled).filter(|(_, handled)| !**handled) {
+            if let Some(pinned) = self
                 .pinned
-                .iter()
-                .any(|pinned| Self::same_content(pinned, item.kind, &item.text, None))
+                .iter_mut()
+                .find(|pinned| Self::same_content(pinned, item.kind, &item.text, None))
             {
+                if pinned.label.is_none() {
+                    if let Some(name) = name_of(item) {
+                        pinned.label = Some(name);
+                        changed = true;
+                    }
+                }
                 skipped += 1;
                 continue;
             }
+            let stamp = item.created_at.min(now);
             self.pinned.push(ClipItem {
                 id: uuid::Uuid::new_v4().to_string(),
                 kind: item.kind,
@@ -2121,18 +2171,19 @@ impl Store {
                 hash: None,
                 source_app_bundle_id: String::new(),
                 source_app: "نسخة احتياطية".into(),
-                created_at: item.created_at,
+                created_at: stamp,
                 is_pinned: true,
                 pinned_order: Some(next_order),
                 copy_count: 0,
                 paste_count: 0,
-                last_used_at: item.created_at,
-                label: item.label.clone(),
+                last_used_at: stamp,
+                label: name_of(item),
             });
             next_order += 1;
             added += 1;
+            changed = true;
         }
-        if added > 0 {
+        if changed {
             if let Err(err) = try_save_json(&self.dir.join(PINNED_FILE), &self.pinned) {
                 self.pinned = previous;
                 return Err(err);
@@ -2162,6 +2213,16 @@ impl Store {
         Ok(())
     }
 
+    /// Rewrites the pinned shelf into exactly this order.
+    ///
+    /// `ids` has to be the pinned set exactly: same ids, none missing, none
+    /// extra, none repeated. A caller working from a stale view would
+    /// otherwise drop a row — or list one twice — while calling it a reorder,
+    /// and the shelf is the one layer nothing ever prunes for the user.
+    ///
+    /// The whole layer is copied for the rollback. That is fine here and not
+    /// in `capture`: pinning is a deliberate, rare act on a short list, not a
+    /// cost paid on every copy the user makes.
     pub fn reorder_pinned_persisted(&mut self, ids: &[String]) -> Result<(), String> {
         self.try_finish_pending_pin()?;
 

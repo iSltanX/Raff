@@ -4,7 +4,15 @@
 // preferences toolbar, one page at a time, grouped cards.
 
 import { api, on } from './store.js';
-import { arabicDigits, metaLine, hotkeyDisplay, hotkeyFromEvent, hotkeyRefusal } from './logic.js';
+import {
+  arabicCount,
+  arabicDigits,
+  metaLine,
+  hotkeyDisplay,
+  hotkeyFromEvent,
+  hotkeyRefusal,
+  settingsFromBackup,
+} from './logic.js';
 import { ALERT, CAPTURE_OFF, CLEAR, KEYBOARD, PAUSE, createIcon } from './icons.js';
 
 // The native WKWebView menu is English ("Reload") — never shown in Raff.
@@ -750,44 +758,62 @@ addExcludedBtn.addEventListener('click', async () => {
 // ─── Backup (IMP-05) ──────────────────────────────────────────────────────
 
 const backupStatus = el('backup-status');
+const backupButtons = el('export-backup').parentElement;
 const BACKUP_ERRORS = {
-  'raff/backup-invalid': 'هذا ليس ملف نسخة احتياطية من رفّ، أو أنه تالف. لم يُستورد شيء.',
-  'raff/backup-too-large': 'الملف أكبر من أن يكون نسخة احتياطية من رفّ. لم يُستورد شيء.',
+  'raff/backup-invalid': 'ليس ملف نسخة احتياطية من رفّ، أو أنه تالف. لم يُستورد شيء.',
+  'raff/backup-newer': 'هذه النسخة من إصدار أحدث من رفّ. حدّث رفّ ثم استوردها.',
+  'raff/backup-too-large': 'الملف أكبر من حدّ النسخة الاحتياطية. لم يُستورد شيء.',
   'raff/backup-write-failed': 'تعذّر حفظ الملف في المكان المختار.',
 };
 const backupError = (err) => BACKUP_ERRORS[String(err)] ?? 'تعذّر إتمام العملية. حاول مرة أخرى.';
+const ITEMS = ['عنصر واحد', 'عنصران', 'عناصر', 'عنصرًا'];
 
-async function runBackup(button, work) {
-  button.disabled = true;
+// One at a time: the other button waits rather than opening a second panel.
+// Neither is disabled, so the one pressed keeps the keyboard.
+let backupBusy = false;
+async function runBackup(work) {
+  if (backupBusy) return;
+  backupBusy = true;
+  backupButtons.setAttribute('aria-busy', 'true');
   try {
     const said = await work();
-    if (said) backupStatus.textContent = said;
+    if (said) {
+      backupStatus.textContent = said;
+      backupStatus.classList.remove('error');
+    }
   } catch (err) {
     backupStatus.textContent = backupError(err);
+    backupStatus.classList.add('error');
   } finally {
-    button.disabled = false;
+    backupBusy = false;
+    backupButtons.removeAttribute('aria-busy');
   }
 }
 
-el('export-backup').addEventListener('click', (e) =>
-  runBackup(e.currentTarget, async () => {
+el('export-backup').addEventListener('click', () =>
+  runBackup(async () => {
     const result = await api.exportBackup();
     if (!result?.saved) return null; // cancelled: nothing to say
-    const left = result.pictures > 0 ? ` وتُركت الصور المثبّتة (${arabicDigits(result.pictures)}).` : '';
-    return `صُدّر ${arabicDigits(result.items)} عنصرًا مثبّتًا مع الإعدادات.${left}`;
+    const left = result.pictures > 0 ? ` ولم تُصدَّر الصور المثبّتة (${arabicDigits(result.pictures)}).` : '';
+    if (result.items === 0) return `صُدّرت الإعدادات، ولا مثبّتات فيها.${left}`;
+    return `صُدّر ${arabicCount(result.items, ITEMS)} من المثبّتات مع الإعدادات.${left}`;
   })
 );
 
-el('import-backup').addEventListener('click', (e) =>
-  runBackup(e.currentTarget, async () => {
+el('import-backup').addEventListener('click', () =>
+  runBackup(async () => {
     const result = await api.importBackup();
     if (!result?.imported) return null;
-    // The file's settings, through the path every setting takes. Not the
-    // welcome's flag: an import does not bring the welcome back.
-    const { firstRunShown, ...rest } = result.settings ?? {};
-    const saved = Object.keys(rest).length > 0 ? await save(() => rest) : true;
-    const settingsLine = saved ? 'وطُبّقت إعداداته.' : 'ولم تُطبَّق إعداداته.';
-    return `أُضيف ${arabicDigits(result.added)}، وتُرك ${arabicDigits(result.skipped)} موجود من قبل. ${settingsLine}`;
+    const { patch, hotkey } = settingsFromBackup(settings, result.settings ?? {});
+    const applied = Object.keys(patch).length > 0 ? await save(() => patch) : true;
+    const hotkeyApplied = hotkey ? await save(() => ({ hotkey })) : true;
+    const added = result.added > 0 ? `أُضيف ${arabicCount(result.added, ITEMS)}` : 'لم يُضف شيء';
+    const skipped = result.skipped > 0 ? `، وتُخطّي ما كان موجودًا من قبل (${arabicDigits(result.skipped)})` : '';
+    let settingsLine = applied
+      ? 'وطُبّقت تفضيلاته، وبقي الالتقاط والخصوصية والاحتفاظ كما هنا.'
+      : 'ولم تُطبَّق تفضيلاته.';
+    if (!hotkeyApplied) settingsLine += ' ولم يُطبَّق اختصاره.';
+    return `${added}${skipped}. ${settingsLine}`;
   })
 );
 

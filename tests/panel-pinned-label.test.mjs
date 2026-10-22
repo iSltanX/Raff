@@ -1,4 +1,4 @@
-// IMP-07: a pinned item can be given a name from the preview («تسمية…»),
+// IMP-07: a pinned item can be given a name from the preview («تسمية»),
 // which shows above its text in the list and is found by search. Only pinned
 // items: the button is not offered for history rows. Enter saves, Escape
 // cancels and gives the keyboard back to search.

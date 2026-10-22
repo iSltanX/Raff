@@ -34,15 +34,28 @@ pub enum Form {
     Bare,
 }
 
-/// The text without what «بلا تشكيل» drops: the harakat and their
-/// relatives (U+064B–U+065F), the superscript alef (U+0670), the Quranic
-/// annotation marks (U+06D6–U+06ED) and tatweel (U+0640). Letters, digits,
-/// punctuation and every other script pass unchanged.
+/// The text without what «بلا تشكيل» drops — combining marks only: the
+/// harakat (U+064B–U+0652) and their relatives (U+0656–U+065E), the
+/// superscript alef (U+0670), the Quranic annotation marks (U+06D6–U+06DC,
+/// U+06DF–U+06E4, U+06E7–U+06E8, U+06EA–U+06ED) and tatweel (U+0640).
+///
+/// The combining madda and hamzas (U+0653–U+0655, U+065F) stay: in
+/// decomposed text they are how أ إ آ are spelled. So do the Quranic signs
+/// that are symbols (۝ ۞ ۩) and the small waw and yeh. Letters, digits,
+/// punctuation and every other script pass unchanged. `hasTashkeel` in
+/// logic.js draws the same line.
 pub fn without_tashkeel(text: &str) -> String {
     text.chars()
         .filter(|c| {
             !matches!(c,
-                '\u{064B}'..='\u{065F}' | '\u{0670}' | '\u{06D6}'..='\u{06ED}' | '\u{0640}')
+                '\u{064B}'..='\u{0652}'
+                    | '\u{0656}'..='\u{065E}'
+                    | '\u{0670}'
+                    | '\u{06D6}'..='\u{06DC}'
+                    | '\u{06DF}'..='\u{06E4}'
+                    | '\u{06E7}'..='\u{06E8}'
+                    | '\u{06EA}'..='\u{06ED}'
+                    | '\u{0640}')
         })
         .collect()
 }
@@ -721,6 +734,26 @@ mod tests {
             without_tashkeel("إِنَّ أُمَّ آمِنَةٍ"),
             "إن أم آمنة",
             "hamza and madda are letters"
+        );
+    }
+
+    /// Review 2026-10-22: decomposed text (NFD, as macOS file names and some
+    /// tools give it) spells أ إ آ as alef plus a combining hamza or madda —
+    /// part of the letter, not tashkeel. And the Quranic signs that are
+    /// symbols, not marks (۝ ۞ ۩), and the small waw and yeh, stay.
+    #[test]
+    fn bare_text_keeps_decomposed_hamza_and_quranic_symbols() {
+        let decomposed = "\u{0627}\u{0654}\u{064F}\u{0645} \u{0627}\u{0655}\u{0650}\u{0646} \u{0627}\u{0653}\u{0645}\u{0646} \u{0621}\u{065F}";
+        assert_eq!(
+            without_tashkeel(decomposed),
+            "\u{0627}\u{0654}\u{0645} \u{0627}\u{0655}\u{0646} \u{0627}\u{0653}\u{0645}\u{0646} \u{0621}\u{065F}"
+        );
+        let signs = "\u{06DD}١ \u{06DE} \u{06E9} \u{06E5}\u{06E6}";
+        assert_eq!(without_tashkeel(signs), signs);
+        assert_eq!(
+            without_tashkeel("\u{06D6}\u{06DC}\u{06DF}\u{06E4}\u{06E7}\u{06E8}\u{06EA}\u{06ED}"),
+            "",
+            "the marks still go"
         );
     }
 

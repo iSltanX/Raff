@@ -22,6 +22,10 @@ pub const MAX_FILE_BYTES: usize = 20 * 1024 * 1024;
 pub const MAX_ITEMS: usize = 2_000;
 
 pub const INVALID: &str = "raff/backup-invalid";
+/// A file from a later Raff, whose shape this one cannot know.
+pub const NEWER: &str = "raff/backup-newer";
+/// `rtf` is stored base64: the capture cap on its bytes, in base64 characters.
+pub const MAX_RTF_BASE64: usize = crate::macos::MAX_RICH_BYTES.div_ceil(3) * 4;
 pub const TOO_LARGE: &str = "raff/backup-too-large";
 pub const WRITE_FAILED: &str = "raff/backup-write-failed";
 
@@ -77,9 +81,20 @@ pub fn build(store: &Store, now: u64) -> (BackupFile, usize) {
     (file, pictures)
 }
 
+/// What any version of the file says about itself, read before the rest so
+/// a file from a later Raff is told apart from one that is not a backup.
+#[derive(Deserialize)]
+struct Header {
+    format: Option<String>,
+    version: Option<u32>,
+}
+
 /// Reads a backup, refusing anything that is not exactly one: another format
-/// or version, an unknown field, a picture, an empty or oversized item, a
-/// name over its cap, or settings `validate` refuses.
+/// or version, an unknown field, a picture, an empty item or one over the
+/// limits a copy is held to, a name over its cap, or settings `validate`
+/// refuses. The settings object itself is lenient as `settings.json` is
+/// (missing fields take their defaults, unknown ones are ignored); `validate`
+/// is what holds it to account.
 pub fn parse(
     bytes: &[u8],
     validate: impl Fn(&Settings) -> Result<(), String>,
@@ -87,16 +102,36 @@ pub fn parse(
     if bytes.len() > MAX_FILE_BYTES {
         return Err(TOO_LARGE.into());
     }
+    let header: Header = serde_json::from_slice(bytes).map_err(|_| INVALID.to_string())?;
+    if header.format.as_deref() != Some(FORMAT) {
+        return Err(INVALID.into());
+    }
+    if header.version.is_some_and(|version| version > VERSION) {
+        return Err(NEWER.into());
+    }
     let file: BackupFile = serde_json::from_slice(bytes).map_err(|_| INVALID.to_string())?;
     let label_ok = |l: &Option<String>| {
         l.as_deref()
             .is_none_or(|l| l.chars().count() <= crate::storage::LABEL_MAX_CHARS)
     };
-    let sound = file.format == FORMAT
-        && file.version == VERSION
+    let within_capture_limits = |item: &BackupItem| {
+        item.text.chars().count() <= crate::macos::MAX_TEXT_CHARS
+            && item
+                .html
+                .as_ref()
+                .is_none_or(|html| html.len() <= crate::macos::MAX_RICH_BYTES)
+            && item
+                .rtf
+                .as_ref()
+                .is_none_or(|rtf| rtf.len() <= MAX_RTF_BASE64)
+    };
+    let sound = file.version == VERSION
         && file.pinned.len() <= MAX_ITEMS
         && file.pinned.iter().all(|item| {
-            item.kind != ItemKind::Image && !item.text.trim().is_empty() && label_ok(&item.label)
+            item.kind != ItemKind::Image
+                && !item.text.trim().is_empty()
+                && label_ok(&item.label)
+                && within_capture_limits(item)
         });
     if !sound {
         return Err(INVALID.into());
@@ -163,7 +198,7 @@ pub async fn export_backup(
         });
     };
     let bytes = serde_json::to_vec_pretty(&file).map_err(|_| WRITE_FAILED.to_string())?;
-    tauri::async_runtime::spawn_blocking(move || std::fs::write(path, bytes))
+    tauri::async_runtime::spawn_blocking(move || write_backup(&path, &bytes))
         .await
         .map_err(|_| WRITE_FAILED.to_string())?
         .map_err(|_| WRITE_FAILED.to_string())?;
@@ -210,6 +245,37 @@ pub async fn import_backup(
         skipped,
         settings: Some(file.settings),
     })
+}
+
+/// The backup into `path`, whole or not at all: written beside it, flushed,
+/// then renamed over it — a file the user chose to replace is never left
+/// half-written. Readable by its owner alone, as Raff's own files are.
+fn write_backup(path: &str, bytes: &[u8]) -> std::io::Result<()> {
+    use std::io::Write;
+    use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+    let path = std::path::Path::new(path);
+    let name = path
+        .file_name()
+        .ok_or(std::io::ErrorKind::InvalidInput)?
+        .to_string_lossy();
+    let tmp = path.with_file_name(format!(".{name}.raff-tmp"));
+    let written = (|| {
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .mode(0o600)
+            .open(&tmp)?;
+        file.set_permissions(std::fs::Permissions::from_mode(0o600))?;
+        file.write_all(bytes)?;
+        file.sync_all()?;
+        std::fs::rename(&tmp, path)
+    })();
+    if written.is_err() {
+        // Ours, made a moment ago in this call: nothing of the user's.
+        let _ = std::fs::remove_file(&tmp);
+    }
+    written
 }
 
 /// A regular file, read up to one byte past the cap.
@@ -318,7 +384,7 @@ mod tests {
         assert_eq!(refused(v), INVALID);
         let mut v = good.clone();
         v["version"] = 2.into();
-        assert_eq!(refused(v), INVALID);
+        assert_eq!(refused(v), NEWER, "a later Raff's file, said as such");
         let mut v = good.clone();
         v["extra"] = true.into();
         assert_eq!(refused(v), INVALID, "an unknown field");
@@ -342,5 +408,136 @@ mod tests {
             parse(&vec![b' '; MAX_FILE_BYTES + 1], |_| Ok(())).unwrap_err(),
             TOO_LARGE
         );
+    }
+
+    /// Review 2026-10-22: a file from a later Raff says so, even when it
+    /// carries fields this one does not know; and an item is held to the
+    /// limits a copy is held to.
+    #[test]
+    fn a_newer_file_says_so_and_items_keep_capture_limits() {
+        let store = store_with_pins(&["أول"]);
+        let (file, _) = build(&store, 7);
+        let good = serde_json::to_value(&file).unwrap();
+        let refused = |value: serde_json::Value| {
+            parse(&serde_json::to_vec(&value).unwrap(), |_| Ok(())).unwrap_err()
+        };
+        let mut v = good.clone();
+        v["version"] = 2.into();
+        v["somethingNew"] = true.into();
+        assert_eq!(refused(v), NEWER);
+        let mut v = good.clone();
+        v["version"] = 0.into();
+        assert_eq!(refused(v), INVALID);
+        let mut v = good.clone();
+        v["pinned"][0]["text"] = "ا".repeat(crate::macos::MAX_TEXT_CHARS + 1).into();
+        assert_eq!(refused(v), INVALID, "text over the capture cap");
+        let mut v = good.clone();
+        v["pinned"][0]["html"] = "x".repeat(crate::macos::MAX_RICH_BYTES + 1).into();
+        assert_eq!(refused(v), INVALID, "html over the capture cap");
+        let mut v = good.clone();
+        v["pinned"][0]["rtf"] = "x".repeat(MAX_RTF_BASE64 + 1).into();
+        assert_eq!(refused(v), INVALID, "rtf over the capture cap");
+    }
+
+    /// Review 2026-10-22: a stamp from the future — a wrong clock, an edited
+    /// file — would lift every later capture's stamp past it (`next_stamp`),
+    /// and retention would never reach them.
+    #[test]
+    fn an_imported_stamp_is_never_in_the_future() {
+        let mut target = store_in(&temp(), &[]);
+        let item = BackupItem {
+            kind: ItemKind::Text,
+            text: "من المستقبل".into(),
+            html: None,
+            rtf: None,
+            label: None,
+            created_at: u64::MAX,
+        };
+        let before = crate::storage::now_ms();
+        assert_eq!(target.import_pinned(&[item]).unwrap(), (1, 0));
+        let stamp = target.pinned[0].created_at;
+        assert!(
+            stamp <= crate::storage::now_ms() && stamp >= before,
+            "{stamp}"
+        );
+        assert!(target.pinned[0].last_used_at <= crate::storage::now_ms());
+    }
+
+    /// Review 2026-10-22: content already in the history is pinned from there,
+    /// not added beside it — the shelf and the history never hold the same
+    /// text twice. And a name in the file reaches a pinned item that has none.
+    #[test]
+    fn an_import_pins_from_the_history_and_brings_missing_names() {
+        let dir = temp();
+        let mut target = store_in(&dir, &["مثبّت بلا اسم"]);
+        target.capture(
+            ItemKind::Text,
+            "في السجل".into(),
+            None,
+            None,
+            None,
+            None,
+            None,
+            ("Notes".into(), "com.apple.Notes".into()),
+        );
+        target.save_history();
+        let history_id = target.history[0].id.clone();
+        let item = |text: &str, label: Option<&str>| BackupItem {
+            kind: ItemKind::Text,
+            text: text.into(),
+            html: None,
+            rtf: None,
+            label: label.map(Into::into),
+            created_at: 5,
+        };
+        let (added, skipped) = target
+            .import_pinned(&[
+                item("في السجل", Some("من السجل")),
+                item("مثبّت بلا اسم", Some("اسمه")),
+            ])
+            .unwrap();
+        assert_eq!((added, skipped), (1, 1));
+        assert!(
+            target.history.iter().all(|i| i.text != "في السجل"),
+            "no copy left in the history"
+        );
+        let pinned = target.pinned.iter().find(|i| i.text == "في السجل").unwrap();
+        assert_eq!(pinned.id, history_id, "the history row itself, pinned");
+        assert_eq!(pinned.label.as_deref(), Some("من السجل"));
+        let named = target
+            .pinned
+            .iter()
+            .find(|i| i.text == "مثبّت بلا اسم")
+            .unwrap();
+        assert_eq!(named.label.as_deref(), Some("اسمه"));
+
+        let reloaded = Store::load(dir);
+        assert_eq!(reloaded.pinned.len(), 2);
+        assert!(reloaded.history.iter().all(|i| i.text != "في السجل"));
+        assert!(reloaded
+            .pinned
+            .iter()
+            .any(|i| i.label.as_deref() == Some("من السجل")));
+        assert!(reloaded
+            .pinned
+            .iter()
+            .any(|i| i.label.as_deref() == Some("اسمه")));
+    }
+
+    /// Review 2026-10-22: the file lands whole or not at all (a file chosen to
+    /// be replaced is not left half-written), and only its owner reads it.
+    #[test]
+    fn the_file_is_written_whole_and_private() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = temp();
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("نسخة.json");
+        std::fs::write(&path, b"old").unwrap();
+        write_backup(path.to_str().unwrap(), b"{\"new\":1}").unwrap();
+        assert_eq!(std::fs::read(&path).unwrap(), b"{\"new\":1}");
+        let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o600);
+        let left: Vec<_> = std::fs::read_dir(&dir).unwrap().collect();
+        assert_eq!(left.len(), 1, "no temporary file left behind");
     }
 }

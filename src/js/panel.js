@@ -306,13 +306,17 @@ function buildRow(item, index) {
 
   if (isGrid()) return buildCard(row, item, index);
 
-  // A pinned item's name, above what it holds (IMP-07).
+  // A pinned item's name, above what it holds, in one column with it (IMP-07).
+  let content = preview;
   if (item.isPinned && item.label) {
+    content = document.createElement('div');
+    content.className = 'row-text';
     const name = document.createElement('div');
     name.className = 'row-label';
     name.dir = 'auto';
     name.textContent = item.label; // user-typed → textContent
-    preview.append(name);
+    content.append(name);
+    preview.append(content);
   }
 
   if (item.type === 'image') {
@@ -323,7 +327,7 @@ function buildRow(item, index) {
     missing.className = 'preview-missing';
     missing.textContent = unavailableNote(item.id);
     media.append(thumb, missing);
-    preview.append(media);
+    content.append(media);
   } else {
     // «08» renders text and code identically — Cairo Medium 12, right-aligned,
     // with dir=auto letting a Latin snippet read left-to-right in place. Only
@@ -337,7 +341,7 @@ function buildRow(item, index) {
       title.dir = 'auto';
     }
     title.textContent = item.text; // clip content → textContent
-    preview.append(title);
+    content.append(title);
   }
   const time = document.createElement('span');
   time.className = 'row-time';
@@ -1404,7 +1408,7 @@ const ERROR_MESSAGES = {
   'raff/undo-retention': 'انتهت مدة الاحتفاظ بهذا العنصر، فلم يُستعد.',
   'raff/undo-expired': 'انتهت مهلة التراجع، وحُذف العنصر نهائيًا.',
   'raff/label-too-long': 'الاسم أطول من ٤٠ حرفًا.',
-  'raff/label-not-pinned': 'الاسم للعناصر المثبّتة وحدها.',
+  'raff/label-not-pinned': 'التسمية للعناصر المثبّتة فقط.',
   'raff/clipboard-off': 'هذه نسخة تجربة من رفّ، فلا تصل إلى الحافظة.',
 };
 
@@ -1946,8 +1950,15 @@ function announcePreview(message) {
   });
 }
 
+/** A preview that goes takes its name field with it, and the keyboard the
+ *  field had goes back to search — never left in a field nobody can see. */
+function dropLabelField() {
+  closeLabelField({ refocus: document.activeElement === labelInput });
+}
+
 async function closePreviewWindow() {
   if (!previewSide) return;
+  dropLabelField();
   previewSide = null;
   previewEl.hidden = true;
   delete previewEl.dataset.id;
@@ -1973,6 +1984,7 @@ function actsOnItem(e) {
 
 /** The panel was hidden, and Rust narrowed its window with it. */
 function resetPreview() {
+  dropLabelField();
   hoverIntent.cancel();
   disarmHover();
   previewWant = null;
@@ -2001,11 +2013,12 @@ function fillPreview(item) {
   previewEl.dataset.id = item.id;
   previewEl.dataset.type = item.type;
   // Only where there is something for it to drop.
-  previewBareEl.hidden = item.type === 'image' || !hasTashkeel(item.text);
-  // A name is the shelf's (IMP-07). Another item closes an open field.
-  previewLabelBtn.hidden = !item.isPinned;
-  previewLabelText.textContent = item.label ? 'تغيير الاسم…' : 'تسمية…';
-  if (!sameItem) closeLabelField({ refocus: false });
+  previewBareEl.hidden = !hasSomethingToDrop(item.id);
+  // A name is the shelf's (IMP-07). Another item closes an open field, and
+  // the keyboard it had goes back to search.
+  if (!sameItem) dropLabelField();
+  previewLabelBtn.hidden = !item.isPinned || !labelForm.hidden;
+  previewLabelText.textContent = item.label ? 'تغيير الاسم' : 'تسمية';
   previewKindEl.textContent = item.type === 'code' ? 'شفرة' : contentTypeIcon(item.type).label;
   previewWhenEl.textContent = [
     relativeTimeAr(item.createdAt),
@@ -2123,11 +2136,21 @@ previewEl.addEventListener('mousedown', (e) => {
   if (!isWritable(e.target)) e.preventDefault();
 });
 
+/** Whether «لصق بلا تشكيل» would change this item: the button's rule. */
+function hasSomethingToDrop(id) {
+  const item = visible.find((entry) => entry.id === id);
+  return Boolean(item) && item.type !== 'image' && hasTashkeel(item.text);
+}
+
 function openLabelField(id) {
   const item = [...state.pinned, ...state.history].find((entry) => entry.id === id);
   if (!item?.isPinned) return;
+  // A name being typed holds the preview: the pointer wandering off a hover
+  // preview no longer closes it, nor does resting on another row.
+  if (previewWant) previewWant.mode = 'held';
   labelInput.value = item.label ?? '';
   labelForm.hidden = false;
+  previewLabelBtn.hidden = true; // the field takes the button's place
   labelInput.focus({ preventScroll: true });
   labelInput.select();
 }
@@ -2135,6 +2158,7 @@ function openLabelField(id) {
 function closeLabelField({ refocus = true } = {}) {
   if (labelForm.hidden) return;
   labelForm.hidden = true;
+  previewLabelBtn.hidden = false; // only a pinned item's preview opens the field
   if (refocus) searchEl.focus({ preventScroll: true });
 }
 
@@ -2144,6 +2168,8 @@ labelForm.addEventListener('submit', (e) => {
   const label = labelInput.value.trim();
   closeLabelField();
   if (!id) return;
+  const item = state.pinned.find((entry) => entry.id === id);
+  if (item && (item.label ?? '') === label) return; // nothing changed, nothing written
   enqueueMutation(async () => {
     try {
       await api.setLabel(id, label || null);
@@ -2398,8 +2424,9 @@ window.addEventListener('keydown', (e) => {
       return;
     case 'Enter':
       e.preventDefault();
-      // ⌥⏎ = لصق كنص عادي، ⌃⏎ = الصق بلا تشكيل (IMP-06).
-      paste(selectedId, e.altKey, e.ctrlKey && !e.altKey);
+      // ⌥⏎ = لصق كنص عادي، ⌃⏎ = لصق بلا تشكيل (IMP-06) — where there is
+      // something to drop, as the button; elsewhere it is ⏎.
+      paste(selectedId, e.altKey, e.ctrlKey && !e.altKey && hasSomethingToDrop(selectedId));
       return;
     case 'Escape':
       e.preventDefault();

@@ -66,7 +66,7 @@ const TYPE_JPEG: &str = "public.jpeg";
 const TYPE_FILE_URL: &str = "public.file-url";
 
 /// Rich representations larger than this are not stored (keeps the JSON store lean).
-const MAX_RICH_BYTES: usize = 256 * 1024;
+pub(crate) const MAX_RICH_BYTES: usize = 256 * 1024;
 /// Image payloads above this are not read into the process at all. An
 /// uncompressed TIFF of a 6K screen is ~81 MB, so a full-screen Retina capture
 /// still fits; the cap exists so the worst case has a number.
@@ -352,6 +352,10 @@ pub fn choose_backup_destination(name: &str) -> Option<String> {
     panel.setNameFieldStringValue(&NSString::from_str(name));
     panel.setPrompt(Some(&NSString::from_str("تصدير")));
     panel.setCanCreateDirectories(true);
+    // The extension the open panel looks for: kept on the name it saves.
+    let extensions = [NSString::from_str("json")];
+    #[allow(deprecated)]
+    panel.setAllowedFileTypes(Some(&NSArray::from_retained_slice(&extensions)));
     if panel.runModal() != NSModalResponseOK {
         return None;
     }

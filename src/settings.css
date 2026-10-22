@@ -687,20 +687,6 @@ body {
   gap: var(--space-8);
 }
 
-/* A bundle id typed by hand: same row shape as the picker above it. */
-.text-input {
-  height: 28px;
-  min-width: 120px;
-  padding: 0 var(--space-12);
-  border: 1px solid var(--line-input);
-  border-radius: var(--radius-md);
-  background: var(--bg-raised);
-  font-size: var(--text-body);
-  color: var(--ink);
-  -webkit-appearance: none;
-  appearance: none;
-}
-
 .excluded-add-manual {
   margin-top: var(--space-8);
 }

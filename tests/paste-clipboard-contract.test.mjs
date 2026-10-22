@@ -88,7 +88,7 @@ test('the full pasteboard payload is restored, not flattened to text', () => {
     /macos::write_clip\(\s*\n?\s*if is_image \{ None \} else \{ Some\(&text\) \},\s*\n?\s*html\.as_deref\(\),\s*\n?\s*rtf\.as_deref\(\),\s*\n?\s*png\.as_deref\(\),/u,
     'text, html, rtf and png representations must all be offered to the pasteboard'
   );
-  // Only the explicit text-only forms — «لصق كنص عادي» and «الصق بلا تشكيل»
+  // Only the explicit text-only forms — «لصق كنص عادي» and «لصق بلا تشكيل»
   // (IMP-06) — drop the rich representations; the default keeps them.
   assert.match(
     paste,

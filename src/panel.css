@@ -1017,7 +1017,18 @@ html[data-preview='right'] .preview-pane {
   font-weight: 600;
 }
 
-/* IMP-07: a pinned item's name, above its text. */
+/* IMP-07: a pinned item's name, above its text, in one column with it. */
+.row-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.row-text > .preview-title {
+  flex: none;
+}
+
 .row-label {
   overflow: hidden;
   white-space: nowrap;
@@ -1039,4 +1050,11 @@ html[data-preview='right'] .preview-pane {
 .preview-label-form .text-input {
   flex: 1;
   min-width: 0;
+}
+
+/* `.preview-actions .btn` stretches every action to the full width; «حفظ»
+   keeps its own, or it takes the field's. */
+.preview-label-form .btn {
+  flex: none;
+  width: auto;
 }

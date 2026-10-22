@@ -311,7 +311,7 @@ test('the preview buttons tell assistive technology their shortcuts', async () =
     '⌘C': 'Meta+C',
     '⌥P': 'Alt+P',
     '⌘⌫': 'Meta+Backspace',
-    '⌃↵': 'Control+Enter', // «الصق بلا تشكيل» (IMP-06)
+    '⌃↵': 'Control+Enter', // «لصق بلا تشكيل» (IMP-06)
   };
   const buttons = [...doc.querySelectorAll('#preview .preview-actions button')];
   const keyed = buttons.filter((button) => button.querySelector('.btn-keys'));
@@ -320,7 +320,7 @@ test('the preview buttons tell assistive technology their shortcuts', async () =
     const keys = button.querySelector('.btn-keys').textContent;
     assert.equal(button.getAttribute('aria-keyshortcuts'), printed[keys], button.dataset.action);
   }
-  // «تسمية…» and its «حفظ» have no key, and claim none (IMP-07).
+  // «تسمية» and its «حفظ» have no key, and claim none (IMP-07).
   for (const button of buttons.filter((b) => !keyed.includes(b))) {
     assert.equal(button.hasAttribute('aria-keyshortcuts'), false, button.textContent);
   }

@@ -7,11 +7,14 @@ export function arabicDigits(value) {
   return String(value).replace(/[0-9]/g, (d) => ARABIC_DIGITS[Number(d)]);
 }
 
-/** Whether «الصق بلا تشكيل» would change this text: harakat and their kin,
- * the superscript alef, Quranic marks or tatweel (as `without_tashkeel` in
- * paste.rs drops them). */
+/** Whether «لصق بلا تشكيل» would change this text: harakat and their kin,
+ * the superscript alef, Quranic marks or tatweel — the same set
+ * `without_tashkeel` in paste.rs drops. A decomposed hamza or madda is part
+ * of its letter, and ۝ ۞ ۩ are symbols, not marks. */
 export function hasTashkeel(text) {
-  return /[\u064B-\u065F\u0670\u06D6-\u06ED\u0640]/u.test(String(text ?? ''));
+  return /[\u064B-\u0652\u0656-\u065E\u0670\u06D6-\u06DC\u06DF-\u06E4\u06E7\u06E8\u06EA-\u06ED\u0640]/u.test(
+    String(text ?? '')
+  );
 }
 
 const ARABIC_MONTHS = [
@@ -192,4 +195,26 @@ export function hotkeyRefusal(accel) {
   if (!mods.some((mod) => mod !== 'shift')) return 'needs-modifier';
   if (SHARED_HOTKEYS.has(accel)) return 'shared';
   return null;
+}
+
+/**
+ * What an imported backup changes in Settings (IMP-05): preferences only.
+ *
+ * Capture, the history's limit and retention, and the concealed-item rule
+ * are this Mac's: a file from another Mac neither deletes rows here (a
+ * smaller limit or shorter retention prunes at once) nor lets more in (a
+ * file with concealed items allowed). Excluded apps only ever grow. The
+ * hotkey comes apart, saved on its own after the rest: one this Mac refuses
+ * must not take the other preferences down with it.
+ */
+export function settingsFromBackup(current, file) {
+  const patch = {};
+  for (const key of ['launchAtLogin', 'learningEnabled', 'appearance', 'followSystem']) {
+    if (key in file && file[key] !== current[key]) patch[key] = file[key];
+  }
+  const have = current.excludedApps ?? [];
+  const added = (file.excludedApps ?? []).filter((id, i, all) => !have.includes(id) && all.indexOf(id) === i);
+  if (added.length > 0) patch.excludedApps = [...have, ...added];
+  const hotkey = file.hotkey && file.hotkey !== current.hotkey ? file.hotkey : null;
+  return { patch, hotkey };
 }
