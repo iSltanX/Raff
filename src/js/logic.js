@@ -7,6 +7,34 @@ export function arabicDigits(value) {
   return String(value).replace(/[0-9]/g, (d) => ARABIC_DIGITS[Number(d)]);
 }
 
+const ARABIC_MONTHS = [
+  'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو',
+  'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر',
+];
+
+/** A release's `YYYY-MM-DD` as a reader says it (audit 022 ج3): «٢٠ أكتوبر
+ * ٢٠٢٦» in Arabic, the interface language's own long date otherwise. A
+ * calendar day, so it is never shifted by a time zone. `null` for anything
+ * that is not such a date. */
+export function releaseDate(iso, lang = 'ar') {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/u.exec(String(iso ?? ''));
+  if (!m) return null;
+  const [year, month, day] = m.slice(1).map(Number);
+  const at = new Date(Date.UTC(year, month - 1, day));
+  if (at.getUTCFullYear() !== year || at.getUTCMonth() !== month - 1 || at.getUTCDate() !== day) {
+    return null;
+  }
+  if (String(lang).toLowerCase().startsWith('ar')) {
+    return `${arabicDigits(day)} ${ARABIC_MONTHS[month - 1]} ${arabicDigits(year)}`;
+  }
+  return new Intl.DateTimeFormat(lang, {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    timeZone: 'UTC',
+  }).format(at);
+}
+
 /**
  * A count with its noun, as Arabic counts: one and two have their own forms,
  * three to ten take the plural, eleven and up the singular accusative.

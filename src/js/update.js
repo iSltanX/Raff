@@ -4,7 +4,7 @@
 // and the tray menu's consume-once intent.
 
 import { api, on } from './store.js';
-import { arabicDigits } from './logic.js';
+import { arabicDigits, releaseDate } from './logic.js';
 import { createUpdateFlow } from './update-flow.js';
 
 // The native WKWebView menu is English ("Reload") — never shown in Raff.
@@ -150,8 +150,11 @@ function paint(state, data) {
       subEl.textContent = 'الحزمة موقّعة، ويرفض رفّ ما لا يطابق توقيعه.';
       availableEl.hidden = false;
       newVersionEl.textContent = `الإصدار ${arabicDigits(data.version)}`;
-      dateEl.hidden = !data.date;
-      if (data.date) dateEl.textContent = `تاريخ النشر: ${arabicDigits(data.date)}`;
+      {
+        const published = releaseDate(data.date, document.documentElement.lang);
+        dateEl.hidden = !published;
+        if (published) dateEl.textContent = `تاريخ النشر: ${published}`;
+      }
       notesEl.hidden = !data.notes;
       notesEl.textContent = data.notes || ''; // textContent → untrusted-safe
       downloadBtn.hidden = false;
