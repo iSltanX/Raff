@@ -305,9 +305,16 @@ test('the preview buttons tell assistive technology their shortcuts', async () =
   const { JSDOM } = await import('jsdom');
   const html = readFileSync(new URL('../src/index.html', import.meta.url), 'utf8');
   const doc = new JSDOM(html).window.document;
-  const printed = { '↵': 'Enter', '⌥↵': 'Alt+Enter', '⌘C': 'Meta+C', '⌥P': 'Alt+P', '⌘⌫': 'Meta+Backspace' };
+  const printed = {
+    '↵': 'Enter',
+    '⌥↵': 'Alt+Enter',
+    '⌘C': 'Meta+C',
+    '⌥P': 'Alt+P',
+    '⌘⌫': 'Meta+Backspace',
+    '⌃↵': 'Control+Enter', // «الصق بلا تشكيل» (IMP-06)
+  };
   const buttons = [...doc.querySelectorAll('#preview .preview-actions button')];
-  assert.equal(buttons.length, 5);
+  assert.equal(buttons.length, 6);
   for (const button of buttons) {
     const keys = button.querySelector('.btn-keys').textContent;
     assert.equal(button.getAttribute('aria-keyshortcuts'), printed[keys], button.dataset.action);

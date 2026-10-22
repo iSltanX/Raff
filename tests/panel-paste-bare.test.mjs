@@ -29,7 +29,7 @@ test('⌃⏎ and the preview button paste without tashkeel; ⏎ does not', async
   selectRowByKeyboard(dom, 'd');
   key({ key: 'Enter' });
   await flush(10);
-  assert.deepEqual(lastPaste(), { id: 'd', plain: false, bare: false }, '⏎ unchanged');
+  assert.deepEqual(lastPaste(), { id: 'd', plain: false }, '⏎ unchanged');
 
   fake.emit('panel://shown');
   await flush(10);
