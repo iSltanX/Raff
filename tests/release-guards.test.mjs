@@ -68,7 +68,10 @@ test('ج2: a release runs from the tag that names the declared version', () => {
 
 test('ج2: the workflow checks the tag before it builds anything', () => {
   const workflow = read('.github/workflows/release.yml');
-  const guard = workflow.indexOf('node scripts/release-guards.mjs tag "${{ github.ref_type }}" "${{ github.ref_name }}"');
+  const guard = workflow.indexOf('node scripts/release-guards.mjs tag "$REF_TYPE" "$REF_NAME"');
+  // Through the environment, never spliced into the shell text.
+  assert.doesNotMatch(workflow, /run:.*\$\{\{\s*github\.ref_name/u);
+  assert.match(workflow, /REF_NAME: \$\{\{ github\.ref_name \}\}/u);
   const install = workflow.indexOf('run: npm ci');
   const build = workflow.indexOf('uses: tauri-apps/tauri-action');
   assert.ok(guard > 0 && guard < install && install < build, `${guard} ${install} ${build}`);

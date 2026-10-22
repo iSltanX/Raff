@@ -24,7 +24,11 @@ const project = path.join(here, '..');
 export function declaredVersions(root = project) {
   const json = (file) => JSON.parse(readFileSync(path.join(root, file), 'utf8'));
   const cargo = readFileSync(path.join(root, 'src-tauri/Cargo.toml'), 'utf8');
-  const pkg = cargo.slice(cargo.indexOf('[package]'));
+  // `[package]` alone, up to the next table: a later `version = "…"` in a
+  // dependency table is not the crate's.
+  const start = cargo.indexOf('[package]');
+  const next = cargo.indexOf('\n[', start + 1);
+  const pkg = cargo.slice(start, next < 0 ? undefined : next);
   return {
     'package.json': json('package.json').version,
     'tauri.conf.json': json('src-tauri/tauri.conf.json').version,
