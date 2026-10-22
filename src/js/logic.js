@@ -99,7 +99,7 @@ export function filterItems(items, query, alsoMatchIds = null) {
     (item) =>
       alsoMatchIds?.has(item.id) ||
       normalizeArabic(item.text).includes(q) ||
-      normalizeArabic(item.label || '').includes(q) ||
+      (item.isPinned && normalizeArabic(item.label || '').includes(q)) ||
       normalizeArabic(item.sourceApp || '').includes(q)
   );
 }

@@ -93,7 +93,8 @@ impl ItemDto {
             paste_count: item.paste_count,
             last_used_at: item.last_used_at,
             has_image: item.image_file.is_some(),
-            label: item.label.clone(),
+            // Hidden while unpinned (kept for a pin that comes back).
+            label: item.label.clone().filter(|_| item.is_pinned),
         }
     }
 }
@@ -238,12 +239,14 @@ fn rows_to_search(store: &Store) -> Vec<(String, String)> {
         .pinned
         .iter()
         .chain(store.history.iter())
-        // A pinned item's name is searched with its text (IMP-07), and a
-        // picture with the text read in it (IMP-09).
+        // A pinned item's name is searched with its text (IMP-07) — not the
+        // name an unpinned row keeps hidden — and a picture with the text
+        // read in it (IMP-09).
         .map(|item| {
             let mut text = item.text.clone();
             let ocr_text = if ocr { &item.ocr_text } else { &None };
-            for extra in [&item.label, ocr_text].into_iter().flatten() {
+            let label = if item.is_pinned { &item.label } else { &None };
+            for extra in [label, ocr_text].into_iter().flatten() {
                 text.push('\n');
                 text.push_str(extra);
             }
@@ -1263,6 +1266,23 @@ mod tests {
             .unwrap();
         assert_eq!(ids_matching(&store, "المكتب"), vec![id.clone()]);
         assert_eq!(ids_matching(&store, "يذكر"), vec![id]);
+    }
+
+    /// A name kept by an unpinned row is hidden: neither shown nor searched
+    /// until the row is pinned again (Sultan, 2026-10-22).
+    #[test]
+    fn a_hidden_name_is_neither_sent_nor_searched() {
+        let mut store = store_with_rows(&["نص بلا ذكر للاسم"]);
+        let id = store.history[0].id.clone();
+        store.history[0].label = Some("المكتب".into());
+        assert!(ids_matching(&store, "المكتب").is_empty());
+        assert_eq!(ItemDto::from(&store.history[0]).label, None);
+        assert!(store.toggle_pin(&id));
+        assert_eq!(ids_matching(&store, "المكتب"), vec![id.clone()]);
+        assert_eq!(
+            ItemDto::from(&store.pinned[0]).label.as_deref(),
+            Some("المكتب")
+        );
     }
 
     /// IMP-09: a picture is found by the text read in it.

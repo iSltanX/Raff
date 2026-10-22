@@ -511,6 +511,17 @@ function buildCard(row, item, index) {
     media.append(slot);
   }
 
+  // A pinned picture's name (Sultan, 2026-10-22), above the time and kind,
+  // which stay.
+  let name = null;
+  if (item.isPinned && item.label) {
+    name = document.createElement('div');
+    name.className = 'card-label';
+    name.setAttribute('role', 'gridcell');
+    name.dir = 'auto';
+    name.textContent = item.label; // user-typed → textContent
+  }
+
   const foot = document.createElement('div');
   foot.className = 'card-foot';
   const time = document.createElement('span');
@@ -543,7 +554,7 @@ function buildCard(row, item, index) {
     searchEl.focus({ preventScroll: true });
     paste(item.id, e.altKey);
   });
-  row.append(media, foot);
+  row.append(...[media, name, foot].filter(Boolean));
   if (item.isPinned) {
     const flag = document.createElement('span');
     flag.className = 'row-pin-flag';
@@ -1408,7 +1419,7 @@ const ERROR_MESSAGES = {
   'raff/undo-retention': 'انتهت مدة الاحتفاظ بهذا العنصر، فلم يُستعد.',
   'raff/undo-expired': 'انتهت مهلة التراجع، وحُذف العنصر نهائيًا.',
   'raff/label-too-long': 'الاسم أطول من ٤٠ حرفًا.',
-  'raff/label-not-pinned': 'التسمية للعناصر المثبّتة فقط.',
+  'raff/label-not-pinned': 'التسمية للمثبّتات فقط. ثبّته أولًا بـ⁦⌥P⁩.',
   'raff/clipboard-off': 'هذه نسخة تجربة من رفّ، فلا تصل إلى الحافظة.',
 };
 
@@ -1884,6 +1895,12 @@ const previewEl = document.getElementById('preview');
 const previewKindEl = document.getElementById('preview-kind');
 const previewBareEl = previewEl.querySelector('[data-action="bare"]');
 const previewLabelBtn = previewEl.querySelector('[data-action="label"]');
+const previewBareLabelRow = document.getElementById('preview-bare-label');
+
+/** The row of the two goes when neither is offered. */
+function syncBareLabelRow() {
+  previewBareLabelRow.hidden = previewBareEl.hidden && previewLabelBtn.hidden;
+}
 const previewLabelText = document.getElementById('preview-label-text');
 const labelForm = document.getElementById('preview-label-form');
 const labelInput = document.getElementById('preview-label-input');
@@ -1973,13 +1990,29 @@ function closePreviewByHand() {
   requestPreview(null);
 }
 
-/** Enter (⌥ for plain), ⌘C, ⌥P and ⌘⌫ — the keys that act on one item. */
+/** Enter (⌥ for plain), ⌘C, ⌥P, ⌥L and ⌘⌫ — the keys that act on one item. */
 function actsOnItem(e) {
   if (e.shiftKey) return false;
   if (e.key === 'Enter' && !e.metaKey) return true;
   if (e.ctrlKey) return false;
   if (e.metaKey && !e.altKey && (e.code === 'KeyC' || e.key === 'Backspace')) return true;
-  return e.altKey && !e.metaKey && e.code === 'KeyP';
+  return e.altKey && !e.metaKey && (e.code === 'KeyP' || e.code === 'KeyL');
+}
+
+/** ⌥L (Sultan, 2026-10-22): the selected pinned item's name field, in its
+ *  preview held open. A history row is told why not. */
+async function labelFromKeys(id) {
+  const item = visible.find((entry) => entry.id === id);
+  if (!item) return;
+  if (!item.isPinned) {
+    showToast(ERROR_MESSAGES['raff/label-not-pinned'], PIN_TOAST_MS, 'error');
+    return;
+  }
+  if (previewWant?.id !== id || previewEl.hidden) await requestPreview({ id, mode: 'held' });
+  if (previewEl.dataset.id !== id || previewEl.hidden) return;
+  // Already open (the keyboard went back to search): back to it, as typed.
+  if (!labelForm.hidden) labelInput.focus({ preventScroll: true });
+  else openLabelField(id);
 }
 
 /** The panel was hidden, and Rust narrowed its window with it. */
@@ -2016,9 +2049,11 @@ function fillPreview(item) {
   previewBareEl.hidden = !hasSomethingToDrop(item.id);
   // A name is the shelf's (IMP-07). Another item closes an open field, and
   // the keyboard it had goes back to search.
-  if (!sameItem) dropLabelField();
+  // So does the same item no longer pinned (unpinned with the field open).
+  if (!sameItem || !item.isPinned) dropLabelField();
   previewLabelBtn.hidden = !item.isPinned || !labelForm.hidden;
   previewLabelText.textContent = item.label ? 'تغيير الاسم' : 'تسمية';
+  syncBareLabelRow();
   previewKindEl.textContent = item.type === 'code' ? 'شفرة' : contentTypeIcon(item.type).label;
   previewWhenEl.textContent = [
     relativeTimeAr(item.createdAt),
@@ -2151,6 +2186,7 @@ function openLabelField(id) {
   labelInput.value = item.label ?? '';
   labelForm.hidden = false;
   previewLabelBtn.hidden = true; // the field takes the button's place
+  syncBareLabelRow();
   labelInput.focus({ preventScroll: true });
   labelInput.select();
 }
@@ -2158,7 +2194,9 @@ function openLabelField(id) {
 function closeLabelField({ refocus = true } = {}) {
   if (labelForm.hidden) return;
   labelForm.hidden = true;
-  previewLabelBtn.hidden = false; // only a pinned item's preview opens the field
+  const shown = visible.find((entry) => entry.id === previewEl.dataset.id);
+  previewLabelBtn.hidden = !shown?.isPinned;
+  syncBareLabelRow();
   if (refocus) searchEl.focus({ preventScroll: true });
 }
 
@@ -2367,6 +2405,20 @@ window.addEventListener('keydown', (e) => {
   ) {
     e.preventDefault();
     togglePinItem(selectedId);
+    return;
+  }
+  // By the key's place (`code`), as ⌥P: the same key in every layout.
+  if (
+    !query &&
+    selectedId &&
+    e.altKey &&
+    !e.metaKey &&
+    !e.ctrlKey &&
+    !e.shiftKey &&
+    e.code === 'KeyL'
+  ) {
+    e.preventDefault();
+    if (!e.repeat) labelFromKeys(selectedId); // held down: one press
     return;
   }
   if (e.metaKey && !e.shiftKey && !e.altKey && !e.ctrlKey && e.key === 'Backspace') {

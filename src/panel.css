@@ -803,6 +803,8 @@ body {
   align-items: center;
   justify-content: space-between;
   height: 24px;
+  /* Level with a named card's foot in the same grid row. */
+  margin-top: auto;
   padding: 0 var(--space-4);
 }
 
@@ -1058,3 +1060,34 @@ html[data-preview='right'] .preview-pane {
   flex: none;
   width: auto;
 }
+
+/* «لصق بلا تشكيل» and «تسمية» share a row; either alone fills it. */
+.preview-pair.is-flex {
+  display: flex;
+  gap: var(--space-8);
+}
+
+.preview-pair.is-flex > .btn {
+  flex: 1;
+  min-width: 0;
+}
+
+.preview-pair[hidden],
+.preview-pair.is-flex > [hidden] {
+  display: none;
+}
+
+/* A pinned picture's name on its card, above the time and kind. */
+.card-label {
+  overflow: hidden;
+  padding: 0 var(--space-4);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: var(--text-caption);
+  font-weight: 700;
+  line-height: var(--line-tight);
+  color: var(--ink-2);
+  unicode-bidi: plaintext;
+  text-align: right;
+}
+

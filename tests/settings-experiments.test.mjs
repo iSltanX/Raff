@@ -120,7 +120,8 @@ test('settings: the experiments are off by default and switch one setting each',
     const sub = doc.getElementById(toggle.getAttribute('aria-describedby')).textContent;
     assert.match(sub, /تجريبي/u);
     assert.match(sub, /على جهازك/u);
-    assert.match(sub, /إيقافه يمحو/u);
+    assert.match(sub, /إيقاف الخيار يمحو كل نص استخرجه/u);
+    assert.match(sub, /لا يمسّ الصور نفسها/u, 'the pictures stay (Sultan, 2026-10-22)');
     const before = saves().length;
     toggle.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
     await flush();

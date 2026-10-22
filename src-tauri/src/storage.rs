@@ -63,7 +63,8 @@ pub struct ClipItem {
     pub paste_count: u32,
     pub last_used_at: u64,
     /// A pinned item's own name (IMP-07), shown above its text and searched
-    /// with it. Pinned items only: unpinning drops it.
+    /// with it. An unpinned row keeps it hidden — neither sent to a window
+    /// nor searched — for a pin that comes back; it goes with the row.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub label: Option<String>,
     /// The text read in a picture (IMP-09), searched with it: `None` until
@@ -2041,8 +2042,8 @@ impl Store {
         let mut item = pending.item.clone();
         item.is_pinned = false;
         item.pinned_order = None;
-        // A name belongs to the shelf (IMP-07): history rows have none.
-        item.label = None;
+        // A name stays with the row, hidden while it is unpinned, and comes
+        // back with the pin (Sultan, 2026-10-22).
         self.return_to_history(item)
     }
 
@@ -2402,8 +2403,8 @@ impl Store {
         let mut item = self.pinned.remove(pos);
         item.is_pinned = false;
         item.pinned_order = None;
-        // A name belongs to the shelf (IMP-07): history rows have none.
-        item.label = None;
+        // A name stays with the row, hidden while it is unpinned, and comes
+        // back with the pin (Sultan, 2026-10-22).
         let dropped = self.return_to_history(item.clone());
         Some(PendingPin {
             item,
@@ -6245,10 +6246,10 @@ mod data_safety_tests {
 
     // 017 ────────────────────────────────────────────────────────────────
 
-    /// IMP-07: a pinned item takes a name, which is kept, trimmed, capped,
-    /// and gone with the pin.
+    /// IMP-07: a pinned item takes a name, which is kept, trimmed and capped;
+    /// unpinned, the row keeps it hidden until it is pinned again.
     #[test]
-    fn a_pinned_item_is_named_and_unpinning_drops_the_name() {
+    fn a_pinned_item_is_named_and_unpinning_keeps_the_name_hidden() {
         let mut s = Store::load(temp_dir());
         capture_text(&mut s, "x");
         let id = s.history[0].id.clone();
@@ -6290,7 +6291,47 @@ mod data_safety_tests {
             .iter()
             .find(|i| i.id == id)
             .expect("back in history");
-        assert_eq!(row.label, None, "unpinned, it has no name");
+        // Sultan's decision (2026-10-22): unpinning keeps the name, hidden in
+        // the history, for a pin that comes back.
+        assert_eq!(row.label.as_deref(), Some("اسم"), "kept with the row");
+        assert!(s.toggle_pin(&id));
+        assert_eq!(
+            s.pinned[0].label.as_deref(),
+            Some("اسم"),
+            "back with the pin"
+        );
+    }
+
+    /// The same through the persisted pin transaction and a relaunch: the
+    /// name survives the unpin's layer writes and comes back with the pin.
+    #[test]
+    fn a_name_survives_a_persisted_unpin_and_returns_with_the_pin() {
+        let mut s = Store::load(temp_dir());
+        s.capture(
+            ItemKind::Text,
+            "نص له اسم".into(),
+            None,
+            None,
+            None,
+            None,
+            None,
+            ("Notes".into(), "com.apple.Notes".into()),
+        );
+        let id = s.history[0].id.clone();
+        assert!(s.set_pin_persisted(&id, true).unwrap());
+        s.set_label_persisted(&id, Some("المكتب")).unwrap();
+        assert!(!s.set_pin_persisted(&id, false).unwrap());
+        let reloaded = Store::load(s.dir.clone());
+        let row = reloaded.history.iter().find(|i| i.id == id).unwrap();
+        assert_eq!(
+            row.label.as_deref(),
+            Some("المكتب"),
+            "kept on disk, unpinned"
+        );
+        let mut s = reloaded;
+        assert!(s.set_pin_persisted(&id, true).unwrap());
+        let reloaded = Store::load(s.dir.clone());
+        assert_eq!(reloaded.pinned[0].label.as_deref(), Some("المكتب"));
     }
 
     /// ت٤٥ ب٣: «مسح السجل» made the delete final while its «تراجع» was on

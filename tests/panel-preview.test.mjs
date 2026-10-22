@@ -312,15 +312,16 @@ test('the preview buttons tell assistive technology their shortcuts', async () =
     '⌥P': 'Alt+P',
     '⌘⌫': 'Meta+Backspace',
     '⌃↵': 'Control+Enter', // «لصق بلا تشكيل» (IMP-06)
+    '⌥L': 'Alt+L', // «تسمية» (IMP-07, Sultan 2026-10-22)
   };
   const buttons = [...doc.querySelectorAll('#preview .preview-actions button')];
   const keyed = buttons.filter((button) => button.querySelector('.btn-keys'));
-  assert.equal(keyed.length, 6);
+  assert.equal(keyed.length, 7);
   for (const button of keyed) {
     const keys = button.querySelector('.btn-keys').textContent;
     assert.equal(button.getAttribute('aria-keyshortcuts'), printed[keys], button.dataset.action);
   }
-  // «تسمية» and its «حفظ» have no key, and claim none (IMP-07).
+  // The name field's «حفظ» has no key, and claims none (IMP-07).
   for (const button of buttons.filter((b) => !keyed.includes(b))) {
     assert.equal(button.hasAttribute('aria-keyshortcuts'), false, button.textContent);
   }
