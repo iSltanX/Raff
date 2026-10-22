@@ -208,6 +208,8 @@ impl Pasteboard for SystemPasteboard {
 struct Rules {
     enabled: bool,
     respect_concealed: bool,
+    /// «لا تحفظ ما يشبه مفتاحًا سريًا» (IMP-10).
+    skip_secrets: bool,
     /// An excluded app was in front somewhere the copy could have happened.
     excluded: bool,
     source: macos::FrontApp,
@@ -215,11 +217,12 @@ struct Rules {
 
 impl Rules {
     fn now(store: &Mutex<Store>, detected_at: Instant, window: Duration) -> Self {
-        let (enabled, respect_concealed, excluded_apps) = {
+        let (enabled, respect_concealed, skip_secrets, excluded_apps) = {
             let store = crate::lock_store(store);
             (
                 store.settings.capture_enabled,
                 store.settings.respect_concealed,
+                store.settings.skip_secrets,
                 store.settings.excluded_apps.clone(),
             )
         };
@@ -234,6 +237,7 @@ impl Rules {
         Rules {
             enabled,
             respect_concealed,
+            skip_secrets,
             excluded,
             source,
         }
@@ -376,6 +380,17 @@ fn look(
     }
     let clip = pb.read_clip();
     let after = pb.change_count();
+    // IMP-10: shaped like a private key or a token, and asked not to keep
+    // such things — read only to be told so, and dropped here, before the
+    // store or any file sees it.
+    if rules.skip_secrets
+        && clip
+            .text
+            .as_deref()
+            .is_some_and(crate::secrets::looks_like_secret)
+    {
+        return (Look::Skipped, pause_ended);
+    }
     let reading = ClipReading {
         before,
         after,
@@ -761,6 +776,7 @@ mod tests {
         Rules {
             enabled: true,
             respect_concealed: true,
+            skip_secrets: false,
             excluded: false,
             source: macos::FrontApp {
                 name: "Safari".into(),
@@ -801,6 +817,58 @@ mod tests {
         };
         let found = look(board, own, pause, rules(), glance, &mut watch.last).0;
         (outcome(found, store), Some(window))
+    }
+
+    /// IMP-10: with «لا تحفظ ما يشبه مفتاحًا سريًا» on, a copy shaped like a
+    /// secret is not stored; with it off (the default) it is, as before.
+    #[test]
+    fn a_secret_shaped_copy_is_skipped_only_when_asked() {
+        let token = "ghp_0123456789abcdefABCDEF0123456789abcd";
+        for (skip_secrets, expected) in [(true, "skipped"), (false, "captured")] {
+            let board = FakeBoard::new(1, token);
+            let own = OwnWrites::new();
+            let pause = Mutex::new(Pause::Off);
+            let (_dir, store) = empty_store();
+            let mut last = 0;
+            let glance = board.change_count();
+            let found = look(
+                &*board,
+                &own,
+                &pause,
+                Rules {
+                    skip_secrets,
+                    ..rules()
+                },
+                glance,
+                &mut last,
+            )
+            .0;
+            assert_eq!(
+                outcome(found, &store),
+                expected,
+                "skip_secrets={skip_secrets}"
+            );
+            let held = crate::lock_store(&store).history.len();
+            assert_eq!(held, usize::from(!skip_secrets));
+        }
+        // An ordinary copy is stored either way.
+        let board = FakeBoard::new(1, "نص عادي");
+        let (_dir, store) = empty_store();
+        let mut last = 0;
+        let glance = board.change_count();
+        let found = look(
+            &*board,
+            &OwnWrites::new(),
+            &Mutex::new(Pause::Off),
+            Rules {
+                skip_secrets: true,
+                ..rules()
+            },
+            glance,
+            &mut last,
+        )
+        .0;
+        assert_eq!(outcome(found, &store), "captured");
     }
 
     fn outcome(found: Look, store: &Mutex<Store>) -> &'static str {

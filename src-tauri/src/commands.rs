@@ -232,14 +232,22 @@ static SEARCH_GENERATION: std::sync::atomic::AtomicU64 = std::sync::atomic::Atom
 
 /// Every row, shelf first, as (id, full text): what a search reads.
 fn rows_to_search(store: &Store) -> Vec<(String, String)> {
+    // Picture text is searched only while «اقرأ النص في الصور» is on.
+    let ocr = store.settings.ocr_enabled;
     store
         .pinned
         .iter()
         .chain(store.history.iter())
-        // A pinned item's name is searched with its text (IMP-07).
-        .map(|item| match &item.label {
-            Some(label) => (item.id.clone(), format!("{label}\n{}", item.text)),
-            None => (item.id.clone(), item.text.clone()),
+        // A pinned item's name is searched with its text (IMP-07), and a
+        // picture with the text read in it (IMP-09).
+        .map(|item| {
+            let mut text = item.text.clone();
+            let ocr_text = if ocr { &item.ocr_text } else { &None };
+            for extra in [&item.label, ocr_text].into_iter().flatten() {
+                text.push('\n');
+                text.push_str(extra);
+            }
+            (item.id.clone(), text)
         })
         .collect()
 }
@@ -1255,6 +1263,30 @@ mod tests {
             .unwrap();
         assert_eq!(ids_matching(&store, "المكتب"), vec![id.clone()]);
         assert_eq!(ids_matching(&store, "يذكر"), vec![id]);
+    }
+
+    /// IMP-09: a picture is found by the text read in it.
+    #[test]
+    fn the_deep_search_finds_a_picture_by_its_text() {
+        let mut store = store_with_rows(&["سطر عادي"]);
+        store.capture(
+            ItemKind::Image,
+            "صورة 10×10".into(),
+            None,
+            None,
+            None,
+            None,
+            Some("h".into()),
+            ("Preview".into(), "com.apple.Preview".into()),
+        );
+        let id = store.history[0].id.clone();
+        store.history[0].ocr_text = Some("فاتورة الكهرباء\nTotal 42".into());
+        store.settings.ocr_enabled = true;
+        assert_eq!(ids_matching(&store, "الكهرباء"), vec![id.clone()]);
+        assert_eq!(ids_matching(&store, "total 42"), vec![id]);
+        // Off: picture text is not looked at, wherever a copy of it remains.
+        store.settings.ocr_enabled = false;
+        assert!(ids_matching(&store, "الكهرباء").is_empty());
     }
 
     /// The store-side half of `search_items`: everything except taking the lock.

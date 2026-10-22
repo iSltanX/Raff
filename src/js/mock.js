@@ -101,6 +101,8 @@ const SETTINGS = {
   historyLimit: 500,
   captureEnabled: params.get('capture') !== 'off' && !MOCK_UNREADABLE_SETTINGS,
   respectConcealed: true,
+  skipSecrets: false,
+  ocrEnabled: false,
   excludedApps: ['com.1password.1password'],
   learningEnabled: true,
   firstRunShown: false,

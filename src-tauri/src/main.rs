@@ -10,10 +10,12 @@ mod commands;
 mod diagnostics;
 mod macos;
 mod monitor;
+mod ocr;
 mod panel;
 mod paste;
 mod report;
 mod report_image;
+mod secrets;
 mod startup_trace;
 mod storage;
 mod tray;
@@ -406,6 +408,7 @@ fn main() {
             }
             startup_trace::mark("hotkey_registered");
             monitor::start(handle.clone());
+            ocr::start(handle.clone());
             startup_trace::mark("monitor_started");
 
             if open_welcome {

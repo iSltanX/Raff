@@ -101,6 +101,8 @@ pub fn patch_allowed(label: &str, patch: &crate::storage::SettingsPatch) -> bool
         appearance,
         follow_system,
         retention_days,
+        skip_secrets,
+        ocr_enabled,
     } = patch;
     label == "settings"
         || (hotkey.is_none()
@@ -112,7 +114,9 @@ pub fn patch_allowed(label: &str, patch: &crate::storage::SettingsPatch) -> bool
             && first_run_shown.is_none()
             && appearance.is_none()
             && follow_system.is_none()
-            && retention_days.is_none())
+            && retention_days.is_none()
+            && skip_secrets.is_none()
+            && ocr_enabled.is_none())
 }
 
 /// The check each guarded command makes first.

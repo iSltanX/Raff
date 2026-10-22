@@ -66,6 +66,11 @@ pub struct ClipItem {
     /// with it. Pinned items only: unpinning drops it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub label: Option<String>,
+    /// The text read in a picture (IMP-09), searched with it: `None` until
+    /// it is read, empty when nothing was found. Forgotten when the option
+    /// is turned off.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ocr_text: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug, Default)]
@@ -102,6 +107,12 @@ pub struct Settings {
     /// for another. `0` is what every existing install migrates to, which is
     /// exactly today's behaviour.
     pub retention_days: u32,
+    /// «لا تحفظ ما يشبه مفتاحًا سريًا» (IMP-10, experimental): a copy shaped
+    /// like a private key or an access token is not captured. Off by default.
+    pub skip_secrets: bool,
+    /// «اقرأ النص في الصور» (IMP-09, experimental): pictures' text is read on
+    /// this Mac for the search. Off by default.
+    pub ocr_enabled: bool,
     /// These are the defaults standing in for a `settings.json` that could not
     /// be read. Written down, so the notice outlives a restart and any other
     /// save; only turning capture back on — the user's confirmation — clears it.
@@ -133,6 +144,8 @@ pub struct SettingsPatch {
     pub appearance: Option<Appearance>,
     pub follow_system: Option<bool>,
     pub retention_days: Option<u32>,
+    pub skip_secrets: Option<bool>,
+    pub ocr_enabled: Option<bool>,
 }
 
 impl SettingsPatch {
@@ -172,6 +185,12 @@ impl SettingsPatch {
         if let Some(value) = self.retention_days {
             next.retention_days = value;
         }
+        if let Some(value) = self.skip_secrets {
+            next.skip_secrets = value;
+        }
+        if let Some(value) = self.ocr_enabled {
+            next.ocr_enabled = value;
+        }
         next
     }
 }
@@ -190,6 +209,8 @@ impl Default for Settings {
             appearance: Appearance::Light,
             follow_system: true,
             retention_days: 0,
+            skip_secrets: false,
+            ocr_enabled: false,
             settings_recovered: false,
         }
     }
@@ -206,6 +227,7 @@ fn weight(item: &ClipItem) -> usize {
     item.text.len()
         + item.html.as_deref().map_or(0, str::len)
         + item.rtf.as_deref().map_or(0, str::len)
+        + item.ocr_text.as_deref().map_or(0, str::len)
 }
 
 /// A use of a row through رفّ: a paste, or a copy made from the panel or menu.
@@ -1218,6 +1240,18 @@ impl Store {
             disarm_image_names(std::slice::from_mut(&mut pending.item));
             disarm_image_names(&mut pending.dropped);
         }
+        // IMP-09: off, yet text read in pictures still on disk — a stop between
+        // the settings write and the layers', or settings that had to be
+        // recovered. Forgotten before anything can search it.
+        if !store.settings.ocr_enabled {
+            let (history, pinned) = store.forget_ocr_text();
+            if history {
+                store.save_history();
+            }
+            if pinned {
+                store.save_pinned();
+            }
+        }
 
         store.resolve_interrupted_pin();
         // A toast cannot survive a process restart, so a journal from the
@@ -1328,16 +1362,33 @@ impl Store {
         settings.settings_recovered = self.settings.settings_recovered && !settings.capture_enabled;
         let old_settings = self.settings.clone();
         let old_history = self.history.clone();
+        // «اقرأ النص في الصور» turned off forgets every text it read (IMP-09).
+        let forget_ocr = old_settings.ocr_enabled && !settings.ocr_enabled;
+        let old_pinned = forget_ocr.then(|| self.pinned.clone());
         self.settings = settings;
+        if forget_ocr {
+            self.forget_ocr_text();
+        }
         let dropped = self.prune_history();
 
         let writes = try_save_json(&self.dir.join(SETTINGS_FILE), &self.settings)
-            .and_then(|_| try_save_json(&self.dir.join(HISTORY_FILE), &self.history));
+            .and_then(|_| try_save_json(&self.dir.join(HISTORY_FILE), &self.history))
+            .and_then(|_| {
+                if forget_ocr {
+                    try_save_json(&self.dir.join(PINNED_FILE), &self.pinned)
+                } else {
+                    Ok(())
+                }
+            });
         if let Err(err) = writes {
             self.settings = old_settings;
             self.history = old_history;
             save_json(&self.dir.join(SETTINGS_FILE), &self.settings);
             save_json(&self.dir.join(HISTORY_FILE), &self.history);
+            if let Some(pinned) = old_pinned {
+                self.pinned = pinned;
+                save_json(&self.dir.join(PINNED_FILE), &self.pinned);
+            }
             return Err(err);
         }
         self.unreadable_settings = self.settings.settings_recovered;
@@ -1346,6 +1397,70 @@ impl Store {
         }
         Ok(())
     }
+    /// The next picture whose text has not been read (IMP-09) — the shelf
+    /// first, then the history from the newest — with its file, while Raff
+    /// still has it.
+    pub(crate) fn next_for_ocr(&self) -> Option<(String, Option<PathBuf>)> {
+        let dir = self.images_dir();
+        self.pinned
+            .iter()
+            .chain(self.history.iter())
+            .find(|item| item.kind == ItemKind::Image && item.ocr_text.is_none())
+            .map(|item| {
+                let path = crate::ocr::picture_path(&dir, item.image_file.as_deref());
+                (item.id.clone(), path)
+            })
+    }
+
+    /// Keeps the text read in a picture, its layer marked for the coalesced
+    /// flush. False when the row is gone.
+    pub(crate) fn set_ocr_text(&mut self, id: &str, text: String) -> bool {
+        let pinned = self.pinned.iter().any(|item| item.id == id);
+        let Some(item) = self.find_mut(id) else {
+            return false;
+        };
+        item.ocr_text = Some(text);
+        self.mark_signals_dirty(pinned);
+        true
+    }
+
+    /// Forgets every text read in a picture (IMP-09 off): in both layers and in
+    /// the Undo and pin journals, whose files are rewritten — best effort,
+    /// they last seconds. Answers which layers changed, for the caller to
+    /// write: (history, pinned).
+    fn forget_ocr_text(&mut self) -> (bool, bool) {
+        fn clear(items: &mut [ClipItem]) -> bool {
+            let mut changed = false;
+            for item in items {
+                changed |= item.ocr_text.take().is_some();
+            }
+            changed
+        }
+        let history = clear(&mut self.history);
+        let pinned = clear(&mut self.pinned);
+        let delete_journal = self
+            .pending_delete
+            .as_mut()
+            .is_some_and(|pending| pending.item.ocr_text.take().is_some());
+        if delete_journal {
+            if let Err(err) =
+                try_save_json(&self.dir.join(PENDING_DELETE_FILE), &self.pending_delete)
+            {
+                eprintln!("raff: {err}");
+            }
+        }
+        let pin_journal = self.pending_pin.as_mut().is_some_and(|pending| {
+            let item = pending.item.ocr_text.take().is_some();
+            clear(&mut pending.dropped) | item
+        });
+        if pin_journal {
+            if let Err(err) = self.try_save_pending_pin() {
+                eprintln!("raff: {err}");
+            }
+        }
+        (history, pinned)
+    }
+
     pub fn load_panel_placement(&self) -> Option<PanelPlacement> {
         load_json(&self.dir.join(PANEL_PLACEMENT_FILE))
     }
@@ -1506,6 +1621,7 @@ impl Store {
             paste_count: 0,
             last_used_at: now,
             label: None,
+            ocr_text: None,
         };
         let id = item.id.clone();
         self.history.insert(0, item);
@@ -2178,6 +2294,7 @@ impl Store {
                 paste_count: 0,
                 last_used_at: stamp,
                 label: name_of(item),
+                ocr_text: None,
             });
             next_order += 1;
             added += 1;
@@ -4829,6 +4946,20 @@ mod tests {
     /// settings is pinned: a field added to `Settings` fails here until
     /// `SettingsPatch` learns it too — otherwise saving it would silently do
     /// nothing.
+    /// Review 2026-10-22: a picture's read text weighs on the history's budget
+    /// as its other text does.
+    #[test]
+    fn a_pictures_read_text_counts_in_its_weight() {
+        let mut item: ClipItem = serde_json::from_value(serde_json::json!({
+            "id": "i", "type": "image", "text": "صورة", "sourceApp": "", "sourceAppBundleId": "",
+            "createdAt": 1, "isPinned": false, "copyCount": 0, "pasteCount": 0, "lastUsedAt": 1
+        }))
+        .unwrap();
+        let bare = weight(&item);
+        item.ocr_text = Some("x".repeat(1000));
+        assert_eq!(weight(&item), bare + 1000);
+    }
+
     #[test]
     fn a_patch_carries_every_setting_and_nothing_crosses() {
         let wanted = Settings {
@@ -4843,6 +4974,8 @@ mod tests {
             appearance: Appearance::Dark,
             follow_system: false,
             retention_days: 30,
+            skip_secrets: true,
+            ocr_enabled: true,
             settings_recovered: false,
         };
         let json = serde_json::to_value(&wanted).unwrap();
@@ -4865,8 +4998,10 @@ mod tests {
                 "hotkey",
                 "launchAtLogin",
                 "learningEnabled",
+                "ocrEnabled",
                 "respectConcealed",
                 "retentionDays",
+                "skipSecrets",
             ],
             "a new setting needs a SettingsPatch field before it can be saved"
         );

@@ -195,6 +195,8 @@ async function load() {
   }
   renderAccessibility(state.axTrusted === true);
   setChecked('concealed-toggle', settings.respectConcealed);
+  setChecked('secrets-toggle', settings.skipSecrets === true);
+  setChecked('ocr-toggle', settings.ocrEnabled === true);
   setChecked('learning-toggle', settings.learningEnabled);
   el('history-limit').value = String(settings.historyLimit);
   el('retention').value = String(settings.retentionDays ?? 0);
@@ -483,6 +485,12 @@ el('capture-toggle').addEventListener('click', () =>
 );
 el('concealed-toggle').addEventListener('click', () =>
   save((current) => ({ respectConcealed: !current.respectConcealed }))
+);
+el('secrets-toggle').addEventListener('click', () =>
+  save((current) => ({ skipSecrets: !current.skipSecrets }))
+);
+el('ocr-toggle').addEventListener('click', () =>
+  save((current) => ({ ocrEnabled: !current.ocrEnabled }))
 );
 el('learning-toggle').addEventListener('click', () =>
   save((current) => ({ learningEnabled: !current.learningEnabled }))

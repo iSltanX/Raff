@@ -338,6 +338,22 @@
                   <span class="label-sub" id="concealed-sub" dir="auto">ما تعلّمه مديرات كلمات المرور والتطبيقات بأنه سرّي أو مؤقت لا يُحفظ أصلًا.</span>
                 </div>
               </div>
+              <!-- IMP-10, experimental and off by default. -->
+              <div class="row">
+                <button
+                  type="button"
+                  class="checkbox"
+                  id="secrets-toggle"
+                  role="checkbox"
+                  aria-checked="false"
+                  aria-labelledby="secrets-label"
+                  aria-describedby="secrets-sub"
+                ></button>
+                <div class="row-label">
+                  <span class="label-title" id="secrets-label" dir="auto">لا تحفظ ما يشبه مفتاحًا سريًا</span>
+                  <span class="label-sub" id="secrets-sub" dir="auto">تجريبي. إن نسخت مفتاحًا خاصًا، أو رمزًا من <bdi>GitHub</bdi>، أو معرّف مفتاح <bdi>AWS</bdi>، أو مفتاحًا يبدأ بـ<bdi>sk-</bdi>، فلا يحفظه رفّ. الكشف بالشكل وحده، فلا يشمل كل سرّ.</span>
+                </div>
+              </div>
               <div class="row">
                 <button
                   type="button"
@@ -398,6 +414,27 @@
                   aria-atomic="true"
                   hidden
                 ><span id="excluded-manual-error-text"></span></div>
+              </div>
+            </div>
+          </div>
+          <!-- IMP-09, experimental and off by default. -->
+          <div class="settings-group">
+            <h3 class="group-title">النص في الصور</h3>
+            <div class="settings-rows">
+              <div class="row">
+                <button
+                  type="button"
+                  class="checkbox"
+                  id="ocr-toggle"
+                  role="checkbox"
+                  aria-checked="false"
+                  aria-labelledby="ocr-label"
+                  aria-describedby="ocr-sub"
+                ></button>
+                <div class="row-label">
+                  <span class="label-title" id="ocr-label" dir="auto">اقرأ النص في الصور ليجدها البحث</span>
+                  <span class="label-sub" id="ocr-sub" dir="auto">تجريبي. يقرأ رفّ النص في صورك، ومنها ما في السجل الآن، على جهازك بلا شبكة، ويحفظه مع الصورة. والعربية على إصدارات <bdi>macOS</bdi> التي تدعمها. إيقافه يمحو كل نص قرأه رفّ.</span>
+                </div>
               </div>
             </div>
           </div>

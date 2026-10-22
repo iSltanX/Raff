@@ -213,7 +213,17 @@ pub(crate) mod test_clipboard {
     /// Runs `body` as a process under `policy`, with a private pasteboard
     /// made for it and released after. Returns what it touched: pasteboard
     /// reaches and ⌘V presses.
+    ///
+    /// One at a time across the test threads: AppKit does not promise that
+    /// pasteboards are safe to use from several threads at once, even private
+    /// ones, and two tests doing so crashed inside `NSPasteboard`'s type
+    /// cache (SIGSEGV in `_updateTypeCacheIfNeeded`, once in 18 full runs,
+    /// 2026-10-22). The app itself reads the pasteboard from one thread.
     pub(crate) fn run(policy: Clipboard, body: impl FnOnce()) -> (usize, usize) {
+        static ONE_AT_A_TIME: std::sync::Mutex<()> = std::sync::Mutex::new(());
+        let _turn = ONE_AT_A_TIME
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let private = NSPasteboard::pasteboardWithUniqueName();
         POLICY.set(Some(policy));
         PASTEBOARD.set(Some(private.clone()));
