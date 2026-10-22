@@ -1391,6 +1391,32 @@ mod tests {
         let _ = std::fs::remove_dir_all(dir);
     }
 
+    /// The fallback: the picture was stored when asked first, so nothing was
+    /// written ahead — then its file went before the capture. It is written
+    /// under the lock, and the row points at a file that is there.
+    #[test]
+    fn a_copy_gone_between_the_two_looks_is_written_under_the_lock() {
+        let dir = std::env::temp_dir().join(format!("raff-fallback-test-{}", uuid::Uuid::new_v4()));
+        let store = Mutex::new(Store::load(dir.clone()));
+        let png = encode_png(&image::DynamicImage::new_rgba8(12, 9)).unwrap();
+        let images = dir.join(crate::storage::IMAGES_DIR);
+        assert!(capture_reading(&store, image_reading(png.clone())));
+        let first = store.lock().unwrap().history[0].image_file.clone().unwrap();
+
+        let decoded = image::load_from_memory(&png).unwrap();
+        let landed = capture_image(&store, png, decoded, macos::FrontApp::default(), || {
+            std::fs::remove_file(images.join(&first)).unwrap();
+        });
+        assert!(landed);
+        let guard = store.lock().unwrap();
+        assert_eq!(guard.history.len(), 1);
+        let healed = guard.history[0].image_file.clone().unwrap();
+        assert_ne!(healed, first);
+        assert!(images.join(&healed).exists(), "written, under the lock");
+        drop(guard);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
     #[test]
     fn recopying_an_image_whose_file_vanished_writes_it_again() {
         let dir = std::env::temp_dir().join(format!("raff-heal-test-{}", uuid::Uuid::new_v4()));

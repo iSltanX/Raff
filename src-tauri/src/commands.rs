@@ -199,8 +199,15 @@ pub async fn search_items(
 ) -> Result<Vec<String>, String> {
     crate::access::require(&window, "search_items")?;
     let generation = SEARCH_GENERATION.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
-    let rows = rows_to_search(&crate::lock_store(&state.store));
     let current = move || SEARCH_GENERATION.load(std::sync::atomic::Ordering::SeqCst) == generation;
+    let rows = {
+        let store = crate::lock_store(&state.store);
+        // Overtaken while waiting for the lock: nothing to copy out for.
+        if !current() {
+            return Ok(Vec::new());
+        }
+        rows_to_search(&store)
+    };
     let found = tauri::async_runtime::spawn_blocking(move || matching_in(&rows, &query, current))
         .await
         .map_err(|err| err.to_string())?;
