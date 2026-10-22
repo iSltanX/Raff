@@ -73,9 +73,30 @@ pub fn write_item_to_clipboard(app: &AppHandle, id: &str, plain: bool) -> bool {
 }
 
 /// Full paste: clipboard write + focus restore + ⌘V + silent learning signals.
-/// The boolean distinguishes a real synthesized paste from clipboard-only
+/// What a paste came to, as the panel reads it: `true` pasted, `false` only
+/// copied, `"copiedOverRaff"` only copied because the panel was opened over
+/// one of رفّ's own windows (009) — said apart, since the panel's usual
+/// explanation for a copy is a missing Accessibility permission.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum PasteOutcome {
+    Pasted,
+    Copied,
+    CopiedOverRaff,
+}
+
+impl serde::Serialize for PasteOutcome {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        match self {
+            Self::Pasted => s.serialize_bool(true),
+            Self::Copied => s.serialize_bool(false),
+            Self::CopiedOverRaff => s.serialize_str("copiedOverRaff"),
+        }
+    }
+}
+
+/// The outcome distinguishes a real synthesized paste from clipboard-only
 /// fallback, using a fresh Accessibility check instead of stale panel state.
-pub async fn paste_item(app: &AppHandle, id: &str, plain: bool) -> Result<bool, String> {
+pub async fn paste_item(app: &AppHandle, id: &str, plain: bool) -> Result<PasteOutcome, String> {
     crate::startup_trace::mark("PASTE row_click_invoke");
     // Before anything moves: no hide, no other app brought forward (ت٤٨).
     if macos::clipboard_inert() {
@@ -92,7 +113,7 @@ pub async fn paste_item(app: &AppHandle, id: &str, plain: bool) -> Result<bool, 
     if !trusted {
         crate::startup_trace::mark("PASTE STOPPED HERE: no Accessibility trust — panel stays visible, no hide, no activate, no paste");
         bump_paste_signals(app, id);
-        return Ok(false);
+        return Ok(PasteOutcome::Copied);
     }
 
     let state = app.state::<AppState>();
@@ -104,7 +125,7 @@ pub async fn paste_item(app: &AppHandle, id: &str, plain: bool) -> Result<bool, 
                 "PASTE STOPPED HERE: the panel was opened over Raff itself — copied only",
             );
             bump_paste_signals(app, id);
-            return Ok(false);
+            return Ok(PasteOutcome::CopiedOverRaff);
         }
     };
     crate::startup_trace::mark_with(|| {
@@ -206,7 +227,11 @@ pub async fn paste_item(app: &AppHandle, id: &str, plain: bool) -> Result<bool, 
         crate::startup_trace::mark("PASTE not pasted — reshowing panel");
         panel::show(app);
     }
-    Ok(pasted)
+    Ok(if pasted {
+        PasteOutcome::Pasted
+    } else {
+        PasteOutcome::Copied
+    })
 }
 
 /// One paste's claims on the panel and on the keystroke (015). The work and
@@ -638,6 +663,18 @@ mod tests {
             "before the panel hides"
         );
         assert!(flow.contains("may_press_paste(still_trusted, front_before_paste.pid, own)"));
+    }
+
+    /// The panel reads `true`, `false`, or the one reason it words apart.
+    #[test]
+    fn a_paste_answers_the_panel_in_its_three_words() {
+        let json = |o| serde_json::to_value(o).unwrap();
+        assert_eq!(json(PasteOutcome::Pasted), serde_json::json!(true));
+        assert_eq!(json(PasteOutcome::Copied), serde_json::json!(false));
+        assert_eq!(
+            json(PasteOutcome::CopiedOverRaff),
+            serde_json::json!("copiedOverRaff")
+        );
     }
 
     #[test]

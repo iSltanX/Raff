@@ -1487,7 +1487,13 @@ function paste(id, plain) {
   api
     .pasteItem(id, plain)
     .then(async (pasted) => {
-      if (pasted) return;
+      if (pasted === true) return;
+      // Copied only because رفّ itself was in front — Settings, or the
+      // welcome's «افتح رفّ» (009): say that, not «grant Accessibility».
+      if (pasted === 'copiedOverRaff') {
+        showToast('نُسخ إلى الحافظة، ولم يُلصق لأن رفّ كان في الواجهة. الصقه بـ \u2066⌘V\u2069 حيث تريد.');
+        return;
+      }
       // `pasted: false` always means the item is safely on the clipboard —
       // Rust writes it before attempting anything else — but tells us
       // nothing about WHY the automatic paste half didn't happen. Missing

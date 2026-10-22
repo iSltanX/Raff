@@ -263,13 +263,14 @@ pub async fn paste_item(
     app: AppHandle,
     id: String,
     plain: bool,
-) -> Result<bool, String> {
+) -> Result<paste::PasteOutcome, String> {
     crate::access::require(&window, "paste_item")?;
     let began = std::time::Instant::now();
     let result = paste::paste_item(&app, &id, plain).await;
     let outcome = match result {
-        Ok(true) => "ok",
-        Ok(false) => "clipboard-only",
+        Ok(paste::PasteOutcome::Pasted) => "ok",
+        Ok(paste::PasteOutcome::Copied) => "clipboard-only",
+        Ok(paste::PasteOutcome::CopiedOverRaff) => "clipboard-only-over-raff",
         Err(_) => "error",
     };
     crate::diagnostics::record("paste", outcome, began);
