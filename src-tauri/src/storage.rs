@@ -62,6 +62,16 @@ pub struct ClipItem {
     pub copy_count: u32,
     pub paste_count: u32,
     pub last_used_at: u64,
+    /// A pinned item's own name (IMP-07), shown above its text and searched
+    /// with it. An unpinned row keeps it hidden — neither sent to a window
+    /// nor searched — for a pin that comes back; it goes with the row.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
+    /// The text read in a picture (IMP-09), searched with it: `None` until
+    /// it is read, empty when nothing was found. Forgotten when the option
+    /// is turned off.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ocr_text: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug, Default)]
@@ -72,7 +82,7 @@ pub enum Appearance {
     Dark,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Settings {
     /// tauri global-shortcut accelerator string.
@@ -98,6 +108,12 @@ pub struct Settings {
     /// for another. `0` is what every existing install migrates to, which is
     /// exactly today's behaviour.
     pub retention_days: u32,
+    /// «لا تحفظ ما يشبه مفتاحًا سريًا» (IMP-10, experimental): a copy shaped
+    /// like a private key or an access token is not captured. Off by default.
+    pub skip_secrets: bool,
+    /// «اقرأ النص في الصور» (IMP-09, experimental): pictures' text is read on
+    /// this Mac for the search. Off by default.
+    pub ocr_enabled: bool,
     /// These are the defaults standing in for a `settings.json` that could not
     /// be read. Written down, so the notice outlives a restart and any other
     /// save; only turning capture back on — the user's confirmation — clears it.
@@ -129,6 +145,8 @@ pub struct SettingsPatch {
     pub appearance: Option<Appearance>,
     pub follow_system: Option<bool>,
     pub retention_days: Option<u32>,
+    pub skip_secrets: Option<bool>,
+    pub ocr_enabled: Option<bool>,
 }
 
 impl SettingsPatch {
@@ -168,6 +186,12 @@ impl SettingsPatch {
         if let Some(value) = self.retention_days {
             next.retention_days = value;
         }
+        if let Some(value) = self.skip_secrets {
+            next.skip_secrets = value;
+        }
+        if let Some(value) = self.ocr_enabled {
+            next.ocr_enabled = value;
+        }
         next
     }
 }
@@ -186,6 +210,8 @@ impl Default for Settings {
             appearance: Appearance::Light,
             follow_system: true,
             retention_days: 0,
+            skip_secrets: false,
+            ocr_enabled: false,
             settings_recovered: false,
         }
     }
@@ -202,6 +228,7 @@ fn weight(item: &ClipItem) -> usize {
     item.text.len()
         + item.html.as_deref().map_or(0, str::len)
         + item.rtf.as_deref().map_or(0, str::len)
+        + item.ocr_text.as_deref().map_or(0, str::len)
 }
 
 /// A use of a row through رفّ: a paste, or a copy made from the panel or menu.
@@ -443,6 +470,15 @@ pub(crate) const UNDO_NO_ROOM: &str = "raff/undo-no-room";
 /// The same, because its age is past the retention period, not the count —
 /// not the undo window running out, which is another thing.
 pub(crate) const UNDO_RETENTION: &str = "raff/undo-retention";
+/// A pinned item's name is a few words, not a note (IMP-07).
+pub(crate) const LABEL_MAX_CHARS: usize = 40;
+pub(crate) const LABEL_TOO_LONG: &str = "raff/label-too-long";
+/// Only the shelf has names: the item is not pinned, or is gone.
+pub(crate) const LABEL_NOT_PINNED: &str = "raff/label-not-pinned";
+
+/// That other thing: the delete was made final — its five seconds ran out, or
+/// «مسح السجل» settled it — before the undo arrived (ت٤٥ ب٣).
+pub(crate) const UNDO_EXPIRED: &str = "raff/undo-expired";
 
 /// Adds `from`'s use to `into`: both were the same copy.
 fn fold_counts(into: &mut ClipItem, from: &ClipItem) {
@@ -1205,6 +1241,18 @@ impl Store {
             disarm_image_names(std::slice::from_mut(&mut pending.item));
             disarm_image_names(&mut pending.dropped);
         }
+        // IMP-09: off, yet text read in pictures still on disk — a stop between
+        // the settings write and the layers', or settings that had to be
+        // recovered. Forgotten before anything can search it.
+        if !store.settings.ocr_enabled {
+            let (history, pinned) = store.forget_ocr_text();
+            if history {
+                store.save_history();
+            }
+            if pinned {
+                store.save_pinned();
+            }
+        }
 
         store.resolve_interrupted_pin();
         // A toast cannot survive a process restart, so a journal from the
@@ -1315,16 +1363,33 @@ impl Store {
         settings.settings_recovered = self.settings.settings_recovered && !settings.capture_enabled;
         let old_settings = self.settings.clone();
         let old_history = self.history.clone();
+        // «اقرأ النص في الصور» turned off forgets every text it read (IMP-09).
+        let forget_ocr = old_settings.ocr_enabled && !settings.ocr_enabled;
+        let old_pinned = forget_ocr.then(|| self.pinned.clone());
         self.settings = settings;
+        if forget_ocr {
+            self.forget_ocr_text();
+        }
         let dropped = self.prune_history();
 
         let writes = try_save_json(&self.dir.join(SETTINGS_FILE), &self.settings)
-            .and_then(|_| try_save_json(&self.dir.join(HISTORY_FILE), &self.history));
+            .and_then(|_| try_save_json(&self.dir.join(HISTORY_FILE), &self.history))
+            .and_then(|_| {
+                if forget_ocr {
+                    try_save_json(&self.dir.join(PINNED_FILE), &self.pinned)
+                } else {
+                    Ok(())
+                }
+            });
         if let Err(err) = writes {
             self.settings = old_settings;
             self.history = old_history;
             save_json(&self.dir.join(SETTINGS_FILE), &self.settings);
             save_json(&self.dir.join(HISTORY_FILE), &self.history);
+            if let Some(pinned) = old_pinned {
+                self.pinned = pinned;
+                save_json(&self.dir.join(PINNED_FILE), &self.pinned);
+            }
             return Err(err);
         }
         self.unreadable_settings = self.settings.settings_recovered;
@@ -1333,6 +1398,70 @@ impl Store {
         }
         Ok(())
     }
+    /// The next picture whose text has not been read (IMP-09) — the shelf
+    /// first, then the history from the newest — with its file, while Raff
+    /// still has it.
+    pub(crate) fn next_for_ocr(&self) -> Option<(String, Option<PathBuf>)> {
+        let dir = self.images_dir();
+        self.pinned
+            .iter()
+            .chain(self.history.iter())
+            .find(|item| item.kind == ItemKind::Image && item.ocr_text.is_none())
+            .map(|item| {
+                let path = crate::ocr::picture_path(&dir, item.image_file.as_deref());
+                (item.id.clone(), path)
+            })
+    }
+
+    /// Keeps the text read in a picture, its layer marked for the coalesced
+    /// flush. False when the row is gone.
+    pub(crate) fn set_ocr_text(&mut self, id: &str, text: String) -> bool {
+        let pinned = self.pinned.iter().any(|item| item.id == id);
+        let Some(item) = self.find_mut(id) else {
+            return false;
+        };
+        item.ocr_text = Some(text);
+        self.mark_signals_dirty(pinned);
+        true
+    }
+
+    /// Forgets every text read in a picture (IMP-09 off): in both layers and in
+    /// the Undo and pin journals, whose files are rewritten — best effort,
+    /// they last seconds. Answers which layers changed, for the caller to
+    /// write: (history, pinned).
+    fn forget_ocr_text(&mut self) -> (bool, bool) {
+        fn clear(items: &mut [ClipItem]) -> bool {
+            let mut changed = false;
+            for item in items {
+                changed |= item.ocr_text.take().is_some();
+            }
+            changed
+        }
+        let history = clear(&mut self.history);
+        let pinned = clear(&mut self.pinned);
+        let delete_journal = self
+            .pending_delete
+            .as_mut()
+            .is_some_and(|pending| pending.item.ocr_text.take().is_some());
+        if delete_journal {
+            if let Err(err) =
+                try_save_json(&self.dir.join(PENDING_DELETE_FILE), &self.pending_delete)
+            {
+                eprintln!("raff: {err}");
+            }
+        }
+        let pin_journal = self.pending_pin.as_mut().is_some_and(|pending| {
+            let item = pending.item.ocr_text.take().is_some();
+            clear(&mut pending.dropped) | item
+        });
+        if pin_journal {
+            if let Err(err) = self.try_save_pending_pin() {
+                eprintln!("raff: {err}");
+            }
+        }
+        (history, pinned)
+    }
+
     pub fn load_panel_placement(&self) -> Option<PanelPlacement> {
         load_json(&self.dir.join(PANEL_PLACEMENT_FILE))
     }
@@ -1492,6 +1621,8 @@ impl Store {
             copy_count: 1,
             paste_count: 0,
             last_used_at: now,
+            label: None,
+            ocr_text: None,
         };
         let id = item.id.clone();
         self.history.insert(0, item);
@@ -1911,6 +2042,8 @@ impl Store {
         let mut item = pending.item.clone();
         item.is_pinned = false;
         item.pinned_order = None;
+        // A name stays with the row, hidden while it is unpinned, and comes
+        // back with the pin (Sultan, 2026-10-22).
         self.return_to_history(item)
     }
 
@@ -2058,6 +2191,146 @@ impl Store {
         true
     }
 
+    /// Adds a backup's items to the shelf (IMP-05), and answers how many were
+    /// added and how many were there already.
+    ///
+    /// - Content in the history is pinned from there, through the pin's own
+    ///   transaction: the shelf and the history never hold the same text
+    ///   twice. Each such pin is durable as it lands; a later failure leaves
+    ///   those pinned, and reports the failure.
+    /// - Content already pinned is skipped; it takes the file's name only when
+    ///   it has none.
+    /// - Anything else goes at the end of the shelf with a new id, and a stamp
+    ///   no later than now: a stamp from the future would lift every later
+    ///   capture's past it (`next_stamp`) and keep them from retention.
+    ///
+    /// The rest is one write of the shelf; when it fails the shelf stays as
+    /// it was after the pins from the history.
+    pub fn import_pinned(
+        &mut self,
+        items: &[crate::backup::BackupItem],
+    ) -> Result<(usize, usize), String> {
+        self.try_finish_pending_pin()?;
+        let now = now_ms();
+        let name_of = |item: &crate::backup::BackupItem| {
+            item.label
+                .as_deref()
+                .map(str::trim)
+                .filter(|l| !l.is_empty())
+                .map(String::from)
+        };
+        let (mut added, mut skipped) = (0, 0);
+
+        // From the history first, each through its own pin transaction.
+        let mut named_from_history = Vec::new();
+        let mut handled = vec![false; items.len()];
+        for (index, item) in items.iter().enumerate() {
+            let pinned_already = self
+                .pinned
+                .iter()
+                .any(|pinned| Self::same_content(pinned, item.kind, &item.text, None));
+            if pinned_already {
+                continue;
+            }
+            let Some(id) = self
+                .history
+                .iter()
+                .find(|row| Self::same_content(row, item.kind, &item.text, None))
+                .map(|row| row.id.clone())
+            else {
+                continue;
+            };
+            self.set_pin_persisted(&id, true)?;
+            named_from_history.push((id, name_of(item)));
+            handled[index] = true;
+            added += 1;
+        }
+
+        // The rest, and the names, in one write of the shelf.
+        let previous = self.pinned.clone();
+        let mut changed = false;
+        let mut next_order = self
+            .pinned
+            .iter()
+            .filter_map(|item| item.pinned_order)
+            .max()
+            .map_or(0, |order| order + 1);
+        for (id, name) in named_from_history {
+            if let (Some(name), Some(row)) = (name, self.pinned.iter_mut().find(|p| p.id == id)) {
+                row.label = Some(name);
+                changed = true;
+            }
+        }
+        for (item, _) in items.iter().zip(&handled).filter(|(_, handled)| !**handled) {
+            if let Some(pinned) = self
+                .pinned
+                .iter_mut()
+                .find(|pinned| Self::same_content(pinned, item.kind, &item.text, None))
+            {
+                if pinned.label.is_none() {
+                    if let Some(name) = name_of(item) {
+                        pinned.label = Some(name);
+                        changed = true;
+                    }
+                }
+                skipped += 1;
+                continue;
+            }
+            let stamp = item.created_at.min(now);
+            self.pinned.push(ClipItem {
+                id: uuid::Uuid::new_v4().to_string(),
+                kind: item.kind,
+                text: item.text.clone(),
+                html: item.html.clone(),
+                rtf: item.rtf.clone(),
+                image_file: None,
+                thumb_file: None,
+                hash: None,
+                source_app_bundle_id: String::new(),
+                source_app: "نسخة احتياطية".into(),
+                created_at: stamp,
+                is_pinned: true,
+                pinned_order: Some(next_order),
+                copy_count: 0,
+                paste_count: 0,
+                last_used_at: stamp,
+                label: name_of(item),
+                ocr_text: None,
+            });
+            next_order += 1;
+            added += 1;
+            changed = true;
+        }
+        if changed {
+            if let Err(err) = try_save_json(&self.dir.join(PINNED_FILE), &self.pinned) {
+                self.pinned = previous;
+                return Err(err);
+            }
+        }
+        Ok((added, skipped))
+    }
+
+    /// Names a pinned item, or clears its name with `None` or blank text
+    /// (IMP-07). Persisted before it answers; on a failed write the shelf
+    /// stays as it was.
+    pub fn set_label_persisted(&mut self, id: &str, label: Option<&str>) -> Result<(), String> {
+        self.try_finish_pending_pin()?;
+        let label = label.map(str::trim).filter(|l| !l.is_empty());
+        if label.is_some_and(|l| l.chars().count() > LABEL_MAX_CHARS) {
+            return Err(LABEL_TOO_LONG.into());
+        }
+        let Some(index) = self.pinned.iter().position(|item| item.id == id) else {
+            return Err(LABEL_NOT_PINNED.into());
+        };
+        let previous = self.pinned[index].label.clone();
+        self.pinned[index].label = label.map(str::to_string);
+        if let Err(err) = try_save_json(&self.dir.join(PINNED_FILE), &self.pinned) {
+            self.pinned[index].label = previous;
+            return Err(err);
+        }
+        Ok(())
+    }
+
     /// Rewrites the pinned shelf into exactly this order.
     ///
     /// `ids` has to be the pinned set exactly: same ids, none missing, none
@@ -2130,6 +2403,8 @@ impl Store {
         let mut item = self.pinned.remove(pos);
         item.is_pinned = false;
         item.pinned_order = None;
+        // A name stays with the row, hidden while it is unpinned, and comes
+        // back with the pin (Sultan, 2026-10-22).
         let dropped = self.return_to_history(item.clone());
         Some(PendingPin {
             item,
@@ -2403,19 +2678,26 @@ impl Store {
         }
     }
 
+    /// The token of the delete still waiting on its undo window, if any.
+    pub fn pending_delete_token(&self) -> Option<String> {
+        self.pending_delete.as_ref().map(|p| p.token.clone())
+    }
+
     /// Restores the one pending receipt according to its saved chronological
     /// or pinned order, so capture de-duplication and concurrent pin mutations
-    /// cannot make a numeric index or neighbor position stale.
-    pub fn undo_delete(&mut self, token: &str) -> Result<(), String> {
+    /// cannot make a numeric index or neighbor position stale. Answers the id
+    /// of the row that stands for the item now: its own, or the newer copy's
+    /// a history item was folded into (ت٤٥ ب٦).
+    pub fn undo_delete(&mut self, token: &str) -> Result<String, String> {
         // A pin still being written is finished first: the undo may take a
         // row out of the shelf, and an unfinished pin journal would put it
         // back afterwards — two of one item.
         self.try_finish_pending_pin()?;
         let Some(pending) = self.pending_delete.as_ref() else {
-            return Err("انتهت مهلة التراجع عن الحذف".into());
+            return Err(UNDO_EXPIRED.into());
         };
         if pending.token != token || self.find(&pending.item.id).is_some() {
-            return Err("انتهت مهلة التراجع عن الحذف".into());
+            return Err(UNDO_EXPIRED.into());
         }
         let pending = pending.clone();
         let deleted = &pending.item;
@@ -2456,6 +2738,17 @@ impl Store {
                     || (pending.layer == DeletedLayer::Pinned && layer == DeletedLayer::Pinned)
             }
             None => pending.layer == layer,
+        };
+        // A history item folded into its newer copy is that copy from now on;
+        // anything else comes back as itself.
+        let standing = match (pending.layer, twin) {
+            (DeletedLayer::History, Some((DeletedLayer::History, index))) => {
+                self.history[index].id.clone()
+            }
+            (DeletedLayer::History, Some((DeletedLayer::Pinned, index))) => {
+                self.pinned[index].id.clone()
+            }
+            _ => deleted.id.clone(),
         };
         let history_before = changes(DeletedLayer::History).then(|| self.history.clone());
         let pinned_before = changes(DeletedLayer::Pinned).then(|| self.pinned.clone());
@@ -2590,7 +2883,7 @@ impl Store {
         // sees the live item and retires the stale receipt without deleting.
         self.pending_delete = None;
         self.save_pending_delete();
-        Ok(())
+        Ok(standing)
     }
 
     /// Permanently closes an undo window and removes image files only after the
@@ -4654,6 +4947,20 @@ mod tests {
     /// settings is pinned: a field added to `Settings` fails here until
     /// `SettingsPatch` learns it too — otherwise saving it would silently do
     /// nothing.
+    /// Review 2026-10-22: a picture's read text weighs on the history's budget
+    /// as its other text does.
+    #[test]
+    fn a_pictures_read_text_counts_in_its_weight() {
+        let mut item: ClipItem = serde_json::from_value(serde_json::json!({
+            "id": "i", "type": "image", "text": "صورة", "sourceApp": "", "sourceAppBundleId": "",
+            "createdAt": 1, "isPinned": false, "copyCount": 0, "pasteCount": 0, "lastUsedAt": 1
+        }))
+        .unwrap();
+        let bare = weight(&item);
+        item.ocr_text = Some("x".repeat(1000));
+        assert_eq!(weight(&item), bare + 1000);
+    }
+
     #[test]
     fn a_patch_carries_every_setting_and_nothing_crosses() {
         let wanted = Settings {
@@ -4668,6 +4975,8 @@ mod tests {
             appearance: Appearance::Dark,
             follow_system: false,
             retention_days: 30,
+            skip_secrets: true,
+            ocr_enabled: true,
             settings_recovered: false,
         };
         let json = serde_json::to_value(&wanted).unwrap();
@@ -4690,8 +4999,10 @@ mod tests {
                 "hotkey",
                 "launchAtLogin",
                 "learningEnabled",
+                "ocrEnabled",
                 "respectConcealed",
                 "retentionDays",
+                "skipSecrets",
             ],
             "a new setting needs a SettingsPatch field before it can be saved"
         );
@@ -5935,6 +6246,111 @@ mod data_safety_tests {
 
     // 017 ────────────────────────────────────────────────────────────────
 
+    /// IMP-07: a pinned item takes a name, which is kept, trimmed and capped;
+    /// unpinned, the row keeps it hidden until it is pinned again.
+    #[test]
+    fn a_pinned_item_is_named_and_unpinning_keeps_the_name_hidden() {
+        let mut s = Store::load(temp_dir());
+        capture_text(&mut s, "x");
+        let id = s.history[0].id.clone();
+        assert_eq!(
+            s.set_label_persisted(&id, Some("اسم")),
+            Err(LABEL_NOT_PINNED.to_string())
+        );
+        assert!(s.toggle_pin(&id));
+        s.save_pinned();
+        s.save_history();
+
+        s.set_label_persisted(&id, Some("  عنوان المكتب  "))
+            .unwrap();
+        assert_eq!(s.pinned[0].label.as_deref(), Some("عنوان المكتب"));
+        let reloaded = Store::load(s.dir.clone());
+        assert_eq!(
+            reloaded.pinned[0].label.as_deref(),
+            Some("عنوان المكتب"),
+            "persisted"
+        );
+
+        let long = "ب".repeat(LABEL_MAX_CHARS + 1);
+        assert_eq!(
+            s.set_label_persisted(&id, Some(&long)),
+            Err(LABEL_TOO_LONG.to_string())
+        );
+        assert_eq!(
+            s.pinned[0].label.as_deref(),
+            Some("عنوان المكتب"),
+            "unchanged by a refusal"
+        );
+
+        s.set_label_persisted(&id, Some("   ")).unwrap();
+        assert_eq!(s.pinned[0].label, None, "blank clears it");
+        s.set_label_persisted(&id, Some("اسم")).unwrap();
+        assert!(s.toggle_pin(&id));
+        let row = s
+            .history
+            .iter()
+            .find(|i| i.id == id)
+            .expect("back in history");
+        // Sultan's decision (2026-10-22): unpinning keeps the name, hidden in
+        // the history, for a pin that comes back.
+        assert_eq!(row.label.as_deref(), Some("اسم"), "kept with the row");
+        assert!(s.toggle_pin(&id));
+        assert_eq!(
+            s.pinned[0].label.as_deref(),
+            Some("اسم"),
+            "back with the pin"
+        );
+    }
+
+    /// The same through the persisted pin transaction and a relaunch: the
+    /// name survives the unpin's layer writes and comes back with the pin.
+    #[test]
+    fn a_name_survives_a_persisted_unpin_and_returns_with_the_pin() {
+        let mut s = Store::load(temp_dir());
+        s.capture(
+            ItemKind::Text,
+            "نص له اسم".into(),
+            None,
+            None,
+            None,
+            None,
+            None,
+            ("Notes".into(), "com.apple.Notes".into()),
+        );
+        let id = s.history[0].id.clone();
+        assert!(s.set_pin_persisted(&id, true).unwrap());
+        s.set_label_persisted(&id, Some("المكتب")).unwrap();
+        assert!(!s.set_pin_persisted(&id, false).unwrap());
+        let reloaded = Store::load(s.dir.clone());
+        let row = reloaded.history.iter().find(|i| i.id == id).unwrap();
+        assert_eq!(
+            row.label.as_deref(),
+            Some("المكتب"),
+            "kept on disk, unpinned"
+        );
+        let mut s = reloaded;
+        assert!(s.set_pin_persisted(&id, true).unwrap());
+        let reloaded = Store::load(s.dir.clone());
+        assert_eq!(reloaded.pinned[0].label.as_deref(), Some("المكتب"));
+    }
+
+    /// ت٤٥ ب٣: «مسح السجل» made the delete final while its «تراجع» was on
+    /// screen. The undo then says the window is over, as a kind the panel can
+    /// word, not a raw sentence that reached the user as «تعذّر حفظ التغيير».
+    #[test]
+    fn an_undo_after_the_delete_was_made_final_says_the_window_is_over() {
+        let mut s = Store::load(temp_dir());
+        capture_text(&mut s, "x");
+        let id = s.history[0].id.clone();
+        let token = s.delete_reversible(&id).unwrap();
+        s.clear_history_persisted().unwrap();
+        assert_eq!(s.undo_delete(&token), Err(UNDO_EXPIRED.to_string()));
+        assert_eq!(
+            s.undo_delete("no-such-token"),
+            Err(UNDO_EXPIRED.to_string())
+        );
+    }
+
     #[test]
     fn undoing_a_delete_folds_into_the_same_text_copied_meanwhile() {
         let mut s = Store::load(temp_dir());
@@ -5945,8 +6361,10 @@ mod data_safety_tests {
         let token = s.delete_reversible(&deleted).unwrap();
         capture_text(&mut s, "x"); // copied again inside the undo window
 
-        s.undo_delete(&token).expect("undo succeeds");
+        let standing = s.undo_delete(&token).expect("undo succeeds");
         let xs: Vec<&ClipItem> = s.history.iter().filter(|i| i.text == "x").collect();
+        assert_eq!(standing, xs[0].id, "the panel is told which row it is now");
+        assert_ne!(standing, deleted);
         assert_eq!(xs.len(), 1, "one row, not two");
         assert_eq!(xs[0].copy_count, 5, "carrying both counts");
         assert_eq!(s.history[0].text, "x", "where the new copy put it");
@@ -5967,7 +6385,8 @@ mod data_safety_tests {
         let token = s.delete_reversible(&id).unwrap();
         capture_text(&mut s, "pinned text"); // lands in history: the pin is gone for now
 
-        s.undo_delete(&token).expect("undo succeeds");
+        let standing = s.undo_delete(&token).expect("undo succeeds");
+        assert_eq!(standing, id, "a pin comes back as itself");
         let pinned = s
             .pinned
             .iter()
@@ -6264,7 +6683,8 @@ mod data_safety_tests {
         let copy = s.history[0].id.clone();
         assert!(s.toggle_pin(&copy));
 
-        s.undo_delete(&token).expect("undo succeeds");
+        let standing = s.undo_delete(&token).expect("undo succeeds");
+        assert_eq!(standing, copy, "folded into the pinned copy");
         assert!(s.find(&deleted).is_none());
         assert!(s.history.is_empty(), "not back in history beside its pin");
         assert_eq!(s.pinned[0].id, copy);

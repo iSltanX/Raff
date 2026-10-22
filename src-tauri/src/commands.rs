@@ -22,6 +22,9 @@ pub mod err {
     pub const NOT_FOUND: &str = "raff/not-found";
     pub const SAVE_FAILED: &str = "raff/save-failed";
     pub const PASTE_FAILED: &str = "raff/paste-failed";
+    /// A command called from a window that has no business calling it
+    /// (`access`). Never reached from رفّ's own pages.
+    pub const WRONG_WINDOW: &str = "raff/wrong-window";
     /// A shortcut with no modifier but ⇧.
     pub const HOTKEY_NEEDS_MODIFIER: &str = "raff/hotkey-needs-modifier";
     /// ⌘C, ⌘V, ⌘X, ⌘A, ⌘Z, ⌘Q or ⌘W.
@@ -32,6 +35,11 @@ pub mod err {
     pub const UNDO_NO_ROOM: &str = crate::storage::UNDO_NO_ROOM;
     /// The same, because it is past the retention period.
     pub const UNDO_RETENTION: &str = crate::storage::UNDO_RETENTION;
+    /// A pinned item's name over its cap, or a name for what is not pinned.
+    pub const LABEL_TOO_LONG: &str = crate::storage::LABEL_TOO_LONG;
+    pub const LABEL_NOT_PINNED: &str = crate::storage::LABEL_NOT_PINNED;
+    /// The delete was already made final (ت٤٥ ب٣).
+    pub const UNDO_EXPIRED: &str = crate::storage::UNDO_EXPIRED;
     /// A test run of رفّ: it has no clipboard to copy to or paste from (ت٤٨).
     pub const CLIPBOARD_OFF: &str = "raff/clipboard-off";
     /// The picture is there — it still pastes — but no thumbnail exists and
@@ -62,6 +70,8 @@ pub struct ItemDto {
     pub paste_count: u32,
     pub last_used_at: u64,
     pub has_image: bool,
+    /// A pinned item's name (IMP-07).
+    pub label: Option<String>,
 }
 
 impl ItemDto {
@@ -83,6 +93,8 @@ impl ItemDto {
             paste_count: item.paste_count,
             last_used_at: item.last_used_at,
             has_image: item.image_file.is_some(),
+            // Hidden while unpinned (kept for a pin that comes back).
+            label: item.label.clone().filter(|_| item.is_pinned),
         }
     }
 }
@@ -107,6 +119,9 @@ pub struct StatePayload {
     pub capture_alive: bool,
     /// A pause in force, if any — its kind and minutes left, nothing it skipped.
     pub capture_pause: crate::PauseView,
+    /// The delete receipt Rust still holds, if any: a panel showing «تراجع»
+    /// for another one, or for none, drops it (ت٤٥ ب٣).
+    pub undo_token: Option<String>,
 }
 
 /// What the Settings window actually needs: the preferences and the two states
@@ -131,9 +146,14 @@ fn pause_view(state: &AppState) -> crate::PauseView {
 }
 
 #[tauri::command]
-pub fn get_settings(app: AppHandle, state: State<AppState>) -> SettingsPayload {
+pub fn get_settings(
+    window: tauri::WebviewWindow,
+    app: AppHandle,
+    state: State<AppState>,
+) -> Result<SettingsPayload, String> {
+    crate::access::require(&window, "get_settings")?;
     let store = crate::lock_store(&state.store);
-    SettingsPayload {
+    Ok(SettingsPayload {
         settings: store.settings.clone(),
         ax_trusted: ax_trusted_noted(),
         version: app.package_info().version.to_string(),
@@ -142,16 +162,21 @@ pub fn get_settings(app: AppHandle, state: State<AppState>) -> SettingsPayload {
             .capture_alive
             .load(std::sync::atomic::Ordering::SeqCst),
         capture_pause: pause_view(&state),
-    }
+    })
 }
 
 #[tauri::command]
-pub fn get_state(app: AppHandle, state: State<AppState>) -> StatePayload {
+pub fn get_state(
+    window: tauri::WebviewWindow,
+    app: AppHandle,
+    state: State<AppState>,
+) -> Result<StatePayload, String> {
+    crate::access::require(&window, "get_state")?;
     crate::startup_trace::mark("FRONTEND_CALLED_get_state");
     let store = crate::lock_store(&state.store);
     let mut pinned: Vec<&crate::storage::ClipItem> = store.pinned.iter().collect();
     pinned.sort_by_key(|i| i.pinned_order.unwrap_or(u32::MAX));
-    StatePayload {
+    Ok(StatePayload {
         pinned: pinned.into_iter().map(ItemDto::from).collect(),
         history: store.history.iter().map(ItemDto::from).collect(),
         settings: store.settings.clone(),
@@ -163,7 +188,8 @@ pub fn get_state(app: AppHandle, state: State<AppState>) -> StatePayload {
             .capture_alive
             .load(std::sync::atomic::Ordering::SeqCst),
         capture_pause: pause_view(&state),
-    }
+        undo_token: store.pending_delete_token(),
+    })
 }
 
 /// Ids of the rows whose **full** text matches — everything the panel cannot
@@ -173,34 +199,113 @@ pub fn get_state(app: AppHandle, state: State<AppState>) -> StatePayload {
 /// text back so it could search it would undo the very cap this exists to work
 /// around. The scan is linear over the shelf; the byte budget on the layer is
 /// what keeps that bounded.
+///
+/// Off the main thread and out of the store lock (IMP-01): over the largest
+/// history the scan measured 256–295 ms in release, once per keystroke. The
+/// lock is held only to copy the rows out (~2 ms), and a newer search stops
+/// an older one, whose answer the panel would drop anyway.
 #[tauri::command]
-pub fn search_items(state: State<AppState>, query: String) -> Vec<String> {
-    matching_ids(&crate::lock_store(&state.store), &query)
+pub async fn search_items(
+    window: tauri::WebviewWindow,
+    state: State<'_, AppState>,
+    query: String,
+) -> Result<Vec<String>, String> {
+    crate::access::require(&window, "search_items")?;
+    let generation = SEARCH_GENERATION.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
+    let current = move || SEARCH_GENERATION.load(std::sync::atomic::Ordering::SeqCst) == generation;
+    let rows = {
+        let store = crate::lock_store(&state.store);
+        // Overtaken while waiting for the lock: nothing to copy out for.
+        if !current() {
+            return Ok(Vec::new());
+        }
+        rows_to_search(&store)
+    };
+    let found = tauri::async_runtime::spawn_blocking(move || matching_in(&rows, &query, current))
+        .await
+        .map_err(|err| err.to_string())?;
+    // Overtaken: the panel has already asked again, and drops this answer.
+    Ok(found.unwrap_or_default())
 }
 
-/// `search_items` without the lock: the query trimmed and folded the way the
-/// panel's own filter does it, then every row's full text.
-fn matching_ids(store: &Store, query: &str) -> Vec<String> {
-    let needle = crate::storage::normalize_for_search(crate::storage::trim_query(query));
-    if needle.is_empty() {
-        return Vec::new();
-    }
+/// Bumped by every deep search; a search still running when it moves on stops.
+static SEARCH_GENERATION: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Every row, shelf first, as (id, full text): what a search reads.
+fn rows_to_search(store: &Store) -> Vec<(String, String)> {
+    // Picture text is searched only while «اقرأ النص في الصور» is on.
+    let ocr = store.settings.ocr_enabled;
     store
         .pinned
         .iter()
         .chain(store.history.iter())
-        .filter(|item| crate::storage::normalize_for_search(&item.text).contains(&needle))
-        .map(|item| item.id.clone())
+        // A pinned item's name is searched with its text (IMP-07) — not the
+        // name an unpinned row keeps hidden — and a picture with the text
+        // read in it (IMP-09).
+        .map(|item| {
+            let mut text = item.text.clone();
+            let ocr_text = if ocr { &item.ocr_text } else { &None };
+            let label = if item.is_pinned { &item.label } else { &None };
+            for extra in [label, ocr_text].into_iter().flatten() {
+                text.push('\n');
+                text.push_str(extra);
+            }
+            (item.id.clone(), text)
+        })
         .collect()
 }
 
+/// The query trimmed and folded the way the panel's own filter does it, then
+/// every row's full text. `None` once `keep_going` says a newer search began.
+fn matching_in(
+    rows: &[(String, String)],
+    query: &str,
+    keep_going: impl Fn() -> bool,
+) -> Option<Vec<String>> {
+    let needle = crate::storage::normalize_for_search(crate::storage::trim_query(query));
+    if needle.is_empty() {
+        return Some(Vec::new());
+    }
+    let mut ids = Vec::new();
+    for (id, text) in rows {
+        if !keep_going() {
+            return None;
+        }
+        if crate::storage::normalize_for_search(text).contains(&needle) {
+            ids.push(id.clone());
+        }
+    }
+    Some(ids)
+}
+
+/// `search_items` over a store, as the tests hold one.
+#[cfg(test)]
+fn matching_ids(store: &Store, query: &str) -> Vec<String> {
+    matching_in(&rows_to_search(store), query, || true).unwrap_or_default()
+}
+
 #[tauri::command]
-pub async fn paste_item(app: AppHandle, id: String, plain: bool) -> Result<bool, String> {
+pub async fn paste_item(
+    window: tauri::WebviewWindow,
+    app: AppHandle,
+    id: String,
+    plain: bool,
+    bare: Option<bool>,
+) -> Result<paste::PasteOutcome, String> {
+    crate::access::require(&window, "paste_item")?;
     let began = std::time::Instant::now();
-    let result = paste::paste_item(&app, &id, plain).await;
+    let form = if bare == Some(true) {
+        paste::Form::Bare
+    } else if plain {
+        paste::Form::Plain
+    } else {
+        paste::Form::Rich
+    };
+    let result = paste::paste_item(&app, &id, form).await;
     let outcome = match result {
-        Ok(true) => "ok",
-        Ok(false) => "clipboard-only",
+        Ok(paste::PasteOutcome::Pasted) => "ok",
+        Ok(paste::PasteOutcome::Copied) => "clipboard-only",
+        Ok(paste::PasteOutcome::CopiedOverRaff) => "clipboard-only-over-raff",
         Err(_) => "error",
     };
     crate::diagnostics::record("paste", outcome, began);
@@ -210,13 +315,18 @@ pub async fn paste_item(app: AppHandle, id: String, plain: bool) -> Result<bool,
 /// Async, like `paste_item`: the write can wait out a poll's read and reads
 /// the picture file, neither of which belongs on the main thread.
 #[tauri::command]
-pub async fn copy_item(app: AppHandle, id: String) -> Result<(), String> {
+pub async fn copy_item(
+    window: tauri::WebviewWindow,
+    app: AppHandle,
+    id: String,
+) -> Result<(), String> {
+    crate::access::require(&window, "copy_item")?;
     let began = std::time::Instant::now();
     if macos::clipboard_inert() {
         crate::diagnostics::record("copy", "clipboard-off", began);
         return Err(err::CLIPBOARD_OFF.into());
     }
-    if paste::write_item_to_clipboard(&app, &id, false) {
+    if paste::write_item_to_clipboard(&app, &id, paste::Form::Rich) {
         paste::bump_copy_signals(&app, &id);
         crate::diagnostics::record("copy", "ok", began);
         Ok(())
@@ -232,13 +342,42 @@ pub async fn copy_item(app: AppHandle, id: String) -> Result<(), String> {
 /// could only be rearranged by unpinning and pinning again in sequence.
 #[tauri::command]
 pub fn reorder_pinned(
+    window: tauri::WebviewWindow,
     app: AppHandle,
     state: State<AppState>,
     ids: Vec<String>,
 ) -> Result<(), String> {
+    crate::access::require(&window, "reorder_pinned")?;
     {
         let mut store = crate::lock_store(&state.store);
         store.reorder_pinned_persisted(&ids).map_err(save_failed)?;
+    }
+    notify(&app);
+    Ok(())
+}
+
+/// Names a pinned item, or clears its name (IMP-07). Off the main thread:
+/// it writes the shelf.
+#[tauri::command(async)]
+pub fn set_label(
+    window: tauri::WebviewWindow,
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: String,
+    label: Option<String>,
+) -> Result<(), String> {
+    crate::access::require(&window, "set_label")?;
+    {
+        let mut store = crate::lock_store(&state.store);
+        store
+            .set_label_persisted(&id, label.as_deref())
+            .map_err(|e| {
+                if e == err::LABEL_TOO_LONG || e == err::LABEL_NOT_PINNED {
+                    e
+                } else {
+                    save_failed(e)
+                }
+            })?;
     }
     notify(&app);
     Ok(())
@@ -273,11 +412,13 @@ fn set_pin(store: &mut Store, id: &str, is_pinned: bool) -> Result<PinDto, Strin
 /// one at a time, so this does not reorder them.
 #[tauri::command(async)]
 pub fn toggle_pin(
+    window: tauri::WebviewWindow,
     app: AppHandle,
     state: State<'_, AppState>,
     id: String,
     is_pinned: bool,
 ) -> Result<PinDto, String> {
+    crate::access::require(&window, "toggle_pin")?;
     let outcome = set_pin(&mut crate::lock_store(&state.store), &id, is_pinned)?;
     notify(&app);
     Ok(outcome)
@@ -294,10 +435,12 @@ pub struct DeleteReceiptDto {
 /// during which the main thread would draw nothing (F-MAINTHREAD-COST).
 #[tauri::command(async)]
 pub fn delete_item(
+    window: tauri::WebviewWindow,
     app: AppHandle,
     state: State<'_, AppState>,
     id: String,
 ) -> Result<DeleteReceiptDto, String> {
+    crate::access::require(&window, "delete_item")?;
     let token = {
         let mut store = crate::lock_store(&state.store);
         store.delete_reversible(&id).map_err(save_failed)?
@@ -309,33 +452,45 @@ pub fn delete_item(
 /// Off the main thread, like `delete_item`: it rewrites the layer.
 #[tauri::command(async)]
 pub fn undo_delete(
+    window: tauri::WebviewWindow,
     app: AppHandle,
     state: State<'_, AppState>,
     token: String,
-) -> Result<(), String> {
-    {
+) -> Result<String, String> {
+    crate::access::require(&window, "undo_delete")?;
+    let standing = {
         let mut store = crate::lock_store(&state.store);
         store.undo_delete(&token).map_err(|e| {
-            if e == err::UNDO_NO_ROOM || e == err::UNDO_RETENTION {
+            if e == err::UNDO_NO_ROOM || e == err::UNDO_RETENTION || e == err::UNDO_EXPIRED {
                 e
             } else {
                 save_failed(e)
             }
-        })?;
-    }
+        })?
+    };
     notify(&app);
-    Ok(())
+    Ok(standing)
 }
 
 /// Off the main thread, like `delete_item`: it deletes files and the journal.
 #[tauri::command(async)]
-pub fn commit_delete(state: State<'_, AppState>, token: String) -> Result<(), String> {
+pub fn commit_delete(
+    window: tauri::WebviewWindow,
+    state: State<'_, AppState>,
+    token: String,
+) -> Result<(), String> {
+    crate::access::require(&window, "commit_delete")?;
     let mut store = crate::lock_store(&state.store);
     store.commit_delete(&token).map_err(save_failed)
 }
 
 #[tauri::command]
-pub fn clear_history(app: AppHandle, state: State<AppState>) -> Result<(), String> {
+pub fn clear_history(
+    window: tauri::WebviewWindow,
+    app: AppHandle,
+    state: State<AppState>,
+) -> Result<(), String> {
+    crate::access::require(&window, "clear_history")?;
     {
         let mut store = crate::lock_store(&state.store);
         store.clear_history_persisted().map_err(save_failed)?;
@@ -345,7 +500,12 @@ pub fn clear_history(app: AppHandle, state: State<AppState>) -> Result<(), Strin
 }
 
 #[tauri::command]
-pub fn clear_learning(app: AppHandle, state: State<AppState>) -> Result<(), String> {
+pub fn clear_learning(
+    window: tauri::WebviewWindow,
+    app: AppHandle,
+    state: State<AppState>,
+) -> Result<(), String> {
+    crate::access::require(&window, "clear_learning")?;
     {
         let mut store = crate::lock_store(&state.store);
         store.clear_learning_persisted().map_err(save_failed)?;
@@ -368,7 +528,11 @@ pub struct LearnDto {
 /// "عرض ما تعلّمه رفّ" — the plan requires the user can see what is being
 /// learned. Returns the most-used items with their raw signals.
 #[tauri::command]
-pub fn learning_summary(state: State<AppState>) -> Vec<LearnDto> {
+pub fn learning_summary(
+    window: tauri::WebviewWindow,
+    state: State<AppState>,
+) -> Result<Vec<LearnDto>, String> {
+    crate::access::require(&window, "learning_summary")?;
     let store = crate::lock_store(&state.store);
     let mut items: Vec<&crate::storage::ClipItem> = store
         .pinned
@@ -377,7 +541,7 @@ pub fn learning_summary(state: State<AppState>) -> Vec<LearnDto> {
         .filter(|i| i.copy_count + i.paste_count > 1)
         .collect();
     items.sort_by_key(|i| std::cmp::Reverse(i.copy_count + i.paste_count));
-    items
+    Ok(items
         .into_iter()
         .take(10)
         .map(|i| LearnDto {
@@ -387,7 +551,7 @@ pub fn learning_summary(state: State<AppState>) -> Vec<LearnDto> {
             paste_count: i.paste_count,
             last_used_at: i.last_used_at,
         })
-        .collect()
+        .collect())
 }
 
 /// Changes the settings named in `settings` and leaves every other one as the
@@ -398,6 +562,20 @@ pub fn learning_summary(state: State<AppState>) -> Vec<LearnDto> {
 /// settings here and persisting the result below.
 #[tauri::command]
 pub fn update_settings(
+    window: tauri::WebviewWindow,
+    app: AppHandle,
+    state: State<AppState>,
+    settings: SettingsPatch,
+) -> Result<(), String> {
+    crate::access::require(&window, "update_settings")?;
+    if !crate::access::patch_allowed(window.label(), &settings) {
+        return Err(err::WRONG_WINDOW.into());
+    }
+    apply_settings(app, state, settings)
+}
+
+/// `update_settings` past its window check: also the menu bar's way in.
+fn apply_settings(
     app: AppHandle,
     state: State<AppState>,
     settings: SettingsPatch,
@@ -478,13 +656,15 @@ pub fn set_capture_enabled(app: &AppHandle, enabled: bool) -> Result<(), String>
         capture_enabled: Some(enabled),
         ..SettingsPatch::default()
     };
-    update_settings(app.clone(), app.state::<AppState>(), patch)
+    apply_settings(app.clone(), app.state::<AppState>(), patch)
 }
 
 /// Ends a pause from the panel strip or Settings.
 #[tauri::command]
-pub fn resume_capture() {
+pub fn resume_capture(window: tauri::WebviewWindow) -> Result<(), String> {
+    crate::access::require(&window, "resume_capture")?;
     crate::tray::resume_capture();
+    Ok(())
 }
 
 /// «إعادة تشغيل رفّ» — the remedy when the capture loop has stopped. Asked
@@ -492,6 +672,7 @@ pub fn resume_capture() {
 /// simply returns to the menu bar.
 #[tauri::command]
 pub fn restart_app(app: AppHandle, window: tauri::WebviewWindow) -> Result<(), String> {
+    crate::access::require(&window, "restart_app")?;
     crate::relaunch(&app, window.label() == "settings")
 }
 
@@ -534,6 +715,16 @@ fn hotkey_refusal(accel: &str) -> Option<&'static str> {
     None
 }
 
+/// `validate_settings` for a backup's settings (IMP-05).
+pub(crate) fn check_settings(settings: &Settings) -> Result<(), String> {
+    validate_settings(settings)
+}
+
+/// A storage failure as the code the pages word (`save_failed`).
+pub(crate) fn save_failed_code(detail: &str) -> String {
+    save_failed(detail.to_string())
+}
+
 fn validate_settings(settings: &Settings) -> Result<(), String> {
     if !matches!(settings.history_limit, 200 | 500 | 1000) {
         return Err("حد السجل غير صالح".into());
@@ -574,10 +765,12 @@ const PREVIEW_IMAGE_MAX_BYTES: u64 = 4 * 1024 * 1024;
 /// no thumbnail; the item still pastes.
 #[tauri::command(async)]
 pub fn get_image(
+    window: tauri::WebviewWindow,
     state: State<'_, AppState>,
     id: String,
     full: Option<bool>,
 ) -> Result<Option<String>, String> {
+    crate::access::require(&window, "get_image")?;
     let files = ImageFiles::of(&crate::lock_store(&state.store), &id);
     files.map_or(Ok(None), |files| files.data_url(full.unwrap_or(false)))
 }
@@ -654,21 +847,33 @@ pub fn show_panel(app: AppHandle) {
 }
 
 #[tauri::command]
-pub fn hide_panel(app: AppHandle) {
+pub fn hide_panel(window: tauri::WebviewWindow, app: AppHandle) -> Result<(), String> {
+    crate::access::require(&window, "hide_panel")?;
     panel::hide(&app);
+    Ok(())
 }
 
 /// The side of the panel with room for the preview, or none (Figma
 /// «05 · التفاصيل» 45:5325).
 #[tauri::command]
-pub fn panel_preview_side(app: AppHandle) -> Option<panel::PreviewSide> {
-    panel::preview_side(&app)
+pub fn panel_preview_side(
+    window: tauri::WebviewWindow,
+    app: AppHandle,
+) -> Result<Option<panel::PreviewSide>, String> {
+    crate::access::require(&window, "panel_preview_side")?;
+    Ok(panel::preview_side(&app))
 }
 
 /// Widens the panel window for the preview on `side`, or narrows it back.
 #[tauri::command]
-pub fn set_panel_preview(app: AppHandle, side: Option<panel::PreviewSide>) {
+pub fn set_panel_preview(
+    window: tauri::WebviewWindow,
+    app: AppHandle,
+    side: Option<panel::PreviewSide>,
+) -> Result<(), String> {
+    crate::access::require(&window, "set_panel_preview")?;
     panel::set_preview(&app, side);
+    Ok(())
 }
 
 #[tauri::command]
@@ -698,12 +903,22 @@ pub fn open_accessibility_settings() {
 }
 
 #[tauri::command]
-pub fn firstrun_done(app: AppHandle, state: State<AppState>) -> Result<(), String> {
+pub fn firstrun_done(
+    window: tauri::WebviewWindow,
+    app: AppHandle,
+    state: State<AppState>,
+    open_panel: Option<bool>,
+) -> Result<(), String> {
+    crate::access::require(&window, "firstrun_done")?;
     {
         let mut store = crate::lock_store(&state.store);
         store
             .mark_first_run_shown_persisted()
             .map_err(save_failed)?;
+    }
+    // «افتح رفّ»: only now, with the welcome finished, and before it closes.
+    if open_panel == Some(true) {
+        panel::show(&app);
     }
     if let Some(w) = app.get_webview_window("firstrun") {
         w.close().map_err(|err| err.to_string())?;
@@ -719,11 +934,12 @@ pub struct RunningApp {
 }
 
 #[tauri::command]
-pub fn list_running_apps() -> Vec<RunningApp> {
-    macos::running_apps()
+pub fn list_running_apps(window: tauri::WebviewWindow) -> Result<Vec<RunningApp>, String> {
+    crate::access::require(&window, "list_running_apps")?;
+    Ok(macos::running_apps()
         .into_iter()
         .map(|(name, bundle_id)| RunningApp { name, bundle_id })
-        .collect()
+        .collect())
 }
 
 // ─── helpers shared with main/tray ───────────────────────────────────────────
@@ -948,6 +1164,149 @@ mod tests {
         assert_eq!(crossed, err::SAVE_FAILED);
         assert!(!crossed.contains("/Users/"), "no path survives");
         assert!(!crossed.contains("history"), "and no file name either");
+    }
+
+    /// IMP-01's measurement, before anything is changed for it: the deep
+    /// search over the largest history رفّ keeps — 1000 rows near the 64 MB
+    /// cap — for a query found nowhere (every row read to its end) and one
+    /// found early. Run in release: `cargo test --release search_probe --
+    /// --ignored --nocapture`. A number, not a pass: it decides whether the
+    /// command leaves the main thread (roadmap: past ~16 ms).
+    #[test]
+    #[ignore = "a measurement, run by hand in release"]
+    fn search_probe() {
+        let unit = "نصّ عربي طويل يتكرر مع English words و١٢٣ أرقام، ";
+        let row = unit.repeat(60_000 / unit.len());
+        let dir = std::env::temp_dir().join(format!("raff-search-probe-{}", uuid::Uuid::new_v4()));
+        let mut store = Store::load(dir.clone());
+        store.settings.history_limit = 1000;
+        for i in 0..1000 {
+            store.capture(
+                ItemKind::Text,
+                format!("{i} {row}"),
+                None,
+                None,
+                None,
+                None,
+                None,
+                ("Notes".into(), "com.apple.Notes".into()),
+            );
+        }
+        let rows = store.history.len();
+        let bytes: usize = store.history.iter().map(|i| i.text.len()).sum();
+        for (label, query) in [("nowhere", "لا يوجد هذا أبدًا"), ("early", "999 نص")]
+        {
+            let mut times: Vec<f64> = (0..7)
+                .map(|_| {
+                    let began = std::time::Instant::now();
+                    let found = matching_ids(&store, query).len();
+                    std::hint::black_box(found);
+                    began.elapsed().as_secs_f64() * 1000.0
+                })
+                .collect();
+            times.sort_by(f64::total_cmp);
+            println!(
+                "search_probe {label}: rows={rows} bytes={bytes} median={:.1}ms min={:.1}ms max={:.1}ms",
+                times[3], times[0], times[6]
+            );
+        }
+        // What holding the lock only to copy the rows out would cost.
+        let mut copies: Vec<f64> = (0..7)
+            .map(|_| {
+                let began = std::time::Instant::now();
+                let rows: Vec<(String, String)> = store
+                    .pinned
+                    .iter()
+                    .chain(store.history.iter())
+                    .map(|i| (i.id.clone(), i.text.clone()))
+                    .collect();
+                std::hint::black_box(rows.len());
+                began.elapsed().as_secs_f64() * 1000.0
+            })
+            .collect();
+        copies.sort_by(f64::total_cmp);
+        println!(
+            "search_probe copy-out: median={:.1}ms max={:.1}ms",
+            copies[3], copies[6]
+        );
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// A newer search stops an older one where it is: typing fast does not
+    /// pile up full scans of a large history (IMP-01).
+    #[test]
+    fn a_search_overtaken_by_a_newer_one_stops() {
+        let rows: Vec<(String, String)> = (0..100)
+            .map(|i| (format!("id{i}"), format!("نص {i}")))
+            .collect();
+        assert_eq!(
+            matching_in(&rows, "نص 5", || true).map(|ids| ids.len()),
+            Some(1 + 10), // «نص 5» and «نص 50» … «نص 59»
+            "a search left alone runs to the end"
+        );
+        let seen = std::cell::Cell::new(0);
+        let overtaken = matching_in(&rows, "نص", || {
+            seen.set(seen.get() + 1);
+            seen.get() < 10
+        });
+        assert_eq!(overtaken, None, "overtaken, it answers nothing");
+        assert!(seen.get() <= 11, "and stops there, not after every row");
+    }
+
+    /// IMP-07: a pinned item is found by its name as by its text.
+    #[test]
+    fn the_deep_search_finds_a_pinned_item_by_its_name() {
+        let mut store = store_with_rows(&["نص لا يذكر الاسم"]);
+        let id = store.history[0].id.clone();
+        assert!(store.toggle_pin(&id));
+        store.save_pinned();
+        store.save_history();
+        store
+            .set_label_persisted(&id, Some("عنوان المكتب"))
+            .unwrap();
+        assert_eq!(ids_matching(&store, "المكتب"), vec![id.clone()]);
+        assert_eq!(ids_matching(&store, "يذكر"), vec![id]);
+    }
+
+    /// A name kept by an unpinned row is hidden: neither shown nor searched
+    /// until the row is pinned again (Sultan, 2026-10-22).
+    #[test]
+    fn a_hidden_name_is_neither_sent_nor_searched() {
+        let mut store = store_with_rows(&["نص بلا ذكر للاسم"]);
+        let id = store.history[0].id.clone();
+        store.history[0].label = Some("المكتب".into());
+        assert!(ids_matching(&store, "المكتب").is_empty());
+        assert_eq!(ItemDto::from(&store.history[0]).label, None);
+        assert!(store.toggle_pin(&id));
+        assert_eq!(ids_matching(&store, "المكتب"), vec![id.clone()]);
+        assert_eq!(
+            ItemDto::from(&store.pinned[0]).label.as_deref(),
+            Some("المكتب")
+        );
+    }
+
+    /// IMP-09: a picture is found by the text read in it.
+    #[test]
+    fn the_deep_search_finds_a_picture_by_its_text() {
+        let mut store = store_with_rows(&["سطر عادي"]);
+        store.capture(
+            ItemKind::Image,
+            "صورة 10×10".into(),
+            None,
+            None,
+            None,
+            None,
+            Some("h".into()),
+            ("Preview".into(), "com.apple.Preview".into()),
+        );
+        let id = store.history[0].id.clone();
+        store.history[0].ocr_text = Some("فاتورة الكهرباء\nTotal 42".into());
+        store.settings.ocr_enabled = true;
+        assert_eq!(ids_matching(&store, "الكهرباء"), vec![id.clone()]);
+        assert_eq!(ids_matching(&store, "total 42"), vec![id]);
+        // Off: picture text is not looked at, wherever a copy of it remains.
+        store.settings.ocr_enabled = false;
+        assert!(ids_matching(&store, "الكهرباء").is_empty());
     }
 
     /// The store-side half of `search_items`: everything except taking the lock.

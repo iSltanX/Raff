@@ -2,6 +2,9 @@
 //! item to the pasteboard, then synthesize ⌘V (Accessibility permitting).
 //! Without the permission the item still lands on the clipboard.
 
+use std::sync::atomic::{AtomicU8, Ordering};
+use std::sync::mpsc::Receiver;
+use std::sync::Arc;
 use std::time::Duration;
 
 use base64::Engine;
@@ -13,13 +16,56 @@ use crate::{macos, panel, AppState};
 
 /// How long we give macOS to move focus back before synthesizing ⌘V.
 const ACTIVATE_DELAY_MS: u64 = 150;
+/// How long a paste may take to start before it is called off.
+const PASTE_PATIENCE: Duration = Duration::from_secs(2);
+/// How long a paste that started may take to finish — hide, activate, wait
+/// `ACTIVATE_DELAY_MS`, press — before the panel stops waiting for it.
+const PASTE_FINISH: Duration = Duration::from_secs(3);
 
-/// Writes an item to the pasteboard. `plain` drops rich representations
-/// ("لصق كنص عادي"). Returns false when the id is unknown.
+/// The form an item is written in.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Form {
+    /// As copied: text with its HTML and RTF, or the picture.
+    Rich,
+    /// «لصق كنص عادي»: the text alone.
+    Plain,
+    /// «الصق بلا تشكيل» (IMP-06): the text alone, without its harakat and
+    /// tatweel. The stored item is not changed.
+    Bare,
+}
+
+/// The text without what «بلا تشكيل» drops — combining marks only: the
+/// harakat (U+064B–U+0652) and their relatives (U+0656–U+065E), the
+/// superscript alef (U+0670), the Quranic annotation marks (U+06D6–U+06DC,
+/// U+06DF–U+06E4, U+06E7–U+06E8, U+06EA–U+06ED) and tatweel (U+0640).
+///
+/// The combining madda and hamzas (U+0653–U+0655, U+065F) stay: in
+/// decomposed text they are how أ إ آ are spelled. So do the Quranic signs
+/// that are symbols (۝ ۞ ۩) and the small waw and yeh. Letters, digits,
+/// punctuation and every other script pass unchanged. `hasTashkeel` in
+/// logic.js draws the same line.
+pub fn without_tashkeel(text: &str) -> String {
+    text.chars()
+        .filter(|c| {
+            !matches!(c,
+                '\u{064B}'..='\u{0652}'
+                    | '\u{0656}'..='\u{065E}'
+                    | '\u{0670}'
+                    | '\u{06D6}'..='\u{06DC}'
+                    | '\u{06DF}'..='\u{06E4}'
+                    | '\u{06E7}'..='\u{06E8}'
+                    | '\u{06EA}'..='\u{06ED}'
+                    | '\u{0640}')
+        })
+        .collect()
+}
+
+/// Writes an item to the pasteboard in `form`. Returns false when the id is
+/// unknown.
 ///
 /// Blocking: it reads the image file and may wait for a poll to finish its
 /// read (`OwnWrites`), so it is only called from commands off the main thread.
-pub fn write_item_to_clipboard(app: &AppHandle, id: &str, plain: bool) -> bool {
+pub fn write_item_to_clipboard(app: &AppHandle, id: &str, form: Form) -> bool {
     let state = app.state::<AppState>();
     let (kind, text, html, rtf, image) = {
         let store = crate::lock_store(&state.store);
@@ -30,7 +76,9 @@ pub fn write_item_to_clipboard(app: &AppHandle, id: &str, plain: bool) -> bool {
             .image_file
             .as_ref()
             .and_then(|f| crate::storage::image_path(&store.images_dir(), f));
-        if plain {
+        if form == Form::Bare {
+            (item.kind, without_tashkeel(&item.text), None, None, image)
+        } else if form == Form::Plain {
             (item.kind, item.text.clone(), None, None, image)
         } else {
             let rtf = item
@@ -65,15 +113,36 @@ pub fn write_item_to_clipboard(app: &AppHandle, id: &str, plain: bool) -> bool {
 }
 
 /// Full paste: clipboard write + focus restore + ⌘V + silent learning signals.
-/// The boolean distinguishes a real synthesized paste from clipboard-only
+/// What a paste came to, as the panel reads it: `true` pasted, `false` only
+/// copied, `"copiedOverRaff"` only copied because the panel was opened over
+/// one of رفّ's own windows (009) — said apart, since the panel's usual
+/// explanation for a copy is a missing Accessibility permission.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum PasteOutcome {
+    Pasted,
+    Copied,
+    CopiedOverRaff,
+}
+
+impl serde::Serialize for PasteOutcome {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        match self {
+            Self::Pasted => s.serialize_bool(true),
+            Self::Copied => s.serialize_bool(false),
+            Self::CopiedOverRaff => s.serialize_str("copiedOverRaff"),
+        }
+    }
+}
+
+/// The outcome distinguishes a real synthesized paste from clipboard-only
 /// fallback, using a fresh Accessibility check instead of stale panel state.
-pub async fn paste_item(app: &AppHandle, id: &str, plain: bool) -> Result<bool, String> {
+pub async fn paste_item(app: &AppHandle, id: &str, form: Form) -> Result<PasteOutcome, String> {
     crate::startup_trace::mark("PASTE row_click_invoke");
     // Before anything moves: no hide, no other app brought forward (ت٤٨).
     if macos::clipboard_inert() {
         return Err(crate::commands::err::CLIPBOARD_OFF.into());
     }
-    if !write_item_to_clipboard(app, id, plain) {
+    if !write_item_to_clipboard(app, id, form) {
         crate::startup_trace::mark("PASTE write_item_to_clipboard FAILED (unknown id)");
         return Err(crate::commands::err::NOT_FOUND.into());
     }
@@ -84,22 +153,37 @@ pub async fn paste_item(app: &AppHandle, id: &str, plain: bool) -> Result<bool, 
     if !trusted {
         crate::startup_trace::mark("PASTE STOPPED HERE: no Accessibility trust — panel stays visible, no hide, no activate, no paste");
         bump_paste_signals(app, id);
-        return Ok(false);
+        return Ok(PasteOutcome::Copied);
     }
 
     let state = app.state::<AppState>();
-    let previous_pid = crate::lock_previous_app(&state.previous_app).take();
+    let own = std::process::id() as i32;
+    let previous_pid = match take_target(&state.previous_app, own) {
+        Target::App(pid) => pid,
+        Target::Raff => {
+            crate::startup_trace::mark(
+                "PASTE STOPPED HERE: the panel was opened over Raff itself — copied only",
+            );
+            bump_paste_signals(app, id);
+            return Ok(PasteOutcome::CopiedOverRaff);
+        }
+    };
     crate::startup_trace::mark_with(|| {
         format!("PASTE previous app remembered={}", previous_pid.is_some())
     });
 
     let handle = app.clone();
-    let id = id.to_string();
-    let worker = handle.clone();
+    let item = id.to_string();
     let attempt = tauri::async_runtime::spawn_blocking(move || {
         let (tx, rx) = std::sync::mpsc::channel();
-        worker
-            .run_on_main_thread(move || {
+        let ticket = Arc::new(PasteTicket::new());
+        let ours = Arc::clone(&ticket);
+        let presser = Arc::clone(&ticket);
+        // Not `run_on_main_thread`: tao drains that queue only while it is
+        // processing events, the queue that once held a panel show for 2.5s
+        // (`macos::dispatch_to_main`).
+        macos::dispatch_to_main(move || {
+            if_claimed(&ours, move || {
                 crate::startup_trace::mark("PASTE panel_hide requested");
                 panel::hide(&handle);
                 crate::startup_trace::mark(&format!(
@@ -133,8 +217,17 @@ pub async fn paste_item(app: &AppHandle, id: &str, plain: bool) -> Result<bool, 
                             previous_pid == Some(front_before_paste.pid)
                         )
                     });
+                    // The point of no return: past it the wait sees this
+                    // through; short of it, the wait has already told the
+                    // user, and nothing may be pressed now.
+                    if !presser.press() {
+                        crate::startup_trace::mark(
+                            "PASTE abandoned before the keystroke — nothing pressed",
+                        );
+                        return;
+                    }
                     let still_trusted = macos::ax_trusted();
-                    let sent = if still_trusted {
+                    let sent = if may_press_paste(still_trusted, front_before_paste.pid, own) {
                         macos::send_cmd_v()
                     } else {
                         false
@@ -144,14 +237,15 @@ pub async fn paste_item(app: &AppHandle, id: &str, plain: bool) -> Result<bool, 
                     ));
                     let pasted =
                         paste_confirmed(still_trusted, sent, previous_pid, front_before_paste.pid);
-                    bump_paste_signals(&handle2, &id);
                     crate::startup_trace::mark(&format!("PASTE COMPLETE pasted={pasted}"));
+                    // Answered first: the counter waits for the store lock,
+                    // and the panel's answer must not wait with it.
                     let _ = tx.send(pasted);
+                    bump_paste_signals(&handle2, &item);
                 });
             })
-            .map_err(|err| err.to_string())?;
-        rx.recv_timeout(Duration::from_secs(2))
-            .map_err(|err| err.to_string())
+        });
+        await_paste(&rx, &ticket, PASTE_PATIENCE, PASTE_FINISH)
     })
     .await
     .map_err(paste_failed)
@@ -161,6 +255,9 @@ pub async fn paste_item(app: &AppHandle, id: &str, plain: bool) -> Result<bool, 
         Ok(pasted) => pasted,
         Err(err) => {
             crate::startup_trace::mark(&format!("PASTE ERROR {err} — reshowing panel"));
+            // The item was written before any of this, as the message says:
+            // counted as used, like every other paste that ends as a copy.
+            bump_paste_signals(app, id);
             panel::show(app);
             return Err(err);
         }
@@ -170,7 +267,140 @@ pub async fn paste_item(app: &AppHandle, id: &str, plain: bool) -> Result<bool, 
         crate::startup_trace::mark("PASTE not pasted — reshowing panel");
         panel::show(app);
     }
-    Ok(pasted)
+    Ok(if pasted {
+        PasteOutcome::Pasted
+    } else {
+        PasteOutcome::Copied
+    })
+}
+
+/// One paste's claims on the panel and on the keystroke (015). The work and
+/// the wait for it race for each, and one side wins each race:
+///
+/// - **Start** — taken by the main-thread work before it hides the panel, or
+///   by the wait once `PASTE_PATIENCE` runs out. Called off here, the paste
+///   never moves anything: no hide, no activation, no ⌘V.
+/// - **Press** — taken by the work immediately before ⌘V, or by the wait once
+///   `PASTE_FINISH` runs out too. Abandoned here, the panel was hidden and the
+///   old app brought forward, but nothing is pressed, then or later.
+///
+/// The press claim is the point of no return. Once the work holds it, the
+/// keystroke is out or going out, and the wait waits for the answer that
+/// follows it rather than report a failure that already pasted. So the user is
+/// never told a paste failed before a ⌘V that then lands.
+struct PasteTicket(AtomicU8);
+
+const WAITING: u8 = 0;
+const STARTED: u8 = 1;
+const CALLED_OFF: u8 = 2;
+const PRESSING: u8 = 3;
+const ABANDONED: u8 = 4;
+
+impl PasteTicket {
+    fn new() -> Self {
+        Self(AtomicU8::new(WAITING))
+    }
+
+    /// The work's side, before anything moves: false once the paste was
+    /// called off.
+    fn start(&self) -> bool {
+        self.claim(WAITING, STARTED)
+    }
+
+    /// The wait's side, once its patience runs out: true when the work had
+    /// not started, and now never will.
+    fn call_off(&self) -> bool {
+        self.claim(WAITING, CALLED_OFF)
+    }
+
+    /// The work's side, immediately before the keystroke: false once the
+    /// wait gave up on it.
+    fn press(&self) -> bool {
+        self.claim(STARTED, PRESSING)
+    }
+
+    /// The wait's side, once the started work has also outlasted
+    /// `PASTE_FINISH`: true when the keystroke had not been claimed, and now
+    /// never will be.
+    fn abandon(&self) -> bool {
+        self.claim(STARTED, ABANDONED)
+    }
+
+    fn claim(&self, from: u8, to: u8) -> bool {
+        self.0
+            .compare_exchange(from, to, Ordering::AcqRel, Ordering::Acquire)
+            .is_ok()
+    }
+}
+
+/// Runs the paste's main-thread work only when it wins the claim.
+fn if_claimed(ticket: &PasteTicket, work: impl FnOnce()) {
+    if ticket.start() {
+        work();
+    } else {
+        crate::startup_trace::mark(
+            "PASTE called off before it started — nothing hidden, nothing pressed",
+        );
+    }
+}
+
+/// Waits for the paste's answer. A paste that has not started within
+/// `patience` is called off; one that started but has not claimed its
+/// keystroke within `finish` more is abandoned. Either is reported as failed —
+/// the item is on the clipboard already, which is what the failure message
+/// says — and neither presses anything afterwards. One whose keystroke is out
+/// is waited for once more, for the answer that comes right after it. Past
+/// that third wait the failure is reported even so; the keystroke, claimed
+/// and beyond recall, takes milliseconds, so that wait is never near spent.
+fn await_paste(
+    rx: &Receiver<bool>,
+    ticket: &PasteTicket,
+    patience: Duration,
+    finish: Duration,
+) -> Result<bool, String> {
+    match rx.recv_timeout(patience) {
+        Ok(pasted) => Ok(pasted),
+        Err(err) if ticket.call_off() => Err(err.to_string()),
+        Err(_) => match rx.recv_timeout(finish) {
+            Ok(pasted) => Ok(pasted),
+            Err(err) if ticket.abandon() => Err(err.to_string()),
+            Err(_) => rx.recv_timeout(finish).map_err(|err| err.to_string()),
+        },
+    }
+}
+
+/// Where a paste goes: back to the app the panel was opened over, or nowhere
+/// because that was رفّ.
+#[derive(Debug, PartialEq)]
+enum Target {
+    Raff,
+    App(Option<i32>),
+}
+
+/// Takes the remembered app for this paste. A panel opened over رفّ keeps
+/// that answer for its next click as well: the panel stays open after a copy,
+/// and a second click finding nothing remembered would hide it, press nothing
+/// and show it again.
+fn take_target(previous_app: &std::sync::Mutex<Option<i32>>, own: i32) -> Target {
+    let mut previous = crate::lock_previous_app(previous_app);
+    if opened_over_raff(*previous, own) {
+        return Target::Raff;
+    }
+    Target::App(previous.take())
+}
+
+/// Whether the panel was opened over one of رفّ's own windows — Settings in
+/// front, say (009). There is no other app to paste into then, and ⌘V would
+/// land in رفّ itself, so the item is only copied, exactly as without the
+/// Accessibility permission.
+fn opened_over_raff(previous_pid: Option<i32>, own: i32) -> bool {
+    previous_pid == Some(own)
+}
+
+/// ⌘V is never synthesized into رفّ itself, whatever put it in front by the
+/// time the keystroke would go out.
+fn may_press_paste(still_trusted: bool, front_pid: i32, own: i32) -> bool {
+    still_trusted && front_pid != own
 }
 
 /// Whether a paste may be reported as done.
@@ -250,6 +480,281 @@ mod tests {
     #[test]
     fn nothing_claimed_about_the_target_leaves_nothing_to_contradict() {
         assert!(paste_confirmed(true, true, None, 99));
+    }
+
+    const OWN: i32 = 777;
+    const PATIENCE: Duration = Duration::from_millis(100);
+
+    /// 015: the main thread got to the paste only after the wait gave up and
+    /// the panel was shown again. The work still hid it, brought the old app
+    /// forward and pressed ⌘V into whatever was in front by then.
+    #[test]
+    fn a_paste_called_off_never_starts_late() {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let ticket = Arc::new(PasteTicket::new());
+        let (ours, pressed) = (Arc::clone(&ticket), Arc::new(AtomicU8::new(0)));
+        let presses = Arc::clone(&pressed);
+        let late = std::thread::spawn(move || {
+            std::thread::sleep(PATIENCE * 3);
+            if_claimed(&ours, || {
+                presses.fetch_add(1, Ordering::SeqCst);
+                let _ = tx.send(true);
+            });
+        });
+
+        assert!(await_paste(&rx, &ticket, PATIENCE, PATIENCE).is_err());
+        late.join().unwrap();
+        assert_eq!(
+            pressed.load(Ordering::SeqCst),
+            0,
+            "nothing pressed after the wait gave up"
+        );
+    }
+
+    /// A paste that started just inside the patience is seen through, not
+    /// reported as failed while its keystroke is still on the way.
+    #[test]
+    fn a_paste_that_started_is_waited_out() {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let ticket = Arc::new(PasteTicket::new());
+        let ours = Arc::clone(&ticket);
+        let slow = std::thread::spawn(move || {
+            assert!(ours.start());
+            std::thread::sleep(PATIENCE * 3);
+            let _ = tx.send(true);
+        });
+
+        assert_eq!(await_paste(&rx, &ticket, PATIENCE, PATIENCE * 10), Ok(true));
+        slow.join().unwrap();
+    }
+
+    /// Review م١: a paste that started and never answered — its thread stuck
+    /// behind a lock — must not leave the panel waiting forever.
+    #[test]
+    fn a_paste_that_started_and_never_answers_is_not_waited_on_forever() {
+        let (tx, rx) = std::sync::mpsc::channel::<bool>();
+        let ticket = Arc::new(PasteTicket::new());
+        assert!(ticket.start());
+        let (done_tx, done_rx) = std::sync::mpsc::channel();
+        let waiter = Arc::clone(&ticket);
+        std::thread::spawn(move || {
+            let _ = done_tx.send(await_paste(&rx, &waiter, PATIENCE, PATIENCE));
+        });
+        let answer = done_rx.recv_timeout(PATIENCE * 10);
+        drop(tx);
+        assert!(matches!(answer, Ok(Err(_))), "{answer:?}");
+    }
+
+    /// Review م٢: the panel stays open after a copy over رفّ, and its next
+    /// click must be judged the same way, not as a paste with no target.
+    #[test]
+    fn a_second_click_over_raff_is_still_only_a_copy() {
+        let slot = std::sync::Mutex::new(Some(OWN));
+        assert_eq!(take_target(&slot, OWN), Target::Raff);
+        assert_eq!(take_target(&slot, OWN), Target::Raff);
+
+        let other = std::sync::Mutex::new(Some(TARGET));
+        assert_eq!(take_target(&other, OWN), Target::App(Some(TARGET)));
+        assert_eq!(take_target(&other, OWN), Target::App(None), "spent");
+    }
+
+    /// A paste run with chosen delays: when the main-thread work starts, how
+    /// long from hiding the panel to the keystroke, and from the keystroke to
+    /// the answer. Returns what the wait answered, and in order what the work
+    /// did and when the user was told.
+    fn run_paste(
+        patience: Duration,
+        start_after: Duration,
+        press_after: Duration,
+        answer_after: Duration,
+    ) -> (Result<bool, String>, Vec<&'static str>) {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let ticket = Arc::new(PasteTicket::new());
+        let events = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let (ours, log) = (Arc::clone(&ticket), Arc::clone(&events));
+        let work = std::thread::spawn(move || {
+            std::thread::sleep(start_after);
+            let presser = Arc::clone(&ours);
+            if_claimed(&ours, move || {
+                log.lock().unwrap().push("hidden");
+                std::thread::sleep(press_after);
+                if presser.press() {
+                    log.lock().unwrap().push("pressed");
+                    std::thread::sleep(answer_after);
+                    let _ = tx.send(true);
+                } else {
+                    log.lock().unwrap().push("held back");
+                }
+            });
+        });
+        let answer = await_paste(&rx, &ticket, patience, patience);
+        events.lock().unwrap().push("told");
+        work.join().unwrap();
+        let events = events.lock().unwrap().clone();
+        (answer, events)
+    }
+
+    /// Still queued when the patience ran out: called off whole. Nothing is
+    /// hidden and nothing pressed, then or later.
+    #[test]
+    fn a_paste_still_queued_at_the_timeout_never_moves_anything() {
+        let (answer, events) = run_paste(PATIENCE, PATIENCE * 3, Duration::ZERO, Duration::ZERO);
+        assert!(answer.is_err());
+        assert_eq!(events, ["told"]);
+    }
+
+    /// Started, then stuck between hiding the panel and the keystroke past
+    /// both waits: the user is told the paste failed, so the keystroke must
+    /// not go out after that — into whatever is in front by then.
+    #[test]
+    fn a_paste_that_started_and_stalled_presses_nothing_after_the_user_is_told() {
+        let (answer, events) = run_paste(PATIENCE, Duration::ZERO, PATIENCE * 4, Duration::ZERO);
+        assert!(answer.is_err());
+        assert_eq!(events, ["hidden", "told", "held back"]);
+    }
+
+    /// Past the point of no return — the keystroke claimed — the wait does
+    /// not report a failure that already went out as a paste: it waits for
+    /// the answer that follows the keystroke.
+    #[test]
+    fn a_keystroke_that_went_out_is_waited_for_not_reported_failed() {
+        let (answer, events) = run_paste(
+            // Wider here: the answer must land between the second wait's end
+            // (2×) and the third's (3×), with room either side under load.
+            PATIENCE * 4,
+            Duration::ZERO,
+            Duration::ZERO,
+            PATIENCE * 10,
+        );
+        assert_eq!(answer, Ok(true));
+        assert_eq!(events, ["hidden", "pressed", "told"]);
+    }
+
+    #[test]
+    fn the_claim_is_won_once() {
+        let started = PasteTicket::new();
+        assert!(started.start());
+        assert!(!started.call_off());
+        assert!(!started.start(), "and started once");
+        assert!(started.press());
+        assert!(!started.abandon(), "a keystroke claimed is not abandoned");
+
+        let abandoned = PasteTicket::new();
+        assert!(abandoned.start());
+        assert!(abandoned.abandon());
+        assert!(!abandoned.press(), "nor pressed once abandoned");
+
+        let never_started = PasteTicket::new();
+        assert!(!never_started.press(), "no keystroke without a start");
+
+        let called_off = PasteTicket::new();
+        assert!(called_off.call_off());
+        assert!(!called_off.start());
+    }
+
+    /// The main-thread work asks for the claim before it hides the panel.
+    #[test]
+    fn the_work_claims_the_paste_before_anything_moves() {
+        let src = include_str!("paste.rs");
+        let flow = &src
+            [src.find("pub async fn paste_item").unwrap()..src.find("struct PasteTicket").unwrap()];
+        let claims = flow.find("if_claimed(&ours, move ||").expect("claimed");
+        assert!(claims < flow.find("panel::hide").unwrap());
+        assert!(flow.contains("await_paste(&rx, &ticket, PASTE_PATIENCE, PASTE_FINISH)"));
+        assert!(!flow.contains(".run_on_main_thread("));
+        let claimed = flow
+            .find("if !presser.press()")
+            .expect("the keystroke is claimed");
+        assert!(claimed < flow.find("macos::send_cmd_v()").unwrap());
+        // A paste that ends in the failure message is still a copy (م٣).
+        let failed = &flow[flow.find("PASTE ERROR").unwrap()..];
+        let counted = failed.find("bump_paste_signals(app, id)").expect("counted");
+        assert!(counted < failed.find("panel::show(app)").unwrap());
+    }
+
+    /// 009: Settings was in front when the panel opened, so the app to go
+    /// back to is رفّ. It used to activate itself, find itself in front as
+    /// expected, press ⌘V into its own window and call that a paste.
+    #[test]
+    fn a_panel_opened_over_raff_only_copies() {
+        assert!(opened_over_raff(Some(OWN), OWN));
+        assert!(!opened_over_raff(Some(TARGET), OWN));
+        assert!(!opened_over_raff(None, OWN));
+    }
+
+    #[test]
+    fn no_keystroke_is_pressed_into_raff_itself() {
+        assert!(!may_press_paste(true, OWN, OWN));
+        assert!(may_press_paste(true, TARGET, OWN));
+        assert!(!may_press_paste(false, TARGET, OWN));
+    }
+
+    /// And the paste flow asks both before anything moves or is pressed.
+    #[test]
+    fn the_paste_flow_asks_both() {
+        let src = include_str!("paste.rs");
+        let flow = &src[src.find("pub async fn paste_item").unwrap()
+            ..src.find("fn opened_over_raff").unwrap()];
+        let asks = flow
+            .find("take_target(&state.previous_app, own)")
+            .expect("asked");
+        assert!(
+            asks < flow.find("panel::hide").unwrap(),
+            "before the panel hides"
+        );
+        assert!(flow.contains("may_press_paste(still_trusted, front_before_paste.pid, own)"));
+    }
+
+    /// The panel reads `true`, `false`, or the one reason it words apart.
+    #[test]
+    fn a_paste_answers_the_panel_in_its_three_words() {
+        let json = |o| serde_json::to_value(o).unwrap();
+        assert_eq!(json(PasteOutcome::Pasted), serde_json::json!(true));
+        assert_eq!(json(PasteOutcome::Copied), serde_json::json!(false));
+        assert_eq!(
+            json(PasteOutcome::CopiedOverRaff),
+            serde_json::json!("copiedOverRaff")
+        );
+    }
+
+    /// IMP-06: harakat, tatweel and their kin go; the words stay.
+    #[test]
+    fn bare_text_keeps_the_letters_and_drops_the_tashkeel() {
+        assert_eq!(without_tashkeel("مُحَمَّدٌ"), "محمد");
+        assert_eq!(without_tashkeel("الســـلام عليكم"), "السلام عليكم");
+        assert_eq!(without_tashkeel("رَحْمَٰن"), "رحمن", "the superscript alef too");
+        assert_eq!(
+            without_tashkeel("صَلَّى ٱللَّهُ ۖ"),
+            "صلى ٱلله ",
+            "the Quranic marks too"
+        );
+        let untouched = "Rust 1.96، والأرقام ١٢٣، و«علامات» — ok?";
+        assert_eq!(without_tashkeel(untouched), untouched);
+        assert_eq!(
+            without_tashkeel("إِنَّ أُمَّ آمِنَةٍ"),
+            "إن أم آمنة",
+            "hamza and madda are letters"
+        );
+    }
+
+    /// Review 2026-10-22: decomposed text (NFD, as macOS file names and some
+    /// tools give it) spells أ إ آ as alef plus a combining hamza or madda —
+    /// part of the letter, not tashkeel. And the Quranic signs that are
+    /// symbols, not marks (۝ ۞ ۩), and the small waw and yeh, stay.
+    #[test]
+    fn bare_text_keeps_decomposed_hamza_and_quranic_symbols() {
+        let decomposed = "\u{0627}\u{0654}\u{064F}\u{0645} \u{0627}\u{0655}\u{0650}\u{0646} \u{0627}\u{0653}\u{0645}\u{0646} \u{0621}\u{065F}";
+        assert_eq!(
+            without_tashkeel(decomposed),
+            "\u{0627}\u{0654}\u{0645} \u{0627}\u{0655}\u{0646} \u{0627}\u{0653}\u{0645}\u{0646} \u{0621}\u{065F}"
+        );
+        let signs = "\u{06DD}١ \u{06DE} \u{06E9} \u{06E5}\u{06E6}";
+        assert_eq!(without_tashkeel(signs), signs);
+        assert_eq!(
+            without_tashkeel("\u{06D6}\u{06DC}\u{06DF}\u{06E4}\u{06E7}\u{06E8}\u{06EA}\u{06ED}"),
+            "",
+            "the marks still go"
+        );
     }
 
     #[test]

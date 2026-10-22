@@ -6,7 +6,15 @@
 // its content type, and the paired Figma actions sit at the trailing edge.
 
 import { api, on } from './store.js';
-import { arabicCount, arabicDigits, filterItems, hotkeyDisplay, hotkeyRefusal, relativeTimeAr } from './logic.js';
+import {
+  arabicCount,
+  arabicDigits,
+  filterItems,
+  hasTashkeel,
+  hotkeyDisplay,
+  hotkeyRefusal,
+  relativeTimeAr,
+} from './logic.js';
 import { createHoverIntent } from './hover-intent.js';
 import {
   SETTINGS,
@@ -142,13 +150,12 @@ function setListStructure(hasOptions) {
 
 function syncActiveOption() {
   const selected = listEl.querySelector('.row.selected[role="row"]');
-  if (selected) {
-    searchEl.setAttribute('aria-activedescendant', selected.id);
-    searchEl.setAttribute('aria-expanded', 'true');
-  } else {
-    searchEl.removeAttribute('aria-activedescendant');
-    searchEl.setAttribute('aria-expanded', 'false');
-  }
+  if (selected) searchEl.setAttribute('aria-activedescendant', selected.id);
+  else searchEl.removeAttribute('aria-activedescendant');
+  // Expanded is whether the grid has rows to move into, selected or not
+  // (audit 021 ج2).
+  const hasRows = Boolean(listEl.querySelector('.row[role="row"][data-id]'));
+  searchEl.setAttribute('aria-expanded', String(hasRows));
 }
 
 const BRAND = Symbol('brand-mark');
@@ -299,6 +306,19 @@ function buildRow(item, index) {
 
   if (isGrid()) return buildCard(row, item, index);
 
+  // A pinned item's name, above what it holds, in one column with it (IMP-07).
+  let content = preview;
+  if (item.isPinned && item.label) {
+    content = document.createElement('div');
+    content.className = 'row-text';
+    const name = document.createElement('div');
+    name.className = 'row-label';
+    name.dir = 'auto';
+    name.textContent = item.label; // user-typed → textContent
+    content.append(name);
+    preview.append(content);
+  }
+
   if (item.type === 'image') {
     const thumb = buildThumb(row, item);
     const media = document.createElement('div');
@@ -307,7 +327,7 @@ function buildRow(item, index) {
     missing.className = 'preview-missing';
     missing.textContent = unavailableNote(item.id);
     media.append(thumb, missing);
-    preview.append(media);
+    content.append(media);
   } else {
     // «08» renders text and code identically — Cairo Medium 12, right-aligned,
     // with dir=auto letting a Latin snippet read left-to-right in place. Only
@@ -321,7 +341,7 @@ function buildRow(item, index) {
       title.dir = 'auto';
     }
     title.textContent = item.text; // clip content → textContent
-    preview.append(title);
+    content.append(title);
   }
   const time = document.createElement('span');
   time.className = 'row-time';
@@ -364,7 +384,9 @@ function buildRow(item, index) {
   pinBtn.className = 'row-action pin-btn' + (item.isPinned ? ' is-pinned' : '');
   pinBtn.replaceChildren(createIcon(item.isPinned ? PIN_TOGGLE : PIN));
   pinBtn.title = item.isPinned ? 'إلغاء تثبيت العنصر' : 'تثبيت العنصر';
-  pinBtn.setAttribute('aria-label', pinBtn.title);
+  // A toggle: one name, its state in aria-pressed (ت٤٠). The tooltip may say
+  // what a click will do; the accessible name must not flip with the state.
+  pinBtn.setAttribute('aria-label', 'تثبيت العنصر');
   pinBtn.setAttribute('aria-pressed', String(item.isPinned));
   pinBtn.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -412,7 +434,13 @@ function buildRow(item, index) {
      twice, which would paste twice. Copy-without-pasting stays available as
      the secondary action on ⌘C. */
   row.addEventListener('click', (e) => {
-    selectedId = item.id;
+    // Through `setSelection`, not behind the list's back: when the panel
+    // stays open after the paste, the row shown as chosen must be this one
+    // (audit 012).
+    setSelection(item.id);
+    // The search field holds the active descendant: a click on a row must not
+    // leave it without focus when the panel stays open after the paste.
+    searchEl.focus({ preventScroll: true });
     paste(item.id, e.altKey);
   });
 
@@ -483,6 +511,17 @@ function buildCard(row, item, index) {
     media.append(slot);
   }
 
+  // A pinned picture's name (Sultan, 2026-10-22), above the time and kind,
+  // which stay.
+  let name = null;
+  if (item.isPinned && item.label) {
+    name = document.createElement('div');
+    name.className = 'card-label';
+    name.setAttribute('role', 'gridcell');
+    name.dir = 'auto';
+    name.textContent = item.label; // user-typed → textContent
+  }
+
   const foot = document.createElement('div');
   foot.className = 'card-foot';
   const time = document.createElement('span');
@@ -506,10 +545,16 @@ function buildCard(row, item, index) {
   foot.append(kind, time);
 
   row.addEventListener('click', (e) => {
-    selectedId = item.id;
+    // Through `setSelection`, not behind the list's back: when the panel
+    // stays open after the paste, the row shown as chosen must be this one
+    // (audit 012).
+    setSelection(item.id);
+    // The search field holds the active descendant: a click on a row must not
+    // leave it without focus when the panel stays open after the paste.
+    searchEl.focus({ preventScroll: true });
     paste(item.id, e.altKey);
   });
-  row.append(media, foot);
+  row.append(...[media, name, foot].filter(Boolean));
   if (item.isPinned) {
     const flag = document.createElement('span');
     flag.className = 'row-pin-flag';
@@ -576,7 +621,9 @@ function movePinned(id, delta) {
       await refresh();
     } catch (err) {
       await refresh();
-      presentToast(errorMessage(err), { duration: PIN_TOAST_MS, kind: 'error' });
+      // Through the one lane: drawn over a delete's receipt it would clear
+      // the receipt's timer and leave that delete pending (audit 010).
+      deliverFeedback(errorMessage(err), { duration: PIN_TOAST_MS, kind: 'error' });
     }
   });
 }
@@ -684,13 +731,22 @@ function renderList() {
   }
 
   setListStructure(true);
-  listEl.setAttribute('aria-rowcount', String(visible.length));
+  listEl.setAttribute('aria-rowcount', String(visible.length + (query.trim() ? 1 : 0)));
   const fragment = document.createDocumentFragment();
   visible.forEach((item, index) => fragment.append(buildRow(item, index)));
-  if (query) {
+  if (query.trim()) {
+    // A grid owns rows and nothing else: the closing line is a row of its
+    // own, after the results (audit 021 ج2). It has no id, so the keyboard
+    // and the selection, which move over `.row`, never land on it.
     const end = document.createElement('div');
     end.className = 'results-end';
-    end.textContent = `نهاية نتائج البحث عن «${query}»`;
+    end.setAttribute('role', 'row');
+    end.setAttribute('aria-rowindex', String(visible.length + 1));
+    const cell = document.createElement('span');
+    cell.setAttribute('role', 'gridcell');
+    // Isolated: a Latin query must not reorder the Arabic around it.
+    cell.textContent = `نهاية نتائج البحث عن «\u2068${query.trim()}\u2069»`;
+    end.append(cell);
     fragment.append(end);
   }
   listEl.append(fragment);
@@ -838,6 +894,49 @@ function shortcutHint(keys, label) {
   return hint;
 }
 
+/** The row control holding focus, as what to find again after a rebuild:
+ * its row and its classes. `null` when focus is anywhere else. */
+function heldListFocus() {
+  const el = document.activeElement;
+  if (!el || el === searchEl || !listEl.contains(el)) return null;
+  return {
+    id: el.closest('.row[data-id]')?.dataset.id ?? null,
+    // What the control is, not its state: `is-pinned` flips with the pin.
+    classes: [...el.classList].filter((name) => !name.startsWith('is-')),
+    // A state view's own button (retry, enable capture) has an id.
+    elementId: el.id || null,
+  };
+}
+
+/** At the end of the shelf a move button turns off; its opposite does not. */
+const OPPOSITE_MOVE = { 'move-up': 'move-down', 'move-down': 'move-up' };
+
+/** Puts focus back on the same control of the same row — or on search, when
+ * that row is gone or the control can no longer be pressed. Left alone when
+ * something else has focus by now. */
+function restoreListFocus(held) {
+  if (!held || (document.activeElement && document.activeElement !== document.body)) return;
+  const byId = held.elementId && document.getElementById(held.elementId);
+  if (byId && listEl.contains(byId) && !byId.disabled) {
+    byId.focus({ preventScroll: true });
+    return;
+  }
+  const row = [...listEl.querySelectorAll('.row[data-id]')].find((r) => r.dataset.id === held.id);
+  const find = (classes) =>
+    row &&
+    classes.length > 0 &&
+    [...row.querySelectorAll('button, [tabindex]')].find((el) =>
+      classes.every((name) => el.classList.contains(name))
+    );
+  let target = find(held.classes);
+  const move = held.classes.find((name) => OPPOSITE_MOVE[name]);
+  if (target?.disabled && move) {
+    target = find(held.classes.map((name) => OPPOSITE_MOVE[name] ?? name));
+  }
+  if (target && !target.disabled) target.focus({ preventScroll: true });
+  else searchEl.focus({ preventScroll: true });
+}
+
 /** Contextual keyboard legend. It advertises only actions that can run in the
  * current state, and uses the selected item's real pin state for the label. */
 function syncShortcutBar() {
@@ -880,11 +979,15 @@ function syncShortcutBar() {
  * state, and the technical cause goes to `diag` only.
  */
 function render() {
+  // Every render rebuilds the rows, so a row control holding focus is
+  // replaced and focus would fall to <body> (audit 020 ج1).
+  const held = heldListFocus();
   try {
     renderCaptureStrip();
     renderList();
     // The preview shows what is listed: refilled, or closed if it is gone.
     if (previewWant) requestPreview(previewWant);
+    restoreListFocus(held);
   } catch (err) {
     diag('render:threw', err);
     if (phase === 'error') return; // already showing the failure state
@@ -1314,6 +1417,9 @@ const ERROR_MESSAGES = {
   'raff/paste-failed': 'تعذّر اللصق. المحتوى على الحافظة، الصقه بـ \u2066⌘V\u2069.',
   'raff/undo-no-room': 'لم يعد في سجلّك متّسع لهذا العنصر، فلم يُستعد.',
   'raff/undo-retention': 'انتهت مدة الاحتفاظ بهذا العنصر، فلم يُستعد.',
+  'raff/undo-expired': 'انتهت مهلة التراجع، وحُذف العنصر نهائيًا.',
+  'raff/label-too-long': 'الاسم أطول من ٤٠ حرفًا.',
+  'raff/label-not-pinned': 'التسمية للمثبّتات فقط. ثبّته أولًا بـ⁦⌥P⁩.',
   'raff/clipboard-off': 'هذه نسخة تجربة من رفّ، فلا تصل إلى الحافظة.',
 };
 
@@ -1351,7 +1457,8 @@ function deleteItem(id, { restoreFocus = false } = {}) {
       // refresh ever finds it neither — and drops its picture before «تراجع».
       await refresh();
       optimisticDeletedIds.delete(id);
-      activeDelete = { token: receipt.token, snapshot };
+      // `after`: refreshes begun from here on know of this receipt.
+      activeDelete = { token: receipt.token, snapshot, after: refreshToken };
       presentToast('تم حذف العنصر', {
         duration: DELETE_TOAST_MS,
         undo: true,
@@ -1388,17 +1495,24 @@ function undoLastDelete() {
 
   enqueueMutation(async () => {
     try {
-      await api.undoDelete(pending.token);
+      const standing = await api.undoDelete(pending.token);
       // From here the backend is the authority: it may have folded the row
       // into a newer copy of it (017) rather than bring it back as it was, so
-      // the painted-back snapshot must not outlive the refresh.
+      // the painted-back snapshot must not outlive the refresh — and the
+      // selection follows to the row that now stands for it (ت٤٥ ب٦).
       optimisticRestores.delete(pending.snapshot.item.id);
+      if (typeof standing === 'string' && selectedId === pending.snapshot.item.id) {
+        selectedId = standing;
+      }
       await refresh();
     } catch (err) {
       optimisticRestores.delete(pending.snapshot.item.id);
       removeLocalItem(pending.snapshot.item.id);
       render();
-      presentToast(errorMessage(err), { duration: PIN_TOAST_MS, kind: 'error' });
+      // An undo after the delete was made final is information about that
+      // delete, not a failure (ت٤٥ ب٣).
+      const kind = String(err) === 'raff/undo-expired' ? 'delete' : 'error';
+      presentToast(errorMessage(err), { duration: PIN_TOAST_MS, kind });
     }
   });
 }
@@ -1407,12 +1521,22 @@ toastUndoEl.addEventListener('click', undoLastDelete);
 
 // ─── Actions ──────────────────────────────────────────────────────────────
 
-function paste(id, plain) {
+function paste(id, plain, bare = false) {
   if (!id) return;
   api
-    .pasteItem(id, plain)
+    .pasteItem(id, plain, bare)
     .then(async (pasted) => {
-      if (pasted) return;
+      if (pasted === true) return;
+      // Copied only because رفّ itself was in front — Settings, or the
+      // welcome's «افتح رفّ» (009): say that, not «grant Accessibility».
+      if (pasted === 'copiedOverRaff') {
+        // A reason and an instruction: the reading time of the longer toasts.
+        showToast(
+          'نُسخ إلى الحافظة — لم يُلصق لأن رفّ كان في المقدمة. الصقه بـ \u2066⌘V\u2069.',
+          ACCESS_TOAST_MS
+        );
+        return;
+      }
       // `pasted: false` always means the item is safely on the clipboard —
       // Rust writes it before attempting anything else — but tells us
       // nothing about WHY the automatic paste half didn't happen. Missing
@@ -1613,6 +1737,21 @@ async function refresh({ retry = false } = {}) {
         if (optimistic) item.isPinned = optimistic.value;
       }
       for (const snapshot of optimisticRestores.values()) restoreSnapshot(state, snapshot);
+      // Rust no longer holds this receipt — «مسح السجل» made the delete final
+      // (ت٤٥ ب٣): «تراجع» would offer what cannot come back. Only a refresh
+      // begun after the receipt is trusted to know of it.
+      if (
+        activeDelete &&
+        token > activeDelete.after &&
+        next.undoToken !== undefined &&
+        next.undoToken !== activeDelete.token
+      ) {
+        activeDelete = null;
+        // Gone at once, not after the exit: nothing to press in the meantime.
+        toastUndoEl.hidden = true;
+        dismissFeedback({ animate: true });
+        scheduleFeedbackDrain();
+      }
       forgetPicturesOfGoneItems(next);
       phase = 'ready';
       diag('refresh:ok', {
@@ -1754,6 +1893,17 @@ filtersEl.addEventListener('keydown', (e) => {
 
 const previewEl = document.getElementById('preview');
 const previewKindEl = document.getElementById('preview-kind');
+const previewBareEl = previewEl.querySelector('[data-action="bare"]');
+const previewLabelBtn = previewEl.querySelector('[data-action="label"]');
+const previewBareLabelRow = document.getElementById('preview-bare-label');
+
+/** The row of the two goes when neither is offered. */
+function syncBareLabelRow() {
+  previewBareLabelRow.hidden = previewBareEl.hidden && previewLabelBtn.hidden;
+}
+const previewLabelText = document.getElementById('preview-label-text');
+const labelForm = document.getElementById('preview-label-form');
+const labelInput = document.getElementById('preview-label-input');
 const previewWhenEl = document.getElementById('preview-when');
 const previewSizeEl = document.getElementById('preview-size');
 const previewBodyEl = document.getElementById('preview-body');
@@ -1817,8 +1967,15 @@ function announcePreview(message) {
   });
 }
 
+/** A preview that goes takes its name field with it, and the keyboard the
+ *  field had goes back to search — never left in a field nobody can see. */
+function dropLabelField() {
+  closeLabelField({ refocus: document.activeElement === labelInput });
+}
+
 async function closePreviewWindow() {
   if (!previewSide) return;
+  dropLabelField();
   previewSide = null;
   previewEl.hidden = true;
   delete previewEl.dataset.id;
@@ -1833,16 +1990,34 @@ function closePreviewByHand() {
   requestPreview(null);
 }
 
-/** Enter (⌥ for plain), ⌘C, ⌥P and ⌘⌫ — the keys that act on one item. */
+/** Enter (⌥ for plain), ⌘C, ⌥P, ⌥L and ⌘⌫ — the keys that act on one item. */
 function actsOnItem(e) {
-  if (e.ctrlKey || e.shiftKey) return false;
+  if (e.shiftKey) return false;
   if (e.key === 'Enter' && !e.metaKey) return true;
+  if (e.ctrlKey) return false;
   if (e.metaKey && !e.altKey && (e.code === 'KeyC' || e.key === 'Backspace')) return true;
-  return e.altKey && !e.metaKey && e.code === 'KeyP';
+  return e.altKey && !e.metaKey && (e.code === 'KeyP' || e.code === 'KeyL');
+}
+
+/** ⌥L (Sultan, 2026-10-22): the selected pinned item's name field, in its
+ *  preview held open. A history row is told why not. */
+async function labelFromKeys(id) {
+  const item = visible.find((entry) => entry.id === id);
+  if (!item) return;
+  if (!item.isPinned) {
+    showToast(ERROR_MESSAGES['raff/label-not-pinned'], PIN_TOAST_MS, 'error');
+    return;
+  }
+  if (previewWant?.id !== id || previewEl.hidden) await requestPreview({ id, mode: 'held' });
+  if (previewEl.dataset.id !== id || previewEl.hidden) return;
+  // Already open (the keyboard went back to search): back to it, as typed.
+  if (!labelForm.hidden) labelInput.focus({ preventScroll: true });
+  else openLabelField(id);
 }
 
 /** The panel was hidden, and Rust narrowed its window with it. */
 function resetPreview() {
+  dropLabelField();
   hoverIntent.cancel();
   disarmHover();
   previewWant = null;
@@ -1870,6 +2045,15 @@ function fillPreview(item) {
   const sameItem = previewEl.dataset.id === item.id;
   previewEl.dataset.id = item.id;
   previewEl.dataset.type = item.type;
+  // Only where there is something for it to drop.
+  previewBareEl.hidden = !hasSomethingToDrop(item.id);
+  // A name is the shelf's (IMP-07). Another item closes an open field, and
+  // the keyboard it had goes back to search.
+  // So does the same item no longer pinned (unpinned with the field open).
+  if (!sameItem || !item.isPinned) dropLabelField();
+  previewLabelBtn.hidden = !item.isPinned || !labelForm.hidden;
+  previewLabelText.textContent = item.label ? 'تغيير الاسم' : 'تسمية';
+  syncBareLabelRow();
   previewKindEl.textContent = item.type === 'code' ? 'شفرة' : contentTypeIcon(item.type).label;
   previewWhenEl.textContent = [
     relativeTimeAr(item.createdAt),
@@ -1981,8 +2165,71 @@ function previewContent(item) {
   return text;
 }
 
-// Pressing a preview button never takes the focus from the search.
-previewEl.addEventListener('mousedown', (e) => e.preventDefault());
+// Pressing a preview button never takes the focus from the search — the
+// name field excepted, which is typed in.
+previewEl.addEventListener('mousedown', (e) => {
+  if (!isWritable(e.target)) e.preventDefault();
+});
+
+/** Whether «لصق بلا تشكيل» would change this item: the button's rule. */
+function hasSomethingToDrop(id) {
+  const item = visible.find((entry) => entry.id === id);
+  return Boolean(item) && item.type !== 'image' && hasTashkeel(item.text);
+}
+
+function openLabelField(id) {
+  const item = [...state.pinned, ...state.history].find((entry) => entry.id === id);
+  if (!item?.isPinned) return;
+  // A name being typed holds the preview: the pointer wandering off a hover
+  // preview no longer closes it, nor does resting on another row.
+  if (previewWant) previewWant.mode = 'held';
+  labelInput.value = item.label ?? '';
+  labelForm.hidden = false;
+  previewLabelBtn.hidden = true; // the field takes the button's place
+  syncBareLabelRow();
+  labelInput.focus({ preventScroll: true });
+  labelInput.select();
+}
+
+function closeLabelField({ refocus = true } = {}) {
+  if (labelForm.hidden) return;
+  labelForm.hidden = true;
+  const shown = visible.find((entry) => entry.id === previewEl.dataset.id);
+  previewLabelBtn.hidden = !shown?.isPinned;
+  syncBareLabelRow();
+  if (refocus) searchEl.focus({ preventScroll: true });
+}
+
+labelForm.addEventListener('submit', (e) => {
+  e.preventDefault();
+  const id = previewEl.dataset.id;
+  const label = labelInput.value.trim();
+  closeLabelField();
+  if (!id) return;
+  const item = state.pinned.find((entry) => entry.id === id);
+  if (item && (item.label ?? '') === label) return; // nothing changed, nothing written
+  enqueueMutation(async () => {
+    try {
+      await api.setLabel(id, label || null);
+      await refresh();
+    } catch (err) {
+      deliverFeedback(errorMessage(err), { duration: PIN_TOAST_MS, kind: 'error' });
+    }
+  });
+});
+
+// The field's keys are the field's: Enter saves (submit), Escape cancels;
+// none reaches the panel's own keys (paste, close the preview…).
+labelInput.addEventListener('keydown', (e) => {
+  e.stopPropagation();
+  if (e.key === 'Escape') {
+    e.preventDefault();
+    closeLabelField();
+  } else if (e.key === 'Enter' && !e.isComposing) {
+    e.preventDefault();
+    labelForm.requestSubmit();
+  }
+});
 previewEl.addEventListener('click', (e) => {
   const button = e.target.closest?.('[data-action]');
   const id = previewEl.dataset.id;
@@ -1993,6 +2240,12 @@ previewEl.addEventListener('click', (e) => {
       return;
     case 'plain':
       paste(id, true);
+      return;
+    case 'bare':
+      paste(id, false, true);
+      return;
+    case 'label':
+      openLabelField(id);
       return;
     case 'copy':
       copyItem(id);
@@ -2108,7 +2361,7 @@ window.addEventListener('keydown', (e) => {
     const item = visible[Number(e.code.slice(5)) - 1];
     e.preventDefault();
     if (item) {
-      selectedId = item.id;
+      setSelection(item.id);
       paste(item.id, e.altKey);
     }
     return;
@@ -2152,6 +2405,20 @@ window.addEventListener('keydown', (e) => {
   ) {
     e.preventDefault();
     togglePinItem(selectedId);
+    return;
+  }
+  // By the key's place (`code`), as ⌥P: the same key in every layout.
+  if (
+    !query &&
+    selectedId &&
+    e.altKey &&
+    !e.metaKey &&
+    !e.ctrlKey &&
+    !e.shiftKey &&
+    e.code === 'KeyL'
+  ) {
+    e.preventDefault();
+    if (!e.repeat) labelFromKeys(selectedId); // held down: one press
     return;
   }
   if (e.metaKey && !e.shiftKey && !e.altKey && !e.ctrlKey && e.key === 'Backspace') {
@@ -2209,7 +2476,9 @@ window.addEventListener('keydown', (e) => {
       return;
     case 'Enter':
       e.preventDefault();
-      paste(selectedId, e.altKey); // ⌥⏎ = لصق كنص عادي
+      // ⌥⏎ = لصق كنص عادي، ⌃⏎ = لصق بلا تشكيل (IMP-06) — where there is
+      // something to drop, as the button; elsewhere it is ⏎.
+      paste(selectedId, e.altKey, e.ctrlKey && !e.altKey && hasSomethingToDrop(selectedId));
       return;
     case 'Escape':
       e.preventDefault();

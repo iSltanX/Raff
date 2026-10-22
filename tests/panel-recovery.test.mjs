@@ -61,7 +61,8 @@ test('panel recovery: first load retries, then ⌘R re-initialises in place', as
     const pinAction = pinned.querySelector('.pin-btn.is-pinned');
     assert.ok(pinAction, 'the pinned row keeps its unpin action visible');
     assert.equal(pinAction.title, 'إلغاء تثبيت العنصر');
-    assert.equal(pinAction.getAttribute('aria-label'), 'إلغاء تثبيت العنصر');
+    // One name for the toggle; its state is aria-pressed (ت٤٠).
+    assert.equal(pinAction.getAttribute('aria-label'), 'تثبيت العنصر');
     assert.equal(pinAction.getAttribute('aria-pressed'), 'true');
     assert.equal(
       dom.window.document.querySelector('.row[data-id="r1"] .pin-indicator'),

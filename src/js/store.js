@@ -28,14 +28,25 @@ export const api = {
   getSettings: () => invoke('get_settings'),
   // Ids of rows matching beyond the preview the panel holds.
   searchItems: (query) => invoke('search_items', { query }),
-  pasteItem: (id, plain = false) => invoke('paste_item', { id, plain }),
+  // `true` pasted, `false` copied only, or a string naming why it was only
+  // copied (`'copiedOverRaff'`, paste.rs `PasteOutcome`): a new reason must be
+  // worded in panel.js, or it reads as the Accessibility fallback.
+  // `bare`: «لصق بلا تشكيل» (IMP-06), the text without harakat or tatweel.
+  // Sent only when asked for: every other paste is what it always was.
+  pasteItem: (id, plain = false, bare = false) =>
+    invoke('paste_item', bare ? { id, plain, bare } : { id, plain }),
   copyItem: (id) => invoke('copy_item', { id }),
   togglePin: (id, isPinned) => invoke('toggle_pin', { id, isPinned }),
   reorderPinned: (ids) => invoke('reorder_pinned', { ids }),
+  // A pinned item's name (IMP-07); null or blank clears it.
+  setLabel: (id, label) => invoke('set_label', { id, label }),
   deleteItem: (id) => invoke('delete_item', { id }),
   undoDelete: (token) => invoke('undo_delete', { token }),
   commitDelete: (token) => invoke('commit_delete', { token }),
   clearHistory: () => invoke('clear_history'),
+  // IMP-05: Rust runs the native panels and handles the file.
+  exportBackup: () => invoke('export_backup'),
+  importBackup: () => invoke('import_backup'),
   clearLearning: () => invoke('clear_learning'),
   learningSummary: () => invoke('learning_summary'),
   // Only the fields being changed; the rest stay as the store holds them.
@@ -55,7 +66,9 @@ export const api = {
   axStatus: () => invoke('ax_status'),
   requestAccessibility: () => invoke('request_accessibility'),
   openAccessibilitySettings: () => invoke('open_accessibility_settings'),
-  firstrunDone: () => invoke('firstrun_done'),
+  // `openPanel`: «افتح رفّ» — Rust opens the panel only once the welcome is
+  // marked done, then closes it (026 ج3).
+  firstrunDone: (openPanel = false) => invoke('firstrun_done', { openPanel }),
   listRunningApps: () => invoke('list_running_apps'),
   checkForUpdate: () => invoke('check_for_update'),
   downloadAndInstallUpdate: () => invoke('download_and_install_update'),

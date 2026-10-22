@@ -467,6 +467,7 @@ body {
 
 .results-end {
   padding: var(--space-12) 0 var(--space-4);
+  overflow-wrap: anywhere;
   text-align: center;
   font-size: var(--text-caption);
   color: var(--ink-3);
@@ -802,6 +803,8 @@ body {
   align-items: center;
   justify-content: space-between;
   height: 24px;
+  /* Level with a named card's foot in the same grid row. */
+  margin-top: auto;
   padding: 0 var(--space-4);
 }
 
@@ -1015,3 +1018,76 @@ html[data-preview='right'] .preview-pane {
   font-family: var(--font-latin);
   font-weight: 600;
 }
+
+/* IMP-07: a pinned item's name, above its text, in one column with it. */
+.row-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.row-text > .preview-title {
+  flex: none;
+}
+
+.row-label {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: var(--text-caption);
+  font-weight: 700;
+  color: var(--ink-2);
+}
+
+.preview-label-form {
+  display: flex;
+  gap: var(--space-8);
+}
+
+.preview-label-form[hidden] {
+  display: none;
+}
+
+.preview-label-form .text-input {
+  flex: 1;
+  min-width: 0;
+}
+
+/* `.preview-actions .btn` stretches every action to the full width; «حفظ»
+   keeps its own, or it takes the field's. */
+.preview-label-form .btn {
+  flex: none;
+  width: auto;
+}
+
+/* «لصق بلا تشكيل» and «تسمية» share a row; either alone fills it. */
+.preview-pair.is-flex {
+  display: flex;
+  gap: var(--space-8);
+}
+
+.preview-pair.is-flex > .btn {
+  flex: 1;
+  min-width: 0;
+}
+
+.preview-pair[hidden],
+.preview-pair.is-flex > [hidden] {
+  display: none;
+}
+
+/* A pinned picture's name on its card, above the time and kind. */
+.card-label {
+  overflow: hidden;
+  padding: 0 var(--space-4);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: var(--text-caption);
+  font-weight: 700;
+  line-height: var(--line-tight);
+  color: var(--ink-2);
+  unicode-bidi: plaintext;
+  text-align: right;
+}
+

@@ -4,7 +4,7 @@
 // and the tray menu's consume-once intent.
 
 import { api, on } from './store.js';
-import { arabicDigits } from './logic.js';
+import { arabicDigits, releaseDate } from './logic.js';
 import { createUpdateFlow } from './update-flow.js';
 
 // The native WKWebView menu is English ("Reload") — never shown in Raff.
@@ -82,6 +82,36 @@ function setProgress(percent) {
 }
 
 function render(state, data = {}) {
+  const hadFocus = updateWindowEl.contains(document.activeElement);
+  paint(state, data);
+  keepFocus(hadFocus);
+}
+
+/** Each state hides the last one's buttons, the pressed one among them: focus
+ * moves to what this state offers, or to the status line saying what is
+ * happening — never to <body> (IMP-08). Parked on the status line, it moves
+ * on as soon as there is something to press. */
+function keepFocus(hadFocus) {
+  const active = document.activeElement;
+  const lost = !active || active === document.body || active.closest('[hidden]') || active === statusEl;
+  if (!hadFocus || !lost) return;
+  const next = [restartBtn, downloadBtn, retryBtn, okBtn, laterBtn].find((button) => !button.hidden);
+  if (next) {
+    next.focus();
+  } else if (active !== statusEl) {
+    statusEl.tabIndex = -1;
+    statusEl.focus();
+  }
+}
+
+/** The status line is a live region, and now also where focus may rest:
+ * rewriting it with the same words on every progress event would have it
+ * announced again each time. */
+function say(text) {
+  if (statusEl.textContent !== text) statusEl.textContent = text;
+}
+
+function paint(state, data) {
   resizeForState(state, data);
   updateWindowEl.setAttribute(
     'aria-busy',
@@ -104,24 +134,27 @@ function render(state, data = {}) {
 
   switch (state) {
     case 'checking':
-      statusEl.textContent = 'جارٍ التحقق من وجود تحديثات…';
+      say('جارٍ التحقق من وجود تحديثات…');
       subEl.textContent = CHECKING_SUB;
       break;
 
     case 'uptodate':
-      statusEl.textContent = data.currentVersion
+      say(data.currentVersion
         ? `لا توجد تحديثات — الإصدار الحالي ${arabicDigits(data.currentVersion)}`
-        : 'لا توجد تحديثات';
+        : 'لا توجد تحديثات');
       okBtn.hidden = false;
       break;
 
     case 'available':
-      statusEl.textContent = 'إصدار جديد متاح';
+      say('إصدار جديد متاح');
       subEl.textContent = 'الحزمة موقّعة، ويرفض رفّ ما لا يطابق توقيعه.';
       availableEl.hidden = false;
       newVersionEl.textContent = `الإصدار ${arabicDigits(data.version)}`;
-      dateEl.hidden = !data.date;
-      if (data.date) dateEl.textContent = `تاريخ النشر: ${arabicDigits(data.date)}`;
+      {
+        const published = releaseDate(data.date, document.documentElement.lang);
+        dateEl.hidden = !published;
+        if (published) dateEl.textContent = `تاريخ النشر: ${published}`;
+      }
       notesEl.hidden = !data.notes;
       notesEl.textContent = data.notes || ''; // textContent → untrusted-safe
       downloadBtn.hidden = false;
@@ -132,18 +165,18 @@ function render(state, data = {}) {
       availableEl.hidden = false; // keep the version context visible
       progressEl.hidden = false;
       setProgress(data.percent ?? null);
-      statusEl.textContent = 'جارٍ تنزيل التحديث…';
+      say('جارٍ تنزيل التحديث…');
       break;
 
     case 'installing':
       availableEl.hidden = false;
       progressEl.hidden = false;
       setProgress(null); // install has no byte progress
-      statusEl.textContent = 'جارٍ تثبيت التحديث…';
+      say('جارٍ تثبيت التحديث…');
       break;
 
     case 'installed':
-      statusEl.textContent = 'اكتمل التثبيت';
+      say('اكتمل التثبيت');
       subEl.textContent = 'أعد تشغيل رفّ لإكمال التثبيت. لا يُفقد شيء من سجلّك.';
       restartBtn.hidden = false;
       laterBtn.hidden = false;
@@ -153,7 +186,7 @@ function render(state, data = {}) {
       statusEl.classList.add('error');
       statusEl.setAttribute('role', 'alert');
       statusEl.setAttribute('aria-live', 'assertive');
-      statusEl.textContent = data.message || 'حدث خطأ';
+      say(data.message || 'حدث خطأ');
       lastErrorFrom = data.from || 'check';
       if (lastErrorFrom === 'restart') {
         // The appropriate retry for a failed restart is the restart button
@@ -166,7 +199,7 @@ function render(state, data = {}) {
       break;
 
     default:
-      statusEl.textContent = 'جارٍ التحقق من وجود تحديثات…';
+      say('جارٍ التحقق من وجود تحديثات…');
       subEl.textContent = CHECKING_SUB;
   }
 }
@@ -176,6 +209,13 @@ const flow = createUpdateFlow({ onChange: render });
 const closeWindow = () => window.__TAURI__?.window.getCurrentWindow().close();
 okBtn.addEventListener('click', closeWindow);
 laterBtn.addEventListener('click', closeWindow);
+// Escape leaves as the buttons do. Closing only hides this window (main.rs),
+// so a download or a staged restart is still there when it is reopened.
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape' || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
+  e.preventDefault();
+  closeWindow();
+});
 downloadBtn.addEventListener('click', () => flow.download());
 restartBtn.addEventListener('click', () => flow.restart());
 retryBtn.addEventListener('click', () => {
@@ -193,7 +233,11 @@ retryBtn.addEventListener('click', () => {
 // simply left on screen instead of starting a new check.
 async function claimMenuIntent() {
   try {
-    if (await api.consumeUpdateIntent()) flow.checkIfIdle();
+    const intent = await api.consumeUpdateIntent();
+    // `true`: check. An object: the version Settings or About just found,
+    // shown as it is rather than asked for again (audit 022 ج2).
+    if (intent === true) flow.checkIfIdle();
+    else if (intent && typeof intent === 'object') flow.showFound(intent);
   } catch (err) {
     console.error('raff: update-intent claim failed', err);
   }

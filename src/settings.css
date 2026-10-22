@@ -111,6 +111,9 @@ body {
 
 .settings-page {
   outline: none;
+  /* The hidden page heading (sr-only) is placed within its page, so the
+     VoiceOver cursor on it scrolls to where the page begins. */
+  position: relative;
 }
 
 .settings-page:focus-visible {
@@ -121,10 +124,6 @@ body {
 /* The stale-hotkey warning under its card (a shared .callout). */
 .settings-rows + .callout {
   margin-top: var(--space-8);
-}
-
-.page-heading {
-  display: none;
 }
 
 .settings-groups {
@@ -609,6 +608,12 @@ body {
   display: none;
 }
 
+/* Until the user's preferences are read the controls hold the page's own
+   defaults; shown, they would read as the user's (ت٤٠). */
+.settings-window[aria-busy='true'] .settings-body {
+  visibility: hidden;
+}
+
 .settings-load-state.is-error {
   color: var(--danger-ink);
 }
@@ -682,20 +687,6 @@ body {
   gap: var(--space-8);
 }
 
-/* A bundle id typed by hand: same row shape as the picker above it. */
-.text-input {
-  height: 28px;
-  min-width: 120px;
-  padding: 0 var(--space-12);
-  border: 1px solid var(--line-input);
-  border-radius: var(--radius-md);
-  background: var(--bg-raised);
-  font-size: var(--text-body);
-  color: var(--ink);
-  -webkit-appearance: none;
-  appearance: none;
-}
-
 .excluded-add-manual {
   margin-top: var(--space-8);
 }
@@ -754,4 +745,11 @@ body {
 .confirm-icon {
   width: 48px;
   height: 48px;
+}
+
+/* Two actions for one row (IMP-05 النسخ الاحتياطي). */
+.row-buttons {
+  display: flex;
+  flex: none;
+  gap: var(--space-8);
 }

@@ -12,7 +12,7 @@ use objc2::runtime::AnyObject;
 use objc2::{define_class, msg_send, sel, AnyThread};
 use objc2_app_kit::{
     NSApplication, NSApplicationActivationOptions, NSModalResponseOK, NSOpenPanel, NSPasteboard,
-    NSRunningApplication, NSWorkspace, NSWorkspaceApplicationKey,
+    NSRunningApplication, NSSavePanel, NSWorkspace, NSWorkspaceApplicationKey,
     NSWorkspaceDidActivateApplicationNotification,
 };
 use objc2_foundation::{
@@ -62,10 +62,11 @@ const TYPE_HTML: &str = "public.html";
 const TYPE_RTF: &str = "public.rtf";
 const TYPE_PNG: &str = "public.png";
 const TYPE_TIFF: &str = "public.tiff";
+const TYPE_JPEG: &str = "public.jpeg";
 const TYPE_FILE_URL: &str = "public.file-url";
 
 /// Rich representations larger than this are not stored (keeps the JSON store lean).
-const MAX_RICH_BYTES: usize = 256 * 1024;
+pub(crate) const MAX_RICH_BYTES: usize = 256 * 1024;
 /// Image payloads above this are not read into the process at all. An
 /// uncompressed TIFF of a 6K screen is ~81 MB, so a full-screen Retina capture
 /// still fits; the cap exists so the worst case has a number.
@@ -212,7 +213,17 @@ pub(crate) mod test_clipboard {
     /// Runs `body` as a process under `policy`, with a private pasteboard
     /// made for it and released after. Returns what it touched: pasteboard
     /// reaches and ⌘V presses.
+    ///
+    /// One at a time across the test threads: AppKit does not promise that
+    /// pasteboards are safe to use from several threads at once, even private
+    /// ones, and two tests doing so crashed inside `NSPasteboard`'s type
+    /// cache (SIGSEGV in `_updateTypeCacheIfNeeded`, once in 18 full runs,
+    /// 2026-10-22). The app itself reads the pasteboard from one thread.
     pub(crate) fn run(policy: Clipboard, body: impl FnOnce()) -> (usize, usize) {
+        static ONE_AT_A_TIME: std::sync::Mutex<()> = std::sync::Mutex::new(());
+        let _turn = ONE_AT_A_TIME
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let private = NSPasteboard::pasteboardWithUniqueName();
         POLICY.set(Some(policy));
         PASTEBOARD.set(Some(private.clone()));
@@ -343,12 +354,51 @@ pub fn choose_image_file() -> Option<String> {
     panel.URL()?.path().map(|p| p.to_string())
 }
 
+/// «تصدير…» (IMP-05): a native save panel, proposing `name`. The path never
+/// reaches the webview. Main thread; `None` when cancelled.
+pub fn choose_backup_destination(name: &str) -> Option<String> {
+    let mtm = MainThreadMarker::new()?;
+    let panel = NSSavePanel::savePanel(mtm);
+    panel.setNameFieldStringValue(&NSString::from_str(name));
+    panel.setPrompt(Some(&NSString::from_str("تصدير")));
+    panel.setCanCreateDirectories(true);
+    // The extension the open panel looks for: kept on the name it saves.
+    let extensions = [NSString::from_str("json")];
+    #[allow(deprecated)]
+    panel.setAllowedFileTypes(Some(&NSArray::from_retained_slice(&extensions)));
+    if panel.runModal() != NSModalResponseOK {
+        return None;
+    }
+    panel.URL()?.path().map(|p| p.to_string())
+}
+
+/// «استيراد…» (IMP-05): a native open panel for one JSON file. Main thread;
+/// `None` when cancelled.
+pub fn choose_backup_file() -> Option<String> {
+    let mtm = MainThreadMarker::new()?;
+    let panel = NSOpenPanel::openPanel(mtm);
+    panel.setCanChooseFiles(true);
+    panel.setCanChooseDirectories(false);
+    panel.setAllowsMultipleSelection(false);
+    panel.setPrompt(Some(&NSString::from_str("استيراد")));
+    let extensions = [NSString::from_str("json")];
+    #[allow(deprecated)]
+    panel.setAllowedFileTypes(Some(&NSArray::from_retained_slice(&extensions)));
+    if panel.runModal() != NSModalResponseOK {
+        return None;
+    }
+    panel.URL()?.path().map(|p| p.to_string())
+}
+
 /// What a paste in the report window found on the pasteboard.
 pub enum PastedImage {
     Image(Vec<u8>),
     /// A file copied in Finder: its pasteboard image is the file's icon, not
     /// the picture, so it is not attached — «اختر صورة…» picks the file.
     File,
+    /// An image, but over the input ceiling (019): said so, rather than «no
+    /// image».
+    TooLarge,
     Nothing,
 }
 
@@ -367,14 +417,19 @@ pub fn read_image_for_report() -> PastedImage {
     if is_file {
         return PastedImage::File;
     }
-    [TYPE_PNG, TYPE_TIFF]
+    [TYPE_PNG, TYPE_TIFF, TYPE_JPEG]
         .iter()
         .find_map(|t| {
             pb.dataForType(&NSString::from_str(t))
-                .filter(|d| !d.is_empty() && d.len() <= crate::report_image::MAX_INPUT_BYTES)
-                .map(|d| d.to_vec())
+                .filter(|d| !d.is_empty())
         })
-        .map_or(PastedImage::Nothing, PastedImage::Image)
+        .map_or(PastedImage::Nothing, |d| {
+            if d.len() > crate::report_image::MAX_INPUT_BYTES {
+                PastedImage::TooLarge
+            } else {
+                PastedImage::Image(d.to_vec())
+            }
+        })
 }
 
 pub fn frontmost_app() -> FrontApp {
@@ -403,9 +458,11 @@ pub struct Activation {
     pub app: FrontApp,
 }
 
-/// Activations older than this are dropped on the next write. The capture path
-/// never looks back further than one poll interval, so this is generous.
-const ACTIVATION_KEEP: Duration = Duration::from_secs(10);
+/// The least the log keeps. A capture looks back to the previous poll
+/// (`monitor::Watch`), however long ago a held-up poll makes that, and the
+/// loop says where its next window opens (`keep_activations_since`): nothing
+/// from there on is dropped, whatever its age.
+const ACTIVATION_KEEP: Duration = Duration::from_secs(5 * 60);
 
 fn activation_log() -> &'static Mutex<Vec<Activation>> {
     static LOG: OnceLock<Mutex<Vec<Activation>>> = OnceLock::new();
@@ -418,17 +475,43 @@ pub fn note_activation(app: FrontApp) {
     let mut log = activation_log()
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
-    let cutoff = now.checked_sub(ACTIVATION_KEEP).unwrap_or(now);
-    // Keep the newest activation at or before the cutoff: it is the one still
-    // in force, and dropping it would lose the answer for older windows.
-    let keep_from = log.iter().rposition(|a| a.at <= cutoff).unwrap_or(0);
-    log.drain(..keep_from);
+    let needed = *window_opened().lock().unwrap_or_else(|p| p.into_inner());
+    forget_old_activations(&mut log, now, needed);
     remember_front(app.pid, is_regular_app(app.pid));
     log.push(Activation { at: now, app });
 }
 
+/// Where the capture loop's next window opens: its last look at the count.
+fn window_opened() -> &'static Mutex<Option<Instant>> {
+    static OPENED: OnceLock<Mutex<Option<Instant>>> = OnceLock::new();
+    OPENED.get_or_init(|| Mutex::new(None))
+}
+
+/// Called by the capture loop at every look: nothing from `at` on may be
+/// forgotten, however long the next poll is held up.
+pub fn keep_activations_since(at: Instant) {
+    *window_opened().lock().unwrap_or_else(|p| p.into_inner()) = Some(at);
+}
+
+/// Called when the capture loop has given up: no window will ask again, and
+/// a mark left standing would keep every later activation for the life of
+/// the process.
+pub fn stop_keeping_activations() {
+    *window_opened().lock().unwrap_or_else(|p| p.into_inner()) = None;
+}
+
+/// Drops what no capture will ask about any more. The newest activation at or
+/// before the cutoff stays: it is the one still in force, and dropping it
+/// would lose the answer for older windows.
+fn forget_old_activations(log: &mut Vec<Activation>, now: Instant, needed: Option<Instant>) {
+    let by_age = now.checked_sub(ACTIVATION_KEEP).unwrap_or(now);
+    let cutoff = needed.map_or(by_age, |opened| opened.min(by_age));
+    let keep_from = log.iter().rposition(|a| a.at <= cutoff).unwrap_or(0);
+    log.drain(..keep_from);
+}
+
 /// The last app other than رفّ to take the front: where the user was (ت٤٧).
-/// Kept apart from the activation log, which forgets after ten seconds.
+/// Kept apart from the activation log, which forgets after five minutes.
 static LAST_OTHER_APP: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(0);
 
 /// Whether an app taking the front is one to give it back to later: not رفّ
@@ -799,6 +882,75 @@ pub fn ax_prompt() -> bool {
 mod tests {
     use super::*;
 
+    /// The hypothesis behind the SIGSEGV of 2026-10-22 (05:45), tested on its
+    /// own: AppKit pasteboards — private ones too — used from several threads
+    /// at once crash in their type cache, and used one at a time do not. The
+    /// crash report had three test threads inside NSPasteboard/CFPasteboard at
+    /// once, the faulting one in `-[NSPasteboard _updateTypeCacheIfNeeded]`
+    /// and another in the class-wide `+_oldStyleTypeNameForIdentifier:`.
+    ///
+    /// Each worker makes the AppKit calls `test_clipboard::run` and
+    /// `read_clip`/`write_clip` make (not those functions themselves): a
+    /// unique pasteboard, clear, set text and HTML, read text and an absent
+    /// type, release. Measured 2026-10-22: unserialised, 24 of 30 processes
+    /// failed (SIGSEGV with the reported stack, SIGTRAP from a collection
+    /// mutated while enumerated, or a read that came back empty); serialised,
+    /// 0 of 30 (`evidence/2026-10-22-m10/sigsegv-test-pasteboard.txt`). `RAFF_STRESS_SERIAL=1` takes one lock around
+    /// each round, as `test_clipboard::run` now does. Run by hand, one process
+    /// per run, so a crash is counted rather than ending the suite:
+    /// `RAFF_STRESS_SERIAL=0 cargo test pasteboard_concurrency -- --ignored`.
+    #[test]
+    #[ignore = "a stress measurement, run by hand in its own process"]
+    fn pasteboard_concurrency_stress() {
+        let env = |key: &str, default: usize| {
+            std::env::var(key)
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(default)
+        };
+        let threads = env("RAFF_STRESS_THREADS", 8);
+        let rounds = env("RAFF_STRESS_ROUNDS", 400);
+        let serial = match std::env::var("RAFF_STRESS_SERIAL").as_deref() {
+            Ok("1") => true,
+            Ok("0") | Err(_) => false,
+            Ok(other) => panic!("RAFF_STRESS_SERIAL is 0 or 1, not {other:?}"),
+        };
+        static ONE: Mutex<()> = Mutex::new(());
+        let workers: Vec<_> = (0..threads)
+            .map(|worker| {
+                std::thread::spawn(move || {
+                    for round in 0..rounds {
+                        let _turn = serial.then(|| ONE.lock().unwrap_or_else(|p| p.into_inner()));
+                        objc2::rc::autoreleasepool(|_| {
+                            let pb = NSPasteboard::pasteboardWithUniqueName();
+                            pb.clearContents();
+                            let text = format!("worker {worker} round {round}");
+                            pb.setString_forType(
+                                &NSString::from_str(&text),
+                                &NSString::from_str(TYPE_TEXT),
+                            );
+                            pb.setString_forType(
+                                &NSString::from_str("<b>x</b>"),
+                                &NSString::from_str(TYPE_HTML),
+                            );
+                            let back = pb
+                                .stringForType(&NSString::from_str(TYPE_TEXT))
+                                .map(|s| s.to_string());
+                            assert_eq!(back.as_deref(), Some(text.as_str()));
+                            let _ = pb.dataForType(&NSString::from_str(TYPE_PNG));
+                            // SAFETY: as in `test_clipboard::run`.
+                            let _: () = unsafe { msg_send![&*pb, releaseGlobally] };
+                        });
+                    }
+                })
+            })
+            .collect();
+        for worker in workers {
+            worker.join().unwrap();
+        }
+        println!("stress: threads={threads} rounds={rounds} serial={serial} — no crash");
+    }
+
     // ت٤٨ ─────────────────────────────────────────────────────────────────
 
     #[test]
@@ -843,6 +995,35 @@ mod tests {
             Some((0, false, None, None, true, false)),
             "and every answer is the empty one"
         );
+    }
+
+    /// 019: a pasted picture is read whatever its type — JPEG too, which the
+    /// report accepts from a file — and one over the ceiling is said to be
+    /// too large, not missing.
+    #[test]
+    fn a_pasted_picture_is_read_as_jpeg_too_and_a_huge_one_is_too_large() {
+        let put = |kind: &str, bytes: &[u8]| {
+            let pb = test_clipboard::pasteboard().unwrap();
+            pb.clearContents();
+            assert!(pb.setData_forType(Some(&NSData::with_bytes(bytes)), &NSString::from_str(kind)));
+        };
+        test_clipboard::run(Clipboard::Real, || {
+            put("public.jpeg", b"\xff\xd8\xff jpeg");
+            assert!(
+                matches!(read_image_for_report(), PastedImage::Image(b) if b.starts_with(b"\xff\xd8")),
+                "jpeg"
+            );
+            put(
+                TYPE_PNG,
+                &vec![0u8; crate::report_image::MAX_INPUT_BYTES + 1],
+            );
+            assert!(
+                matches!(read_image_for_report(), PastedImage::TooLarge),
+                "over the ceiling"
+            );
+            put(TYPE_TEXT, b"just text");
+            assert!(matches!(read_image_for_report(), PastedImage::Nothing));
+        });
     }
 
     #[test]
@@ -970,6 +1151,63 @@ mod tests {
     }
 
     const WINDOW: Duration = Duration::from_millis(350);
+
+    /// Review م٤: a poll held up for half a minute looks back half a minute,
+    /// so the log must still hold the password manager that was in front then.
+    #[test]
+    fn the_log_outlasts_a_held_up_poll() {
+        let now = Instant::now();
+        let mut log = vec![
+            act(ago(now, 40_000), "com.apple.Safari"),
+            act(ago(now, 30_000), "com.agilebits.onepassword7"),
+            act(ago(now, 29_000), "com.apple.Terminal"),
+        ];
+        forget_old_activations(&mut log, now, Some(ago(now, 35_000)));
+        let excluded = vec!["com.agilebits.onepassword7".to_string()];
+        let window = Duration::from_millis(35_000);
+        assert!(window_has_excluded(&log, &excluded, now, window));
+    }
+
+    /// A poll held up past the log's own keep — seven minutes, the password
+    /// manager in front in the first two and gone before the keep began. The
+    /// window still reaches back to the previous look, and the log must still
+    /// hold what was in front there: a gap in it would read as "nothing
+    /// excluded" and store the copy. No keep, however long, promises that to a
+    /// window without a limit; the loop telling the log where its window opens
+    /// does.
+    #[test]
+    fn a_window_longer_than_the_keep_keeps_its_whole_history() {
+        let now = Instant::now();
+        let opened = ago(now, 7 * 60_000);
+        let mut log = vec![
+            act(ago(now, 8 * 60_000), "com.apple.Safari"),
+            act(ago(now, 6 * 60_000), "com.agilebits.onepassword7"),
+            act(ago(now, 5 * 60_000 + 30_000), "com.apple.Terminal"),
+            act(ago(now, 60_000), "com.apple.Notes"),
+        ];
+        forget_old_activations(&mut log, now, Some(opened));
+        let excluded = vec!["com.agilebits.onepassword7".to_string()];
+        assert!(window_has_excluded(&log, &excluded, now, now - opened));
+        assert_eq!(
+            front_at(&log, now, now - opened).map(|a| a.bundle_id),
+            Some("com.apple.Safari".to_string()),
+            "and the app in force when it opened"
+        );
+    }
+
+    /// Once the loop has looked again, the old part goes as before.
+    #[test]
+    fn what_no_window_needs_is_still_forgotten() {
+        let now = Instant::now();
+        let mut log = vec![
+            act(ago(now, 8 * 60_000), "com.apple.Safari"),
+            act(ago(now, 6 * 60_000), "com.agilebits.onepassword7"),
+            act(ago(now, 60_000), "com.apple.Notes"),
+        ];
+        forget_old_activations(&mut log, now, Some(ago(now, 1_000)));
+        let kept: Vec<_> = log.iter().map(|a| a.app.bundle_id.as_str()).collect();
+        assert_eq!(kept, ["com.agilebits.onepassword7", "com.apple.Notes"]);
+    }
 
     #[test]
     fn an_excluded_app_inside_the_window_is_caught_even_when_it_is_not_the_last_one() {

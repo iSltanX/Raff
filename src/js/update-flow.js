@@ -65,6 +65,17 @@ export function createUpdateFlow({ onChange }) {
     }
   }
 
+  /** Shows a check another window already made, unless something is in
+   *  flight or staged — the same guard as `checkIfIdle`. */
+  function showFound(result) {
+    if (busy || phase === 'installing' || phase === 'installed') return;
+    if (result?.status === 'available') {
+      set('available', { version: result.version, date: result.date, notes: result.notes });
+    } else {
+      checkIfIdle();
+    }
+  }
+
   /** Runs `check()` unless an operation is already in flight, or an install is
    *  already staged awaiting restart. Used by the tray menu entry point, which
    *  must show the current state instead of starting a second operation. */
@@ -95,5 +106,5 @@ export function createUpdateFlow({ onChange }) {
     set('error', { from: 'download', message: event?.payload?.message || 'تعذّر تنزيل التحديث أو تثبيته.' })
   );
 
-  return { check, download, restart, checkIfIdle, isBusy: () => busy, getPhase: () => phase };
+  return { check, download, restart, checkIfIdle, showFound, isBusy: () => busy, getPhase: () => phase };
 }

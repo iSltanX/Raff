@@ -67,3 +67,17 @@ for (const selector of ['.row-time', '.preview-title.is-link']) {
     }
   });
 }
+
+// Audit 021 ج1 measured secondary text at ~3.1:1 on the identity before
+// «نجدي». On this one every --ink-3 text reads at 5.0:1 or more in both
+// appearances (evidence/2026-10-22-m6b), so it stays --ink-3; this keeps a
+// later token change from taking it under AA on any surface it is read on.
+test('secondary text (--ink-3) stays at AA on every panel surface, in both appearances', () => {
+  for (const scope of [LIGHT, DARK]) {
+    const ink = hex(token(scope, '--ink-3'));
+    for (const surface of ['--bg-glass', '--bg-selected', '--bg-window', '--bg-raised']) {
+      const ratio = contrast(ink, hex(token(scope, surface)));
+      assert.ok(ratio >= 4.5, `${scope} --ink-3 on ${surface}: ${ratio.toFixed(2)}:1`);
+    }
+  }
+});

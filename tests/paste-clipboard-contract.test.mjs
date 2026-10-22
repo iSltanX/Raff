@@ -88,9 +88,17 @@ test('the full pasteboard payload is restored, not flattened to text', () => {
     /macos::write_clip\(\s*\n?\s*if is_image \{ None \} else \{ Some\(&text\) \},\s*\n?\s*html\.as_deref\(\),\s*\n?\s*rtf\.as_deref\(\),\s*\n?\s*png\.as_deref\(\),/u,
     'text, html, rtf and png representations must all be offered to the pasteboard'
   );
+  // Only the explicit text-only forms — «لصق كنص عادي» and «لصق بلا تشكيل»
+  // (IMP-06) — drop the rich representations; the default keeps them.
   assert.match(
     paste,
-    /if plain \{\s*\n\s*\(item\.kind, item\.text\.clone\(\), None, None, image\)/u,
-    'only the explicit plain-text mode drops the rich representations'
+    /if form == Form::Bare \{\s*\n\s*\(item\.kind, without_tashkeel\(&item\.text\), None, None, image\)/u,
+    'the bare form drops them and the tashkeel'
   );
+  assert.match(
+    paste,
+    /\} else if form == Form::Plain \{\s*\n\s*\(item\.kind, item\.text\.clone\(\), None, None, image\)/u,
+    'the plain form drops them'
+  );
+  assert.match(paste, /\(item\.kind, item\.text\.clone\(\), item\.html\.clone\(\), rtf, image\)/u, 'the rich form keeps them');
 });

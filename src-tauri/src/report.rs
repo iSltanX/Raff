@@ -212,7 +212,7 @@ fn freeze(
                 .ok_or(err::INVALID)?,
         ),
     };
-    let description = description.trim().to_string();
+    let description = trim_like_the_window(description).to_string();
     let length = description.chars().count();
     if length == 0 || length > MAX_DESCRIPTION_CHARS {
         return Err(err::INVALID.into());
@@ -369,16 +369,6 @@ fn write_clipboard(app: &AppHandle, text: &str) -> Result<(), String> {
 
 // ─── Commands ─────────────────────────────────────────────────────────────
 
-/// Only the report window may drive a report (and Settings may copy the
-/// diagnostics): the panel, which renders clipboard content, may not.
-fn require_window(window: &tauri::WebviewWindow, allowed: &[&str]) -> Result<(), String> {
-    if allowed.contains(&window.label()) {
-        Ok(())
-    } else {
-        Err(err::INVALID.into())
-    }
-}
-
 /// Reads the macOS version once, off the main thread, at launch.
 pub fn warm() {
     std::thread::spawn(|| {
@@ -396,7 +386,7 @@ pub async fn report_prepare(
     category: Option<String>,
     description: String,
 ) -> Result<Preview, String> {
-    require_window(&window, &["report"])?;
+    crate::access::require(&window, "report_prepare")?;
     let diagnostics = diagnostics::collect(&app);
     let version = app.package_info().version.to_string();
     let mut session = lock();
@@ -418,7 +408,7 @@ pub async fn report_prepare(
 /// Sends the frozen payload (or re-sends it, with the same key).
 #[tauri::command]
 pub async fn report_send(window: tauri::WebviewWindow) -> Result<SendOutcome, String> {
-    require_window(&window, &["report"])?;
+    crate::access::require(&window, "report_send")?;
     let (body, key, blocked, epoch) = {
         let session = lock();
         let frozen = session.frozen.as_ref().ok_or(err::NOT_PREPARED)?;
@@ -468,7 +458,7 @@ pub async fn report_send(window: tauri::WebviewWindow) -> Result<SendOutcome, St
 /// «نسخ البلاغ» — the frozen payload, attachments as {type, bytes}.
 #[tauri::command]
 pub async fn report_copy(app: AppHandle, window: tauri::WebviewWindow) -> Result<(), String> {
-    require_window(&window, &["report"])?;
+    crate::access::require(&window, "report_copy")?;
     let text = {
         let session = lock();
         copy_text(&session.frozen.as_ref().ok_or(err::NOT_PREPARED)?.body)
@@ -483,21 +473,26 @@ pub async fn report_copy_number(
     window: tauri::WebviewWindow,
     id: u64,
 ) -> Result<(), String> {
-    require_window(&window, &["report"])?;
+    crate::access::require(&window, "report_copy_number")?;
     write_clipboard(&app, &format!("#{id}"))
 }
 
 /// «معلومات التشخيص ← نسخ» — the diagnostics object alone. Sends nothing.
 #[tauri::command]
 pub async fn diagnostics_copy(app: AppHandle, window: tauri::WebviewWindow) -> Result<(), String> {
-    require_window(&window, &["settings", "report"])?;
+    crate::access::require(&window, "diagnostics_copy")?;
     let text = serde_json::to_string_pretty(&diagnostics::collect(&app))
         .map_err(|_| err::COPY_FAILED.to_string())?;
     write_clipboard(&app, &text)
 }
 
-async fn prepare_off_main(bytes: Vec<u8>, from_pasteboard: bool) -> Result<ImageMeta, String> {
-    let epoch = lock().epoch;
+/// `epoch` is the window's the attach started in, as its failure is fenced
+/// by (`forget_image_on_error`): success and failure answer to the same one.
+async fn prepare_off_main(
+    epoch: u64,
+    bytes: Vec<u8>,
+    from_pasteboard: bool,
+) -> Result<ImageMeta, String> {
     let prepared = tauri::async_runtime::spawn_blocking(move || {
         report_image::prepare(&bytes, from_pasteboard)
     })
@@ -520,27 +515,47 @@ fn store_image(epoch: u64, prepared: Prepared) {
 
 /// A failed attach leaves no image behind: the window then says there is
 /// none, and a preview must never carry an earlier one it no longer shows.
-fn forget_image_on_error<T>(result: Result<T, String>) -> Result<T, String> {
+/// Only for the window it started in, like `store_image`: a late failure from
+/// a closed report must not take the image off the one open now (019).
+fn forget_image_on_error<T>(epoch: u64, result: Result<T, String>) -> Result<T, String> {
     if result.is_err() {
-        let mut session = lock();
+        forget_attach(&mut lock(), epoch);
+    }
+    result
+}
+
+fn forget_attach(session: &mut Session, epoch: u64) {
+    if session.epoch == epoch {
         session.image = None;
         session.frozen = None;
     }
-    result
 }
 
 /// «اختر صورة…» — a native open panel; the path never reaches the webview.
 /// Cancelling keeps whatever was attached.
 #[tauri::command]
 pub async fn report_pick_image(window: tauri::WebviewWindow) -> Result<Option<ImageMeta>, String> {
-    require_window(&window, &["report"])?;
-    forget_image_on_error(pick_image().await)
+    crate::access::require(&window, "report_pick_image")?;
+    let epoch = lock().epoch;
+    forget_image_on_error(epoch, pick_image(epoch).await)
+}
+
+/// Trims what the report window's `String.trim()` trims, so the count the
+/// window shows and the one checked here agree (019): JavaScript's set takes
+/// U+FEFF and leaves U+0085, Rust's `trim` the other way round.
+fn trim_like_the_window(text: &str) -> &str {
+    text.trim_matches(|c: char| (c.is_whitespace() && c != '\u{85}') || c == '\u{feff}')
 }
 
 /// Reads at most the input ceiling plus one byte from a regular file, so a
 /// special file or a symlink to one cannot feed an endless stream.
 fn read_capped(path: &std::path::Path) -> Result<Vec<u8>, report_image::ImageError> {
     use std::io::Read;
+    // Before opening: opening a named pipe waits for a writer (019).
+    let kind = std::fs::metadata(path).map_err(|_| report_image::ImageError::Unreadable)?;
+    if !kind.is_file() {
+        return Err(report_image::ImageError::Unreadable);
+    }
     let file = std::fs::File::open(path).map_err(|_| report_image::ImageError::Unreadable)?;
     let meta = file
         .metadata()
@@ -558,7 +573,7 @@ fn read_capped(path: &std::path::Path) -> Result<Vec<u8>, report_image::ImageErr
     Ok(bytes)
 }
 
-async fn pick_image() -> Result<Option<ImageMeta>, String> {
+async fn pick_image(epoch: u64) -> Result<Option<ImageMeta>, String> {
     // The panel runs on the GCD main queue, not inside Tauri's event-loop
     // task: a modal loop nested in that task can re-enter the runtime's
     // locked event handler (a redraw while the panel is up) and hang.
@@ -576,7 +591,7 @@ async fn pick_image() -> Result<Option<ImageMeta>, String> {
             .await
             .map_err(|_| report_image::ImageError::Unreadable.code().to_string())?
             .map_err(|e| e.code().to_string())?;
-    prepare_off_main(bytes, false).await.map(Some)
+    prepare_off_main(epoch, bytes, false).await.map(Some)
 }
 
 /// A paste in the report window: the pasteboard is read at that moment, for
@@ -584,18 +599,24 @@ async fn pick_image() -> Result<Option<ImageMeta>, String> {
 /// stays).
 #[tauri::command]
 pub async fn report_paste_image(window: tauri::WebviewWindow) -> Result<Option<ImageMeta>, String> {
-    require_window(&window, &["report"])?;
+    crate::access::require(&window, "report_paste_image")?;
+    let epoch = lock().epoch;
     let result = match crate::macos::read_image_for_report() {
-        crate::macos::PastedImage::Image(bytes) => prepare_off_main(bytes, true).await.map(Some),
+        crate::macos::PastedImage::Image(bytes) => {
+            prepare_off_main(epoch, bytes, true).await.map(Some)
+        }
         crate::macos::PastedImage::File => Err(err::PASTED_FILE.into()),
+        crate::macos::PastedImage::TooLarge => {
+            Err(report_image::ImageError::TooLarge.code().to_string())
+        }
         crate::macos::PastedImage::Nothing => Ok(None),
     };
-    forget_image_on_error(result)
+    forget_image_on_error(epoch, result)
 }
 
 #[tauri::command]
 pub fn report_remove_image(window: tauri::WebviewWindow) {
-    if require_window(&window, &["report"]).is_err() {
+    if !crate::access::allowed(window.label(), "report_remove_image") {
         return;
     }
     let mut session = lock();
@@ -784,6 +805,85 @@ mod tests {
                 .is_err(),
             "the body never reaches the host a redirect names"
         );
+    }
+
+    /// 019: a pick that started in a report window since closed fails late —
+    /// it must not take the image off the window open now.
+    #[test]
+    fn a_late_failure_from_a_closed_window_keeps_the_current_image() {
+        let image = Prepared {
+            mime: "image/png",
+            bytes: vec![7],
+            width: 1,
+            height: 1,
+            thumb: String::new(),
+        };
+        let mut session = Session {
+            epoch: 5,
+            image: Some(image),
+            ..Session::default()
+        };
+        forget_attach(&mut session, 4);
+        assert!(
+            session.image.is_some(),
+            "a failure from epoch 4 leaves epoch 5's image"
+        );
+        forget_attach(&mut session, 5);
+        assert!(session.image.is_none(), "its own failure still clears it");
+    }
+
+    /// 019: a named pipe picked as the image. Opening one for reading waits
+    /// for a writer, so the check that it is a regular file must come first.
+    #[test]
+    fn a_named_pipe_is_refused_without_waiting_for_a_writer() {
+        let dir = std::env::temp_dir().join(format!("raff-fifo-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let fifo = dir.join("picture.png");
+        assert!(std::process::Command::new("mkfifo")
+            .arg(&fifo)
+            .status()
+            .unwrap()
+            .success());
+        let (tx, rx) = std::sync::mpsc::channel();
+        let path = fifo.clone();
+        std::thread::spawn(move || {
+            let _ = tx.send(read_capped(&path).err());
+        });
+        let answer = rx.recv_timeout(Duration::from_secs(2));
+        if answer.is_err() {
+            // Unblock the reader stuck in `open`, so the thread can end.
+            let _ = std::fs::OpenOptions::new().write(true).open(&fifo);
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(answer, Ok(Some(report_image::ImageError::Unreadable)));
+    }
+
+    /// 019: what the window counts is what is checked here.
+    #[test]
+    fn the_description_is_trimmed_as_the_window_trims_it() {
+        let ok = |text: &str| {
+            freeze(
+                "bug",
+                None,
+                text,
+                diag(),
+                None,
+                "5.1.0".into(),
+                "15.4".into(),
+                ENDPOINT,
+            )
+            .is_ok()
+        };
+        let full = "ب".repeat(MAX_DESCRIPTION_CHARS);
+        assert!(
+            ok(&format!("\u{feff}{full}\u{feff}")),
+            "BOM is trimmed, as in the window"
+        );
+        assert!(
+            !ok(&format!("\u{85}{full}")),
+            "NEL is counted, as in the window"
+        );
+        assert!(!ok("\u{feff}"), "a lone BOM is empty");
     }
 
     #[test]

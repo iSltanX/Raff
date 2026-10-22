@@ -15,9 +15,9 @@ use crate::storage::{
 use crate::{macos, tray, AppState, Pause};
 
 const POLL_MS: u64 = 350;
-/// How far back a capture looks when asking who owned the clipboard. A change
-/// noticed at `T` happened somewhere in `(T - POLL_MS, T]`, so that is exactly
-/// the span whose frontmost apps have to clear the exclusion list.
+/// The least a capture looks back when asking who owned the clipboard. The
+/// span it actually looks back over is the time since the last look (`Watch`),
+/// which is never shorter than the sleep between two looks.
 const SOURCE_WINDOW: Duration = Duration::from_millis(POLL_MS);
 /// Images declaring more pixels than this are refused before anything is
 /// allocated for them. A full-screen Retina capture on a 6K display is ~20
@@ -35,13 +35,15 @@ pub fn start(app: AppHandle) {
     start_signal_flusher(app.clone());
     start_retention_sweeper(app.clone());
     std::thread::spawn(move || {
-        let mut last = macos::change_count();
+        let mut watch = Watch::from(macos::change_count(), Instant::now());
+        macos::keep_activations_since(watch.looked_at);
         let outcome = supervise(|| {
             std::thread::sleep(Duration::from_millis(POLL_MS));
-            poll_once(&app, &mut last);
+            in_pool(|| poll_once(&app, &mut watch));
             ControlFlow::Continue(())
         });
         if outcome == Supervision::GaveUp {
+            macos::stop_keeping_activations();
             let state = app.state::<AppState>();
             state.capture_alive.store(false, Ordering::SeqCst);
             // Say it where the user is looking, not only where they might go
@@ -50,6 +52,14 @@ pub fn start(app: AppHandle) {
             let _ = app.emit("raff://changed", ());
         }
     });
+}
+
+/// Runs one tick of the capture loop inside its own autorelease pool. The
+/// loop's thread lives as long as رفّ, and what AppKit hands back autoreleased
+/// from a pasteboard read would otherwise wait for the thread's implicit pool,
+/// which drains only when the thread ends — never (018).
+fn in_pool<R>(tick: impl FnOnce() -> R) -> R {
+    objc2::rc::autoreleasepool(|_| tick())
 }
 
 /// How often the retention policy is re-applied while Raff is running.
@@ -198,18 +208,21 @@ impl Pasteboard for SystemPasteboard {
 struct Rules {
     enabled: bool,
     respect_concealed: bool,
+    /// «لا تحفظ ما يشبه مفتاحًا سريًا» (IMP-10).
+    skip_secrets: bool,
     /// An excluded app was in front somewhere the copy could have happened.
     excluded: bool,
     source: macos::FrontApp,
 }
 
 impl Rules {
-    fn now(store: &Mutex<Store>, detected_at: Instant) -> Self {
-        let (enabled, respect_concealed, excluded_apps) = {
+    fn now(store: &Mutex<Store>, detected_at: Instant, window: Duration) -> Self {
+        let (enabled, respect_concealed, skip_secrets, excluded_apps) = {
             let store = crate::lock_store(store);
             (
                 store.settings.capture_enabled,
                 store.settings.respect_concealed,
+                store.settings.skip_secrets,
                 store.settings.excluded_apps.clone(),
             )
         };
@@ -219,11 +232,12 @@ impl Rules {
         let activations = macos::activation_snapshot();
         let front_now = macos::frontmost_app();
         let excluded = excluded_apps.contains(&front_now.bundle_id)
-            || macos::window_has_excluded(&activations, &excluded_apps, detected_at, SOURCE_WINDOW);
-        let source = macos::front_at(&activations, detected_at, SOURCE_WINDOW).unwrap_or(front_now);
+            || macos::window_has_excluded(&activations, &excluded_apps, detected_at, window);
+        let source = macos::front_at(&activations, detected_at, window).unwrap_or(front_now);
         Rules {
             enabled,
             respect_concealed,
+            skip_secrets,
             excluded,
             source,
         }
@@ -244,22 +258,60 @@ enum Look {
     Read(ClipReading),
 }
 
-/// One poll of the pasteboard. `last` carries the change count across ticks.
-fn poll_once(app: &AppHandle, last: &mut isize) {
-    let glance = macos::change_count();
-    if glance == *last {
-        return;
+/// Where the poll loop left off: the change count it last settled on, and
+/// when it last read the count.
+struct Watch {
+    last: isize,
+    looked_at: Instant,
+}
+
+impl Watch {
+    fn from(count: isize, at: Instant) -> Self {
+        Self {
+            last: count,
+            looked_at: at,
+        }
     }
+
+    /// Takes one look at the count, read between `before` and `after`. When it
+    /// moved, answers the span the change could have happened in: from the
+    /// previous look to this one.
+    ///
+    /// The previous look is the right start, not a fixed interval back: the
+    /// loop sleeps between looks, but the poll before that sleep can take far
+    /// longer than one interval (a large image, a wait at the gate), and an
+    /// excluded app in front during that time must still be found (007 ج1).
+    /// The next span starts before this read, so nothing falls between two.
+    fn notice(&mut self, count: isize, before: Instant, after: Instant) -> Option<Duration> {
+        let since = after.saturating_duration_since(self.looked_at);
+        self.looked_at = before;
+        (count != self.last).then(|| since.max(SOURCE_WINDOW))
+    }
+}
+
+/// One poll of the pasteboard. `watch` carries the change count across ticks.
+fn poll_once(app: &AppHandle, watch: &mut Watch) {
+    let before = Instant::now();
+    let glance = macos::change_count();
     let detected_at = Instant::now();
+    // The next window opens at this look, and however long this poll takes,
+    // what happens from then on must stay in the activation log for it. Told
+    // only once this window's rules hold their snapshot of the log: told
+    // sooner, a window longer than the keep could lose its own start.
+    let Some(window) = watch.notice(glance, before, detected_at) else {
+        macos::keep_activations_since(watch.looked_at);
+        return;
+    };
     let state = app.state::<AppState>();
-    let rules = Rules::now(&state.store, detected_at);
+    let rules = Rules::now(&state.store, detected_at, window);
+    macos::keep_activations_since(watch.looked_at);
     let (found, pause_ended) = look(
         &SystemPasteboard,
         &state.own_writes,
         &state.pause,
         rules,
         glance,
-        last,
+        &mut watch.last,
     );
     if pause_ended {
         tray::sync_paused();
@@ -328,6 +380,17 @@ fn look(
     }
     let clip = pb.read_clip();
     let after = pb.change_count();
+    // IMP-10: shaped like a private key or a token, and asked not to keep
+    // such things — read only to be told so, and dropped here, before the
+    // store or any file sees it.
+    if rules.skip_secrets
+        && clip
+            .text
+            .as_deref()
+            .is_some_and(crate::secrets::looks_like_secret)
+    {
+        return (Look::Skipped, pause_ended);
+    }
     let reading = ClipReading {
         before,
         after,
@@ -392,44 +455,66 @@ fn capture_reading(store_lock: &Mutex<Store>, reading: ClipReading) -> bool {
     let Some((png, decoded)) = decode_capture(raw.png, raw.tiff) else {
         return false;
     };
+    capture_image(store_lock, png, decoded, front, || {})
+}
 
+/// Stores a decoded picture. `between` runs after the files are written ahead
+/// and before the capture is applied: nothing in production, a racing capture
+/// in a test.
+///
+/// The picture and its thumbnail are written before the store is locked for
+/// the capture (IMP-02 أ): a 5K screenshot held the lock 40–150 ms writing
+/// them, and the panel opening meanwhile waited on it on the main thread. The
+/// lock is taken briefly first to ask whether the picture is already stored;
+/// under the lock for the capture that is asked again, since a delete or
+/// another capture may have changed the answer meanwhile.
+fn capture_image(
+    store_lock: &Mutex<Store>,
+    png: Vec<u8>,
+    decoded: image::DynamicImage,
+    front: macos::FrontApp,
+    between: impl FnOnce(),
+) -> bool {
     let hash = content_hash(&png);
     let (w, h) = (decoded.width(), decoded.height());
     let label = format!("صورة {w}×{h}");
 
-    // Files written for this capture, to take back if it does not persist.
-    let mut created: Vec<std::path::PathBuf> = Vec::new();
-    let persisted = capture_and_persist(store_lock, |store| {
+    let (dir, stored) = {
+        let store = crate::lock_store(store_lock);
         let dir = store.images_dir();
-        // Identical image already stored, *and* its file is still there? Then
-        // bump it without touching the disk. Asking the metadata alone let a
-        // row whose file had vanished swallow the re-copy as a duplicate, so
-        // no replacement was ever written and the row stayed broken for good —
-        // while copying it back out failed with «العنصر غير موجود».
-        let dup = store.pinned.iter().chain(store.history.iter()).any(|i| {
-            i.kind == ItemKind::Image
-                && i.hash.as_deref() == Some(hash.as_str())
-                && i.image_file
-                    .as_deref()
-                    .and_then(|file| crate::storage::image_path(&dir, file))
-                    .is_some_and(|path| path.exists())
-        });
-
-        let (image_file, thumb_file) = if dup {
-            (None, None)
-        } else {
-            let id_base = uuid::Uuid::new_v4().to_string();
-            let image_file = format!("{id_base}.png");
-            let thumb_name = format!("{id_base}.thumb.png");
-            if std::fs::write(dir.join(&image_file), &png).is_err() {
-                return CaptureResult::failed();
-            }
-            created.push(dir.join(&image_file));
-            let thumb_file = write_thumbnail(&dir, thumb_name, &decoded);
-            created.extend(thumb_file.iter().map(|name| dir.join(name)));
-            (Some(image_file), thumb_file)
+        let stored = has_live_copy(&store, &dir, &hash);
+        (dir, stored)
+    };
+    // Files written for this capture, to take back if it does not use them.
+    let mut created: Vec<std::path::PathBuf> = Vec::new();
+    let mut ahead = if stored {
+        None
+    } else {
+        let Some(files) = write_image_files(&dir, &png, &decoded) else {
+            return false;
         };
+        created.extend(files.paths(&dir));
+        Some(files)
+    };
+    between();
 
+    let mut used = false;
+    let persisted = capture_and_persist(store_lock, |store| {
+        let files = if has_live_copy(store, &dir, &hash) {
+            None
+        } else if let Some(files) = ahead.take() {
+            Some(files)
+        } else {
+            // The copy that made a write unnecessary went in between: the one
+            // case written under the lock, as every capture used to be.
+            let Some(files) = write_image_files(&dir, &png, &decoded) else {
+                return CaptureResult::failed();
+            };
+            created.extend(files.paths(&dir));
+            Some(files)
+        };
+        used = files.is_some();
+        let (image_file, thumb_file) = files.map_or((None, None), |f| (Some(f.image), f.thumb));
         store.capture(
             ItemKind::Image,
             label,
@@ -442,16 +527,61 @@ fn capture_reading(store_lock: &Mutex<Store>, reading: ClipReading) -> bool {
         )
     });
 
-    if persisted.is_err() {
-        // The capture was taken back or never made it, so nothing in the model
-        // refers to these files. (One that moved to the other layer while its
-        // write was in flight is settled as `Ok`, and keeps them.)
+    // Taken back or never made, the capture names none of these files; one
+    // that landed on a picture already stored never used them. (One that moved
+    // to the other layer while its write was in flight is settled as `Ok`, and
+    // keeps them.)
+    if persisted.is_err() || !used {
         for file in created {
             let _ = std::fs::remove_file(file);
         }
-        return false;
     }
-    true
+    persisted.is_ok()
+}
+
+/// Whether this picture is stored already, *and* its file is still there.
+/// Asking the metadata alone let a row whose file had vanished swallow the
+/// re-copy as a duplicate, so no replacement was ever written and the row
+/// stayed broken for good — while copying it back out failed with «العنصر غير
+/// موجود».
+fn has_live_copy(store: &Store, dir: &std::path::Path, hash: &str) -> bool {
+    store.pinned.iter().chain(store.history.iter()).any(|i| {
+        i.kind == ItemKind::Image
+            && i.hash.as_deref() == Some(hash)
+            && i.image_file
+                .as_deref()
+                .and_then(|file| crate::storage::image_path(dir, file))
+                .is_some_and(|path| path.exists())
+    })
+}
+
+/// A picture's files, written and named.
+struct ImageFiles {
+    image: String,
+    thumb: Option<String>,
+}
+
+impl ImageFiles {
+    fn paths(&self, dir: &std::path::Path) -> Vec<std::path::PathBuf> {
+        std::iter::once(&self.image)
+            .chain(self.thumb.iter())
+            .map(|name| dir.join(name))
+            .collect()
+    }
+}
+
+/// Writes the picture and its thumbnail under fresh names. `None` when the
+/// picture itself could not be written; a thumbnail that fails is left out.
+fn write_image_files(
+    dir: &std::path::Path,
+    png: &[u8],
+    decoded: &image::DynamicImage,
+) -> Option<ImageFiles> {
+    let id_base = uuid::Uuid::new_v4().to_string();
+    let image = format!("{id_base}.png");
+    std::fs::write(dir.join(&image), png).ok()?;
+    let thumb = write_thumbnail(dir, format!("{id_base}.thumb.png"), decoded);
+    Some(ImageFiles { image, thumb })
 }
 
 /// The PNG bytes to store and the decoded image they came from.
@@ -646,6 +776,7 @@ mod tests {
         Rules {
             enabled: true,
             respect_concealed: true,
+            skip_secrets: false,
             excluded: false,
             source: macos::FrontApp {
                 name: "Safari".into(),
@@ -667,7 +798,81 @@ mod tests {
         if glance == *last {
             return "unchanged";
         }
-        match look(board, own, pause, rules(), glance, last).0 {
+        outcome(look(board, own, pause, rules(), glance, last).0, store)
+    }
+
+    /// `poll_once` with its loop state, at a chosen instant: what it found,
+    /// and the window its rules would have been gathered over.
+    fn poll_at(
+        board: &FakeBoard,
+        own: &OwnWrites,
+        pause: &Mutex<Pause>,
+        store: &Mutex<Store>,
+        watch: &mut Watch,
+        at: Instant,
+    ) -> (&'static str, Option<Duration>) {
+        let glance = board.change_count();
+        let Some(window) = watch.notice(glance, at, at) else {
+            return ("unchanged", None);
+        };
+        let found = look(board, own, pause, rules(), glance, &mut watch.last).0;
+        (outcome(found, store), Some(window))
+    }
+
+    /// IMP-10: with «لا تحفظ ما يشبه مفتاحًا سريًا» on, a copy shaped like a
+    /// secret is not stored; with it off (the default) it is, as before.
+    #[test]
+    fn a_secret_shaped_copy_is_skipped_only_when_asked() {
+        let token = "ghp_0123456789abcdefABCDEF0123456789abcd";
+        for (skip_secrets, expected) in [(true, "skipped"), (false, "captured")] {
+            let board = FakeBoard::new(1, token);
+            let own = OwnWrites::new();
+            let pause = Mutex::new(Pause::Off);
+            let (_dir, store) = empty_store();
+            let mut last = 0;
+            let glance = board.change_count();
+            let found = look(
+                &*board,
+                &own,
+                &pause,
+                Rules {
+                    skip_secrets,
+                    ..rules()
+                },
+                glance,
+                &mut last,
+            )
+            .0;
+            assert_eq!(
+                outcome(found, &store),
+                expected,
+                "skip_secrets={skip_secrets}"
+            );
+            let held = crate::lock_store(&store).history.len();
+            assert_eq!(held, usize::from(!skip_secrets));
+        }
+        // An ordinary copy is stored either way.
+        let board = FakeBoard::new(1, "نص عادي");
+        let (_dir, store) = empty_store();
+        let mut last = 0;
+        let glance = board.change_count();
+        let found = look(
+            &*board,
+            &OwnWrites::new(),
+            &Mutex::new(Pause::Off),
+            Rules {
+                skip_secrets: true,
+                ..rules()
+            },
+            glance,
+            &mut last,
+        )
+        .0;
+        assert_eq!(outcome(found, &store), "captured");
+    }
+
+    fn outcome(found: Look, store: &Mutex<Store>) -> &'static str {
+        match found {
             Look::Own => "own",
             Look::Skipped => "skipped",
             Look::Moved => "moved",
@@ -679,6 +884,110 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// 018: on a thread of its own, as the capture loop runs, an object a
+    /// tick autoreleases is gone once the tick is over.
+    #[test]
+    fn what_a_tick_autoreleases_is_freed_when_the_tick_ends() {
+        std::thread::spawn(|| {
+            let weak = in_pool(|| {
+                let object = objc2_foundation::NSObject::new();
+                let weak = objc2::rc::Weak::from_retained(&object);
+                let _ = objc2::rc::Retained::autorelease_ptr(object);
+                assert!(weak.load().is_some(), "held by the pool until it drains");
+                weak
+            });
+            assert!(weak.load().is_none(), "still alive after the tick");
+        })
+        .join()
+        .unwrap();
+    }
+
+    /// Every look tells the activation log where the next window opens, so a
+    /// window without a limit never outlasts the history it reads.
+    #[test]
+    fn every_look_tells_the_log_where_the_next_window_opens() {
+        let src = include_str!("monitor.rs");
+        let poll = &src[src.find("fn poll_once(").unwrap()..src.find("fn look(").unwrap()];
+        let told = "macos::keep_activations_since(watch.looked_at)";
+        let unchanged = &poll[..poll.find("return;").unwrap()];
+        assert!(unchanged.contains(told), "a look that found nothing");
+        let snapshot = poll.find("Rules::now(").unwrap();
+        assert!(
+            poll[snapshot..].contains(told),
+            "a look that found a change"
+        );
+        assert!(
+            !poll[unchanged.len()..snapshot].contains(told),
+            "not before its snapshot"
+        );
+        let start = &src[src.find("pub fn start(").unwrap()..src.find("fn in_pool").unwrap()];
+        assert!(start.contains("macos::keep_activations_since(watch.looked_at)"));
+        let gave_up = &start[start.find("Supervision::GaveUp").unwrap()..];
+        assert!(
+            gave_up.contains("macos::stop_keeping_activations()"),
+            "and lets go when it gives up"
+        );
+    }
+
+    /// And the loop does run every tick that way.
+    #[test]
+    fn the_capture_loop_runs_each_tick_in_a_pool() {
+        let src = include_str!("monitor.rs");
+        let start = &src[src.find("pub fn start(").unwrap()..src.find("fn in_pool").unwrap()];
+        assert!(start.contains("in_pool(|| poll_once("));
+    }
+
+    fn front(at: Instant, bundle: &str) -> macos::Activation {
+        macos::Activation {
+            at,
+            app: macos::FrontApp {
+                bundle_id: bundle.into(),
+                ..Default::default()
+            },
+        }
+    }
+
+    const MS: fn(u64) -> Duration = Duration::from_millis;
+
+    /// 007 ج1: the previous poll was slow — an image capture, or a wait at the
+    /// gate — so 750ms passed between two looks, not 350. The copy was made in
+    /// the password manager early in that span, and the user had switched away
+    /// before the later part of it. A fixed 350ms window looked only at the
+    /// later part, saw Terminal, and stored the copy.
+    #[test]
+    fn the_exclusion_window_reaches_back_to_the_previous_look() {
+        let t0 = Instant::now();
+        let mut watch = Watch::from(5, t0);
+        let (before, after) = (t0 + MS(750), t0 + MS(751));
+        let window = watch.notice(6, before, after).expect("the count moved");
+        assert!(window >= after - t0, "{window:?}");
+
+        let log = vec![
+            front(t0, "com.apple.Safari"),
+            front(t0 + MS(100), "com.agilebits.onepassword7"),
+            front(t0 + MS(200), "com.apple.Terminal"),
+        ];
+        let excluded = vec!["com.agilebits.onepassword7".to_string()];
+        assert!(macos::window_has_excluded(&log, &excluded, after, window));
+    }
+
+    /// A look that finds nothing moves the start of the next window, and the
+    /// window never shrinks below the sleep between two looks.
+    #[test]
+    fn the_window_starts_at_the_last_look_and_never_falls_below_the_sleep() {
+        let t0 = Instant::now();
+        let mut watch = Watch::from(5, t0);
+        assert_eq!(watch.notice(5, t0 + MS(400), t0 + MS(401)), None);
+        let window = watch.notice(6, t0 + MS(1_200), t0 + MS(1_201)).unwrap();
+        assert!(window >= MS(801) && window < MS(1_201), "{window:?}");
+
+        let mut quick = Watch::from(5, t0);
+        assert_eq!(
+            quick.notice(6, t0 + MS(10), t0 + MS(11)),
+            Some(SOURCE_WINDOW)
+        );
     }
 
     fn empty_store() -> (std::path::PathBuf, Mutex<Store>) {
@@ -887,6 +1196,44 @@ mod tests {
         let _ = std::fs::remove_dir_all(dir);
     }
 
+    /// 007 ج1 alongside the gate: the loop state changes when a window starts,
+    /// not what the gate decides. رفّ's write is still recognised and spent,
+    /// a copy landing mid-look is still left to the next poll — and that poll
+    /// judges it over a window reaching back to the look that left it.
+    #[test]
+    fn the_watch_keeps_the_gates_outcomes_and_covers_what_a_look_left() {
+        let (dir, store) = empty_store();
+        let board = FakeBoard::new(2, "قديم");
+        let own = OwnWrites::new();
+        let pause = Mutex::new(Pause::Off);
+        let t0 = Instant::now();
+        let mut watch = Watch::from(2, t0);
+        let at = |ms| t0 + MS(ms);
+
+        own.write(|| Some(board.write("ما كتبه رفّ", None)));
+        let (found, window) = poll_at(&board, &own, &pause, &store, &mut watch, at(400));
+        assert_eq!((found, window), ("own", Some(MS(400))));
+        assert_eq!(*own.hold(), None, "the record is spent");
+        let unchanged = poll_at(&board, &own, &pause, &store, &mut watch, at(750));
+        assert_eq!(unchanged, ("unchanged", None));
+
+        board.write("أولى", None);
+        {
+            let b = board.clone();
+            board.at_count_read(3, move || {
+                b.write("ثانية", None);
+            });
+        }
+        let (found, window) = poll_at(&board, &own, &pause, &store, &mut watch, at(1_100));
+        assert_eq!((found, window), ("moved", Some(MS(350))));
+        let (found, window) = poll_at(&board, &own, &pause, &store, &mut watch, at(1_600));
+        assert_eq!(found, "captured");
+        assert_eq!(window, Some(MS(500)), "from the look that left it");
+        assert_eq!(texts(&store), ["ثانية"]);
+        assert_eq!(board.clip_reads.load(Ordering::SeqCst), 1);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
     /// Another app's copy landing between the count a poll decided on and its
     /// read: what is there now was never checked (a pause, the exclusions),
     /// so it is left to the next poll, which checks it and stores it.
@@ -1046,6 +1393,98 @@ mod tests {
         }
     }
 
+    /// IMP-02 أ, measured (image_lock_probe): a 5K screenshot kept the store
+    /// locked 40–150 ms while its picture and thumbnail were written — the
+    /// panel opening meanwhile waited on `get_state`, on the main thread. The
+    /// files are written before the lock is taken for the capture.
+    #[test]
+    fn a_picture_is_written_with_the_store_unlocked() {
+        let src = include_str!("monitor.rs");
+        let image =
+            &src[src.find("fn capture_image(").unwrap()..src.find("fn decode_capture(").unwrap()];
+        let apply = &image[image.find("capture_and_persist(store_lock").unwrap()..];
+        let apply = &apply[..apply.find("\n    });").unwrap()];
+        let first_write = image.find("write_image_files(").unwrap();
+        assert!(
+            first_write < image.find("capture_and_persist(store_lock").unwrap(),
+            "written first"
+        );
+        // Under the lock only when the copy that made a write unnecessary
+        // vanished in between: the one fallback.
+        assert_eq!(apply.matches("write_image_files(").count(), 1, "{apply}");
+        assert!(!apply.contains("std::fs::write"));
+    }
+
+    /// The same picture captured by something else while this one's files
+    /// were being written: the capture lands on that row, and the files
+    /// written for nothing are taken back.
+    #[test]
+    fn files_written_ahead_for_a_picture_already_there_are_taken_back() {
+        let dir = std::env::temp_dir().join(format!("raff-ahead-test-{}", uuid::Uuid::new_v4()));
+        let store = Mutex::new(Store::load(dir.clone()));
+        let png = encode_png(&image::DynamicImage::new_rgba8(12, 9)).unwrap();
+        let images = dir.join(crate::storage::IMAGES_DIR);
+        let decoded = image::load_from_memory(&png).unwrap();
+
+        let landed = capture_image(
+            &store,
+            png.clone(),
+            decoded,
+            macos::FrontApp::default(),
+            || {
+                // Between the write ahead and the capture: the same picture lands.
+                assert!(capture_reading(&store, image_reading(png.clone())));
+            },
+        );
+        assert!(landed);
+        let guard = store.lock().unwrap();
+        assert_eq!(guard.history.len(), 1, "one row for the picture");
+        let named: Vec<String> = guard
+            .history
+            .iter()
+            .flat_map(|i| i.image_file.iter().chain(i.thumb_file.iter()).cloned())
+            .collect();
+        let on_disk: Vec<String> = std::fs::read_dir(&images)
+            .unwrap()
+            .flatten()
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(
+            on_disk.len(),
+            named.len(),
+            "no orphan left: {on_disk:?} vs {named:?}"
+        );
+        assert!(named.iter().all(|f| images.join(f).exists()));
+        drop(guard);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// The fallback: the picture was stored when asked first, so nothing was
+    /// written ahead — then its file went before the capture. It is written
+    /// under the lock, and the row points at a file that is there.
+    #[test]
+    fn a_copy_gone_between_the_two_looks_is_written_under_the_lock() {
+        let dir = std::env::temp_dir().join(format!("raff-fallback-test-{}", uuid::Uuid::new_v4()));
+        let store = Mutex::new(Store::load(dir.clone()));
+        let png = encode_png(&image::DynamicImage::new_rgba8(12, 9)).unwrap();
+        let images = dir.join(crate::storage::IMAGES_DIR);
+        assert!(capture_reading(&store, image_reading(png.clone())));
+        let first = store.lock().unwrap().history[0].image_file.clone().unwrap();
+
+        let decoded = image::load_from_memory(&png).unwrap();
+        let landed = capture_image(&store, png, decoded, macos::FrontApp::default(), || {
+            std::fs::remove_file(images.join(&first)).unwrap();
+        });
+        assert!(landed);
+        let guard = store.lock().unwrap();
+        assert_eq!(guard.history.len(), 1);
+        let healed = guard.history[0].image_file.clone().unwrap();
+        assert_ne!(healed, first);
+        assert!(images.join(&healed).exists(), "written, under the lock");
+        drop(guard);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
     #[test]
     fn recopying_an_image_whose_file_vanished_writes_it_again() {
         let dir = std::env::temp_dir().join(format!("raff-heal-test-{}", uuid::Uuid::new_v4()));
@@ -1182,6 +1621,50 @@ mod tests {
 
         assert!(capture_reading(&store, reading(42, 42, "نصّ عادي")));
         assert_eq!(store.lock().unwrap().history.len(), 1);
+    }
+
+    /// IMP-02 أ's measurement: what a 5K screenshot keeps the store locked
+    /// for today — the picture written, its thumbnail made and written, all
+    /// inside `capture_and_persist`'s `apply`. Run in release:
+    /// `cargo test --release image_lock_probe -- --ignored --nocapture`.
+    #[test]
+    #[ignore = "a measurement, run by hand in release"]
+    fn image_lock_probe() {
+        let (w, h) = (5120u32, 2880u32);
+        let mut seed = 7u32;
+        let pixels: Vec<u8> = (0..w * h * 4)
+            .map(|i| {
+                seed = seed.wrapping_mul(1_103_515_245).wrapping_add(12_345);
+                // A screenshot is mostly flat with detail: noise on every 8th byte.
+                if i % 8 == 0 {
+                    (seed >> 16) as u8
+                } else {
+                    200
+                }
+            })
+            .collect();
+        let decoded =
+            image::DynamicImage::ImageRgba8(image::RgbaImage::from_raw(w, h, pixels).unwrap());
+        let png = encode_png(&decoded).unwrap();
+        let dir = std::env::temp_dir().join(format!("raff-image-probe-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut held: Vec<f64> = (0..5)
+            .map(|n| {
+                let began = std::time::Instant::now();
+                std::fs::write(dir.join(format!("{n}.png")), &png).unwrap();
+                write_thumbnail(&dir, format!("{n}.thumb.png"), &decoded).unwrap();
+                began.elapsed().as_secs_f64() * 1000.0
+            })
+            .collect();
+        held.sort_by(f64::total_cmp);
+        println!(
+            "image_lock_probe: png={} bytes, held median={:.1}ms min={:.1}ms max={:.1}ms",
+            png.len(),
+            held[2],
+            held[0],
+            held[4]
+        );
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]

@@ -39,7 +39,7 @@ function rustAnnounces(source = (file) => read(`src-tauri/src/${file}`)) {
     }
   }
 
-  // Three announce on the way through another module; each path is checked
+  // Four announce on the way through another function; each path is checked
   // so the list cannot outlive the code it describes.
   const paste = source('paste.rs');
   const bump = paste.slice(paste.indexOf('fn bump_signals'));
@@ -53,8 +53,22 @@ function rustAnnounces(source = (file) => read(`src-tauri/src/${file}`)) {
   const setPause = tray.slice(tray.indexOf('fn set_pause'));
   assert.match(setPause.slice(0, setPause.indexOf('\n}\n')), /emit\("raff:\/\/changed"/u);
   assert.match(tray, /pub fn resume_capture\(\) \{\s*set_pause\(/u);
-  assert.match(commands, /pub (?:async )?fn resume_capture\(\) \{\s*crate::tray::resume_capture\(\)/u);
+  // After its window check (`access`), the command is the tray's path.
+  assert.match(
+    commands,
+    /pub (?:async )?fn resume_capture\([^)]*\)[^{]*\{\s*crate::access::require\(&window, "resume_capture"\)\?;\s*crate::tray::resume_capture\(\)/u
+  );
   announced.add('resume_capture');
+
+  // The settings command checks its window, then hands over to the path the
+  // menu bar takes too.
+  const apply = commands.slice(commands.indexOf('fn apply_settings('));
+  assert.match(apply.slice(0, apply.indexOf('\n}\n')), /\bnotify\(&app\)/u, 'saved settings announce');
+  assert.match(
+    commands,
+    /pub fn update_settings\([^)]*\)[^{]*\{\s*crate::access::require\(&window, "update_settings"\)\?;\s*if !crate::access::patch_allowed\([^}]*\}\s*apply_settings\(/u
+  );
+  announced.add('update_settings');
   return announced;
 }
 
@@ -86,9 +100,11 @@ test('the list read from Rust is the one this suite expects', () => {
       'clear_learning',
       'copy_item',
       'delete_item',
+      'import_backup',
       'paste_item',
       'reorder_pinned',
       'resume_capture',
+      'set_label',
       'toggle_pin',
       'undo_delete',
       'update_settings',
@@ -104,6 +120,7 @@ const ARGS = {
   paste_item: { id: 'h1', plain: false },
   copy_item: { id: 'h1' },
   reorder_pinned: { ids: ['p1'] },
+  set_label: { id: 'p1', label: 'اسم' },
   update_settings: { settings: { historyLimit: 400 } },
   search_items: { query: 'item' },
   get_image: { id: 'h1' },

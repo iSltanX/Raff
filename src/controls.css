@@ -203,3 +203,20 @@ kbd {
   overscroll-behavior: contain;
 }
 
+/* A line typed by hand: a bundle id in Settings, a pinned item's name in the
+   preview. Same row shape as the picker. The body is user-select:none; a
+   field is for typing in. */
+.text-input {
+  height: 28px;
+  min-width: 120px;
+  padding: 0 var(--space-12);
+  border: 1px solid var(--line-input);
+  border-radius: var(--radius-md);
+  background: var(--bg-raised);
+  font-size: var(--text-body);
+  color: var(--ink);
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-appearance: none;
+  appearance: none;
+}

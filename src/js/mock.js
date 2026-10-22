@@ -55,6 +55,9 @@ let deleteSequence = 0;
 // leaves one check for the window to claim before opening it (`updater.rs`):
 // a freshly loaded update page always finds one.
 let updateIntent = true;
+// Set once the mock has "checked": `open_updates` then hands the window what
+// was found, as Rust does.
+let updateFound = false;
 
 const listeners = new Map();
 
@@ -71,6 +74,8 @@ function announce(event = 'raff://changed') {
 // What Rust follows with `raff://changed` once it succeeds; a paste or copy
 // announces only the use it counted (`count_use`).
 const CHANGES = new Set([
+  'import_backup',
+  'set_label',
   'toggle_pin',
   'delete_item',
   'undo_delete',
@@ -96,6 +101,8 @@ const SETTINGS = {
   historyLimit: 500,
   captureEnabled: params.get('capture') !== 'off' && !MOCK_UNREADABLE_SETTINGS,
   respectConcealed: true,
+  skipSecrets: false,
+  ocrEnabled: false,
   excludedApps: ['com.1password.1password'],
   learningEnabled: true,
   firstRunShown: false,
@@ -197,6 +204,23 @@ function answer(cmd, args) {
           .map((entry) => entry.id)
       );
     }
+    // IMP-05: the browser has no save or open panel; a sample answer.
+    case 'export_backup':
+      return Promise.resolve({ saved: true, items: PINNED.length, pictures: 0 });
+    // As Rust, it announces when it added something: the sample adds one.
+    case 'import_backup':
+      PINNED.push({ ...PINNED[0], id: `imported-${PINNED.length}`, text: 'عنصر مستورد', label: undefined });
+      return Promise.resolve({ imported: true, added: 1, skipped: 0, settings: { ...SETTINGS } });
+    // IMP-07, as Rust: pinned items only, trimmed, capped, blank clears.
+    case 'set_label': {
+      const entry = PINNED.find((item) => item.id === args.id);
+      if (!entry) return Promise.reject('raff/label-not-pinned');
+      const label = String(args.label ?? '').trim();
+      if ([...label].length > 40) return Promise.reject('raff/label-too-long');
+      if (label) entry.label = label;
+      else delete entry.label;
+      return Promise.resolve(null);
+    }
     case 'reorder_pinned': {
       const ids = args.ids ?? [];
       const matchesShelf =
@@ -272,8 +296,11 @@ function answer(cmd, args) {
         return Promise.reject(new Error('انتهت مهلة التراجع عن الحذف'));
       }
       pendingDelete.layer.splice(pendingDelete.index, 0, pendingDelete.entry);
-      pendingDelete = null;
-      return Promise.resolve(null);
+      {
+        const standing = pendingDelete.entry.id;
+        pendingDelete = null;
+        return Promise.resolve(standing);
+      }
     case 'commit_delete':
       if (pendingDelete?.token === args.token) pendingDelete = null;
       return Promise.resolve(null);
@@ -311,6 +338,7 @@ function answer(cmd, args) {
     // Design-review sample: shows the richest "update available" state. Events
     // don't fire outside Tauri, so download resolves straight to "installed".
     case 'check_for_update':
+      updateFound = true;
       return Promise.resolve({
         status: 'available',
         currentVersion: '6.0.1',
@@ -321,12 +349,14 @@ function answer(cmd, args) {
     case 'download_and_install_update':
     case 'restart_to_update':
       return Promise.resolve(null);
+    // As in Rust: what a check found is handed to the window, not asked again.
     case 'open_updates':
-      updateIntent = true;
+      updateIntent = updateFound ? 'found' : true;
       return Promise.resolve(null);
     case 'consume_update_intent': {
       const claimed = updateIntent;
       updateIntent = false;
+      if (claimed === 'found') return mockInvoke('check_for_update');
       return Promise.resolve(claimed);
     }
 

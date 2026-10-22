@@ -7,6 +7,49 @@ export function arabicDigits(value) {
   return String(value).replace(/[0-9]/g, (d) => ARABIC_DIGITS[Number(d)]);
 }
 
+/** Whether «لصق بلا تشكيل» would change this text: harakat and their kin,
+ * the superscript alef, Quranic marks or tatweel — the same set
+ * `without_tashkeel` in paste.rs drops. A decomposed hamza or madda is part
+ * of its letter, and ۝ ۞ ۩ are symbols, not marks. */
+export function hasTashkeel(text) {
+  return /[\u064B-\u0652\u0656-\u065E\u0670\u06D6-\u06DC\u06DF-\u06E4\u06E7\u06E8\u06EA-\u06ED\u0640]/u.test(
+    String(text ?? '')
+  );
+}
+
+const ARABIC_MONTHS = [
+  'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو',
+  'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر',
+];
+
+/** A release's `YYYY-MM-DD` as a reader says it (audit 022 ج3): «٢٠ أكتوبر
+ * ٢٠٢٦» in Arabic, the interface language's own long date otherwise. A
+ * calendar day, so it is never shifted by a time zone. `null` for anything
+ * that is not such a date. */
+export function releaseDate(iso, lang = 'ar') {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/u.exec(String(iso ?? ''));
+  if (!m) return null;
+  const [year, month, day] = m.slice(1).map(Number);
+  const at = new Date(Date.UTC(year, month - 1, day));
+  if (at.getUTCFullYear() !== year || at.getUTCMonth() !== month - 1 || at.getUTCDate() !== day) {
+    return null;
+  }
+  const arabic = `${arabicDigits(day)} ${ARABIC_MONTHS[month - 1]} ${arabicDigits(year)}`;
+  if (/^ar(-|$)/iu.test(String(lang ?? ''))) return arabic;
+  try {
+    return new Intl.DateTimeFormat(lang, {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      timeZone: 'UTC',
+    }).format(at);
+  } catch {
+    // An empty or malformed `lang` makes Intl throw; the date still shows,
+    // in the interface's own language.
+    return arabic;
+  }
+}
+
 /**
  * A count with its noun, as Arabic counts: one and two have their own forms,
  * three to ten take the plural, eleven and up the singular accusative.
@@ -56,6 +99,7 @@ export function filterItems(items, query, alsoMatchIds = null) {
     (item) =>
       alsoMatchIds?.has(item.id) ||
       normalizeArabic(item.text).includes(q) ||
+      (item.isPinned && normalizeArabic(item.label || '').includes(q)) ||
       normalizeArabic(item.sourceApp || '').includes(q)
   );
 }
@@ -151,4 +195,26 @@ export function hotkeyRefusal(accel) {
   if (!mods.some((mod) => mod !== 'shift')) return 'needs-modifier';
   if (SHARED_HOTKEYS.has(accel)) return 'shared';
   return null;
+}
+
+/**
+ * What an imported backup changes in Settings (IMP-05): preferences only.
+ *
+ * Capture, the history's limit and retention, and the concealed-item rule
+ * are this Mac's: a file from another Mac neither deletes rows here (a
+ * smaller limit or shorter retention prunes at once) nor lets more in (a
+ * file with concealed items allowed). Excluded apps only ever grow. The
+ * hotkey comes apart, saved on its own after the rest: one this Mac refuses
+ * must not take the other preferences down with it.
+ */
+export function settingsFromBackup(current, file) {
+  const patch = {};
+  for (const key of ['launchAtLogin', 'learningEnabled', 'appearance', 'followSystem']) {
+    if (key in file && file[key] !== current[key]) patch[key] = file[key];
+  }
+  const have = current.excludedApps ?? [];
+  const added = (file.excludedApps ?? []).filter((id, i, all) => !have.includes(id) && all.indexOf(id) === i);
+  if (added.length > 0) patch.excludedApps = [...have, ...added];
+  const hotkey = file.hotkey && file.hotkey !== current.hotkey ? file.hotkey : null;
+  return { patch, hotkey };
 }

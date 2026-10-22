@@ -93,7 +93,7 @@
         aria-labelledby="settings-tab-general"
         tabindex="0"
       >
-        <div class="page-heading">
+        <div class="page-heading sr-only">
           <h2>عام</h2>
           <p>بدء التشغيل، والاختصار، ومظهر رفّ.</p>
         </div>
@@ -179,7 +179,7 @@
         tabindex="0"
         hidden
       >
-        <div class="page-heading">
+        <div class="page-heading sr-only">
           <h2>الالتقاط</h2>
           <p>هل يحفظ رفّ ما تنسخه، وكم يحفظ، وإلى متى.</p>
         </div>
@@ -260,6 +260,22 @@
               </div>
             </div>
           </div>
+          <!-- IMP-05: the shelf and the settings in one readable file. -->
+          <div class="settings-group">
+            <h3 class="group-title">النسخ الاحتياطي</h3>
+            <div class="settings-rows">
+              <div class="row">
+                <div class="row-buttons">
+                  <button type="button" class="push-btn" id="export-backup" aria-label="تصدير نسخة احتياطية…">تصدير…</button>
+                  <button type="button" class="push-btn" id="import-backup" aria-label="استيراد نسخة احتياطية…">استيراد…</button>
+                </div>
+                <div class="row-label">
+                  <span class="label-title" dir="auto">المثبّتات والإعدادات في ملف</span>
+                  <span class="label-sub is-status" id="backup-status" role="status" aria-live="polite" aria-atomic="true" dir="auto">ملف تحفظه حيث تشاء، بلا صور ولا سجل، ويُستورد على جهاز آخر بلا تكرار.</span>
+                </div>
+              </div>
+            </div>
+          </div>
           <p class="page-note" dir="auto">ما يحفظه رفّ يبقى على جهازك.</p>
         </div>
       </section>
@@ -271,7 +287,7 @@
         tabindex="0"
         hidden
       >
-        <div class="page-heading">
+        <div class="page-heading sr-only">
           <h2>الخصوصية</h2>
           <p>الإذن الاختياري للصق، وما لا ينبغي لرفّ حفظه.</p>
         </div>
@@ -320,6 +336,22 @@
                 <div class="row-label">
                   <span class="label-title" id="concealed-label" dir="auto">تجاهل المحتوى السرّي والمؤقت</span>
                   <span class="label-sub" id="concealed-sub" dir="auto">ما تعلّمه مديرات كلمات المرور والتطبيقات بأنه سرّي أو مؤقت لا يُحفظ أصلًا.</span>
+                </div>
+              </div>
+              <!-- IMP-10, experimental and off by default. -->
+              <div class="row">
+                <button
+                  type="button"
+                  class="checkbox"
+                  id="secrets-toggle"
+                  role="checkbox"
+                  aria-checked="false"
+                  aria-labelledby="secrets-label"
+                  aria-describedby="secrets-sub"
+                ></button>
+                <div class="row-label">
+                  <span class="label-title" id="secrets-label" dir="auto">لا تحفظ ما يشبه مفتاحًا سريًا</span>
+                  <span class="label-sub" id="secrets-sub" dir="auto">تجريبي. إن نسخت مفتاحًا خاصًا، أو رمزًا من <bdi>GitHub</bdi>، أو معرّف مفتاح <bdi>AWS</bdi>، أو مفتاحًا يبدأ بـ<bdi>sk-</bdi>، فلا يحفظه رفّ. الكشف بالشكل وحده، فلا يشمل كل سرّ.</span>
                 </div>
               </div>
               <div class="row">
@@ -385,6 +417,27 @@
               </div>
             </div>
           </div>
+          <!-- IMP-09, experimental and off by default. -->
+          <div class="settings-group">
+            <h3 class="group-title">النص في الصور</h3>
+            <div class="settings-rows">
+              <div class="row">
+                <button
+                  type="button"
+                  class="checkbox"
+                  id="ocr-toggle"
+                  role="checkbox"
+                  aria-checked="false"
+                  aria-labelledby="ocr-label"
+                  aria-describedby="ocr-sub"
+                ></button>
+                <div class="row-label">
+                  <span class="label-title" id="ocr-label" dir="auto">اقرأ النص في الصور ليجدها البحث</span>
+                  <span class="label-sub" id="ocr-sub" dir="auto">تجريبي. يقرأ رفّ النص في صورك، ومنها ما في السجل الآن، على جهازك بلا شبكة، ويحفظه مع الصورة. والعربية على إصدارات <bdi>macOS</bdi> التي تدعمها. إيقاف الخيار يمحو كل نص استخرجه، ولا يمسّ الصور نفسها.</span>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
       <section
@@ -395,7 +448,7 @@
         tabindex="0"
         hidden
       >
-        <div class="page-heading">
+        <div class="page-heading sr-only">
           <h2>التعلّم</h2>
           <p>عدّادات استخدام محلية لكل عنصر.</p>
         </div>

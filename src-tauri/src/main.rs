@@ -4,14 +4,18 @@
 // for a problem report the user previews and confirms.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod access;
+mod backup;
 mod commands;
 mod diagnostics;
 mod macos;
 mod monitor;
+mod ocr;
 mod panel;
 mod paste;
 mod report;
 mod report_image;
+mod secrets;
 mod startup_trace;
 mod storage;
 mod tray;
@@ -277,10 +281,13 @@ fn main() {
             commands::copy_item,
             commands::toggle_pin,
             commands::reorder_pinned,
+            commands::set_label,
             commands::delete_item,
             commands::undo_delete,
             commands::commit_delete,
             commands::clear_history,
+            backup::export_backup,
+            backup::import_backup,
             commands::clear_learning,
             commands::learning_summary,
             commands::update_settings,
@@ -401,6 +408,7 @@ fn main() {
             }
             startup_trace::mark("hotkey_registered");
             monitor::start(handle.clone());
+            ocr::start(handle.clone());
             startup_trace::mark("monitor_started");
 
             if open_welcome {

@@ -108,6 +108,18 @@
         <button type="button" class="btn" data-action="plain" tabindex="-1" aria-keyshortcuts="Alt+Enter"><span>لصق كنص عادي</span><bdi class="btn-keys">⌥↵</bdi></button>
         <button type="button" class="btn" data-action="copy" tabindex="-1" aria-keyshortcuts="Meta+C"><span class="preview-icon" data-icon="copy"></span><span>نسخ</span><bdi class="btn-keys">⌘C</bdi></button>
       </div>
+      <!-- One row (Sultan, 2026-10-22): «لصق بلا تشكيل» for text with harakat
+           or tatweel to drop (IMP-06), «تسمية» for a pinned item (IMP-07).
+           Either alone fills the row; with neither, the row goes. The name
+           field opens in place below; Enter saves, Escape cancels. -->
+      <div class="preview-pair is-flex" id="preview-bare-label" hidden>
+        <button type="button" class="btn" data-action="bare" tabindex="-1" aria-keyshortcuts="Control+Enter" hidden><span>لصق بلا تشكيل</span><bdi class="btn-keys">⌃↵</bdi></button>
+        <button type="button" class="btn" data-action="label" tabindex="-1" aria-keyshortcuts="Alt+L" hidden><span id="preview-label-text">تسمية</span><bdi class="btn-keys">⌥L</bdi></button>
+      </div>
+      <form class="preview-label-form" id="preview-label-form" hidden>
+        <input type="text" class="text-input" id="preview-label-input" maxlength="40" dir="auto" autocomplete="off" spellcheck="false" aria-label="اسم المثبّت" placeholder="اسم للمثبّت" />
+        <button type="submit" class="btn">حفظ</button>
+      </form>
       <div class="preview-pair">
         <button type="button" class="btn" data-action="pin" tabindex="-1" aria-keyshortcuts="Alt+P"><span class="preview-icon" data-icon="pin"></span><span id="preview-pin-label">تثبيت</span><bdi class="btn-keys">⌥P</bdi></button>
         <button type="button" class="btn btn-quiet" data-action="delete" tabindex="-1" aria-keyshortcuts="Meta+Backspace"><span class="preview-icon" data-icon="trash"></span><span>حذف</span><bdi class="btn-keys">⌘⌫</bdi></button>

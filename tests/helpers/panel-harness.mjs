@@ -56,6 +56,8 @@ export function sampleItem(id, overrides = {}) {
  *  by `change-event-parity.test.mjs`). A paste or copy announces only the use
  *  it counted, so it is handled where it is answered. */
 const ANNOUNCES = new Set([
+  'import_backup',
+  'set_label',
   'toggle_pin',
   'delete_item',
   'undo_delete',
@@ -208,14 +210,31 @@ export function createFakeTauri(initialState, { failTimes = 0 } = {}) {
         return Promise.reject(new Error('انتهت مهلة التراجع عن الحذف'));
       }
       state[pendingDelete.layer].splice(pendingDelete.index, 0, pendingDelete.item);
+      const standing = pendingDelete.item.id;
       pendingDelete = null;
-      return Promise.resolve(null);
+      // As Rust: the id of the row that stands for the item now.
+      return Promise.resolve(standing);
     }
     if (cmd === 'commit_delete') {
       if (pendingDelete && pendingDelete.token === args?.token) {
         committedDeleteTokens.push(pendingDelete.token);
         pendingDelete = null;
       }
+      return Promise.resolve(null);
+    }
+    // IMP-05: a backup with one item new to this shelf.
+    if (cmd === 'import_backup') {
+      state.pinned = [...state.pinned, { id: `imported-${state.pinned.length}`, type: 'text', text: 'مستورد', isPinned: true }];
+      return Promise.resolve({ imported: true, added: 1, skipped: 0, settings: null });
+    }
+    // IMP-07, as Rust: pinned items only, trimmed, capped, blank clears.
+    if (cmd === 'set_label') {
+      const item = state.pinned.find((entry) => entry.id === args?.id);
+      if (!item) return Promise.reject('raff/label-not-pinned');
+      const label = String(args?.label ?? '').trim();
+      if ([...label].length > 40) return Promise.reject('raff/label-too-long');
+      if (label) item.label = label;
+      else delete item.label;
       return Promise.resolve(null);
     }
     if (cmd === 'reorder_pinned') {

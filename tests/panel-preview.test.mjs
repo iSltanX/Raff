@@ -305,11 +305,24 @@ test('the preview buttons tell assistive technology their shortcuts', async () =
   const { JSDOM } = await import('jsdom');
   const html = readFileSync(new URL('../src/index.html', import.meta.url), 'utf8');
   const doc = new JSDOM(html).window.document;
-  const printed = { '↵': 'Enter', '⌥↵': 'Alt+Enter', '⌘C': 'Meta+C', '⌥P': 'Alt+P', '⌘⌫': 'Meta+Backspace' };
+  const printed = {
+    '↵': 'Enter',
+    '⌥↵': 'Alt+Enter',
+    '⌘C': 'Meta+C',
+    '⌥P': 'Alt+P',
+    '⌘⌫': 'Meta+Backspace',
+    '⌃↵': 'Control+Enter', // «لصق بلا تشكيل» (IMP-06)
+    '⌥L': 'Alt+L', // «تسمية» (IMP-07, Sultan 2026-10-22)
+  };
   const buttons = [...doc.querySelectorAll('#preview .preview-actions button')];
-  assert.equal(buttons.length, 5);
-  for (const button of buttons) {
+  const keyed = buttons.filter((button) => button.querySelector('.btn-keys'));
+  assert.equal(keyed.length, 7);
+  for (const button of keyed) {
     const keys = button.querySelector('.btn-keys').textContent;
     assert.equal(button.getAttribute('aria-keyshortcuts'), printed[keys], button.dataset.action);
+  }
+  // The name field's «حفظ» has no key, and claims none (IMP-07).
+  for (const button of buttons.filter((b) => !keyed.includes(b))) {
+    assert.equal(button.hasAttribute('aria-keyshortcuts'), false, button.textContent);
   }
 });

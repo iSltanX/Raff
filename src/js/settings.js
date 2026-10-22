@@ -4,7 +4,15 @@
 // preferences toolbar, one page at a time, grouped cards.
 
 import { api, on } from './store.js';
-import { arabicDigits, metaLine, hotkeyDisplay, hotkeyFromEvent, hotkeyRefusal } from './logic.js';
+import {
+  arabicCount,
+  arabicDigits,
+  metaLine,
+  hotkeyDisplay,
+  hotkeyFromEvent,
+  hotkeyRefusal,
+  settingsFromBackup,
+} from './logic.js';
 import { ALERT, CAPTURE_OFF, CLEAR, KEYBOARD, PAUSE, createIcon } from './icons.js';
 
 // The native WKWebView menu is English ("Reload") — never shown in Raff.
@@ -187,6 +195,8 @@ async function load() {
   }
   renderAccessibility(state.axTrusted === true);
   setChecked('concealed-toggle', settings.respectConcealed);
+  setChecked('secrets-toggle', settings.skipSecrets === true);
+  setChecked('ocr-toggle', settings.ocrEnabled === true);
   setChecked('learning-toggle', settings.learningEnabled);
   el('history-limit').value = String(settings.historyLimit);
   el('retention').value = String(settings.retentionDays ?? 0);
@@ -476,6 +486,12 @@ el('capture-toggle').addEventListener('click', () =>
 el('concealed-toggle').addEventListener('click', () =>
   save((current) => ({ respectConcealed: !current.respectConcealed }))
 );
+el('secrets-toggle').addEventListener('click', () =>
+  save((current) => ({ skipSecrets: !current.skipSecrets }))
+);
+el('ocr-toggle').addEventListener('click', () =>
+  save((current) => ({ ocrEnabled: !current.ocrEnabled }))
+);
 el('learning-toggle').addEventListener('click', () =>
   save((current) => ({ learningEnabled: !current.learningEnabled }))
 );
@@ -621,11 +637,19 @@ function renderExcluded() {
     remove.replaceChildren(createIcon(CLEAR));
     remove.title = 'إزالة';
     remove.setAttribute('aria-label', `إزالة ${bundleId}`);
-    remove.addEventListener('click', () =>
-      save((current) => ({
+    remove.addEventListener('click', async () => {
+      const at = settings.excludedApps.indexOf(bundleId);
+      const saved = await save((current) => ({
         excludedApps: current.excludedApps.filter((candidate) => candidate !== bundleId),
-      }))
-    );
+      }));
+      if (!saved) return;
+      // The row went with the focused button: focus the row that took its
+      // place, or the one before, or the field when the list is empty.
+      const buttons = [...el('excluded-list').querySelectorAll('.remove-excluded')];
+      (buttons[at] ?? buttons[at - 1] ?? manualBundle).focus();
+      // And the app may be offered again (audit 020 ج3).
+      if (!el('excluded-manager').hidden) await populateRunningApps();
+    });
     li.append(bundle, remove);
     list.append(li);
   }
@@ -678,18 +702,37 @@ const manualBundle = el('excluded-bundle');
 const manualError = el('excluded-manual-error');
 const manualErrorText = el('excluded-manual-error-text');
 
+const MANUAL_HINT = manualBundle.getAttribute('aria-describedby');
+
 function showManualError(message) {
   manualErrorText.textContent = message;
   manualError.hidden = false;
+  manualBundle.setAttribute('aria-invalid', 'true');
+  manualBundle.setAttribute('aria-describedby', `${MANUAL_HINT} excluded-manual-error`);
 }
 
-manualBundle.addEventListener('input', () => {
+function clearManualError() {
   manualError.hidden = true;
+  manualBundle.removeAttribute('aria-invalid');
+  manualBundle.setAttribute('aria-describedby', MANUAL_HINT);
+}
+
+manualBundle.addEventListener('input', clearManualError);
+
+// Enter in the field is its button, as in any one-field form (audit 020 ج3).
+manualBundle.addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter' || e.isComposing) return;
+  e.preventDefault();
+  el('add-excluded-manual').click();
 });
 
 el('add-excluded-manual').addEventListener('click', async () => {
   const bundleId = manualBundle.value.trim();
-  if (!bundleId || settings.excludedApps.includes(bundleId)) return;
+  if (!bundleId) return;
+  if (settings.excludedApps.includes(bundleId)) {
+    showManualError('هذا التطبيق مستبعَد بالفعل.');
+    return;
+  }
 
   const saved = await save((current) => ({
     excludedApps: current.excludedApps.includes(bundleId)
@@ -705,7 +748,7 @@ el('add-excluded-manual').addEventListener('click', async () => {
     return;
   }
   manualBundle.value = '';
-  manualError.hidden = true;
+  clearManualError();
   await populateRunningApps();
 });
 
@@ -719,6 +762,68 @@ addExcludedBtn.addEventListener('click', async () => {
   }));
   if (saved) await populateRunningApps();
 });
+
+// ─── Backup (IMP-05) ──────────────────────────────────────────────────────
+
+const backupStatus = el('backup-status');
+const backupButtons = el('export-backup').parentElement;
+const BACKUP_ERRORS = {
+  'raff/backup-invalid': 'ليس ملف نسخة احتياطية من رفّ، أو أنه تالف. لم يُستورد شيء.',
+  'raff/backup-newer': 'هذه النسخة من إصدار أحدث من رفّ. حدّث رفّ ثم استوردها.',
+  'raff/backup-too-large': 'الملف أكبر من حدّ النسخة الاحتياطية. لم يُستورد شيء.',
+  'raff/backup-write-failed': 'تعذّر حفظ الملف في المكان المختار.',
+};
+const backupError = (err) => BACKUP_ERRORS[String(err)] ?? 'تعذّر إتمام العملية. حاول مرة أخرى.';
+const ITEMS = ['عنصر واحد', 'عنصران', 'عناصر', 'عنصرًا'];
+
+// One at a time: the other button waits rather than opening a second panel.
+// Neither is disabled, so the one pressed keeps the keyboard.
+let backupBusy = false;
+async function runBackup(work) {
+  if (backupBusy) return;
+  backupBusy = true;
+  backupButtons.setAttribute('aria-busy', 'true');
+  try {
+    const said = await work();
+    if (said) {
+      backupStatus.textContent = said;
+      backupStatus.classList.remove('error');
+    }
+  } catch (err) {
+    backupStatus.textContent = backupError(err);
+    backupStatus.classList.add('error');
+  } finally {
+    backupBusy = false;
+    backupButtons.removeAttribute('aria-busy');
+  }
+}
+
+el('export-backup').addEventListener('click', () =>
+  runBackup(async () => {
+    const result = await api.exportBackup();
+    if (!result?.saved) return null; // cancelled: nothing to say
+    const left = result.pictures > 0 ? ` ولم تُصدَّر الصور المثبّتة (${arabicDigits(result.pictures)}).` : '';
+    if (result.items === 0) return `صُدّرت الإعدادات، ولا مثبّتات فيها.${left}`;
+    return `صُدّر ${arabicCount(result.items, ITEMS)} من المثبّتات مع الإعدادات.${left}`;
+  })
+);
+
+el('import-backup').addEventListener('click', () =>
+  runBackup(async () => {
+    const result = await api.importBackup();
+    if (!result?.imported) return null;
+    const { patch, hotkey } = settingsFromBackup(settings, result.settings ?? {});
+    const applied = Object.keys(patch).length > 0 ? await save(() => patch) : true;
+    const hotkeyApplied = hotkey ? await save(() => ({ hotkey })) : true;
+    const added = result.added > 0 ? `أُضيف ${arabicCount(result.added, ITEMS)}` : 'لم يُضف شيء';
+    const skipped = result.skipped > 0 ? `، وتُخطّي ما كان موجودًا من قبل (${arabicDigits(result.skipped)})` : '';
+    let settingsLine = applied
+      ? 'وطُبّقت تفضيلاته، وبقي الالتقاط والخصوصية والاحتفاظ كما هنا.'
+      : 'ولم تُطبَّق تفضيلاته.';
+    if (!hotkeyApplied) settingsLine += ' ولم يُطبَّق اختصاره.';
+    return `${added}${skipped}. ${settingsLine}`;
+  })
+);
 
 // ─── Two-step destructive buttons ─────────────────────────────────────────
 
