@@ -12,10 +12,10 @@
   on the shelf (dmg-layout.mjs: ICON_SIZE, ICON_CENTRES). Applications sits to
   its left on the same line, and the drag runs right to left.
 
-  Light only: Finder takes one background picture, never one per appearance.
-  Reports (DropDMG, 2018 and 2020; not yet checked on macOS 27) say Finder also
-  draws such a window light, with dark labels, so the shelf is a sand tone a
-  dark label reads on, and the window behind Applications too.
+  Light only: Finder takes one background picture, never one per appearance,
+  and draws such a window light with dark labels even in Dark Mode (seen in
+  Finder on macOS 27, 2026-10-22). So the shelf is a sand tone a dark label
+  reads on, and so is the window behind Applications.
 -->
 <html lang="ar" dir="rtl" data-appearance="light">
 <head>
@@ -41,9 +41,11 @@
   /* Where the plate meets the shelf. Flat: a tone, no blur. */
   .contact { left: 314px; top: 247.9375px; width: 88px; height: 4px; border-radius: 2px; background: var(--line-input); }
 
-  /* The drag, right to left: seven dots and a chevron. */
+  /* The drag, right to left: six dots and a chevron, clear of both icons —
+     Finder's folder art ends at x 216 and Raff's plate starts at 300
+     (measured in Finder on macOS 27, 2026-10-22). */
   .dot { top: 188px; width: 4px; height: 4px; border-radius: 50%; background: var(--brand-accent); }
-  .chevron { left: 214px; top: 182px; width: 10px; height: 16px; }
+  .chevron { left: 224px; top: 182px; width: 10px; height: 16px; }
 
   .line { left: 40px; width: 580px; text-align: center; }
   .instruction { top: 40px; font: 700 22px/34px var(--font-heading); color: var(--ink); }
@@ -59,13 +61,12 @@
   <div class="abs shelf"></div>
   <div class="abs contact"></div>
 
-  <div class="abs dot" style="left: 284px"></div>
-  <div class="abs dot" style="left: 275px"></div>
-  <div class="abs dot" style="left: 266px"></div>
-  <div class="abs dot" style="left: 257px"></div>
-  <div class="abs dot" style="left: 248px"></div>
-  <div class="abs dot" style="left: 239px"></div>
-  <div class="abs dot" style="left: 230px"></div>
+  <div class="abs dot" style="left: 285px"></div>
+  <div class="abs dot" style="left: 276px"></div>
+  <div class="abs dot" style="left: 267px"></div>
+  <div class="abs dot" style="left: 258px"></div>
+  <div class="abs dot" style="left: 249px"></div>
+  <div class="abs dot" style="left: 240px"></div>
   <svg class="abs chevron" viewBox="0 0 10 16" aria-hidden="true">
     <path d="M8.5 1.5L2 8L8.5 14.5" fill="none" style="stroke: var(--brand-accent)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
   </svg>

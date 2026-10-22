@@ -104,6 +104,21 @@ test('Raff.app rests on the shelf: its plate fills the 233 × 233 square of the 
   assert.ok(Math.abs(px(contact.top) - (top + 233 * scale)) < 0.1, 'the contact line sits on the top edge of the shelf');
 });
 
+test('the drag hint runs between the icons without touching either', () => {
+  const html = read('src-tauri/dmg/background.html');
+  // Measured in Finder on macOS 27 (2026-10-22): the Applications folder art
+  // reaches 66 pt right of its centre at icon size 144; Raff's plate is the
+  // 233-unit square, half of 115.875 either side of its centre.
+  const folderRight = ICON_CENTRES.Applications[0] + 66;
+  const plateLeft = ICON_CENTRES['Raff.app'][0] - (ICON_SIZE * 824) / 1024 / 2;
+  const dots = [...html.matchAll(/class="abs dot" style="left: ([\d.]+)px"/gu)].map((m) => Number(m[1]));
+  assert.ok(dots.length >= 4, 'the hint is a row of dots');
+  const tip = px(rule(html, '.chevron').left) + 2; // the chevron path starts at x 2 of its box
+  assert.ok(tip - folderRight >= 8, `the chevron clears the folder: ${(tip - folderRight).toFixed(1)} pt`);
+  assert.ok(plateLeft - (Math.max(...dots) + 4) >= 8, `the dots clear Raff: ${(plateLeft - Math.max(...dots) - 4).toFixed(1)} pt`);
+  assert.ok(Math.min(...dots) > tip + 8, 'the dots start right of the chevron');
+});
+
 test('a dark Finder label reads on the shelf and on the window', () => {
   // Finder writes the icon names in dark type over a background picture
   // (see background.html); both tones under a name must carry it.
