@@ -31,7 +31,8 @@ export const api = {
   // `true` pasted, `false` copied only, or a string naming why it was only
   // copied (`'copiedOverRaff'`, paste.rs `PasteOutcome`): a new reason must be
   // worded in panel.js, or it reads as the Accessibility fallback.
-  pasteItem: (id, plain = false) => invoke('paste_item', { id, plain }),
+  // `bare`: «الصق بلا تشكيل» (IMP-06), the text without harakat or tatweel.
+  pasteItem: (id, plain = false, bare = false) => invoke('paste_item', { id, plain, bare }),
   copyItem: (id) => invoke('copy_item', { id }),
   togglePin: (id, isPinned) => invoke('toggle_pin', { id, isPinned }),
   reorderPinned: (ids) => invoke('reorder_pinned', { ids }),

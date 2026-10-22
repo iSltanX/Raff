@@ -6,7 +6,15 @@
 // its content type, and the paired Figma actions sit at the trailing edge.
 
 import { api, on } from './store.js';
-import { arabicCount, arabicDigits, filterItems, hotkeyDisplay, hotkeyRefusal, relativeTimeAr } from './logic.js';
+import {
+  arabicCount,
+  arabicDigits,
+  filterItems,
+  hasTashkeel,
+  hotkeyDisplay,
+  hotkeyRefusal,
+  relativeTimeAr,
+} from './logic.js';
 import { createHoverIntent } from './hover-intent.js';
 import {
   SETTINGS,
@@ -1487,10 +1495,10 @@ toastUndoEl.addEventListener('click', undoLastDelete);
 
 // ─── Actions ──────────────────────────────────────────────────────────────
 
-function paste(id, plain) {
+function paste(id, plain, bare = false) {
   if (!id) return;
   api
-    .pasteItem(id, plain)
+    .pasteItem(id, plain, bare)
     .then(async (pasted) => {
       if (pasted === true) return;
       // Copied only because رفّ itself was in front — Settings, or the
@@ -1859,6 +1867,7 @@ filtersEl.addEventListener('keydown', (e) => {
 
 const previewEl = document.getElementById('preview');
 const previewKindEl = document.getElementById('preview-kind');
+const previewBareEl = previewEl.querySelector('[data-action="bare"]');
 const previewWhenEl = document.getElementById('preview-when');
 const previewSizeEl = document.getElementById('preview-size');
 const previewBodyEl = document.getElementById('preview-body');
@@ -1940,8 +1949,9 @@ function closePreviewByHand() {
 
 /** Enter (⌥ for plain), ⌘C, ⌥P and ⌘⌫ — the keys that act on one item. */
 function actsOnItem(e) {
-  if (e.ctrlKey || e.shiftKey) return false;
+  if (e.shiftKey) return false;
   if (e.key === 'Enter' && !e.metaKey) return true;
+  if (e.ctrlKey) return false;
   if (e.metaKey && !e.altKey && (e.code === 'KeyC' || e.key === 'Backspace')) return true;
   return e.altKey && !e.metaKey && e.code === 'KeyP';
 }
@@ -1975,6 +1985,8 @@ function fillPreview(item) {
   const sameItem = previewEl.dataset.id === item.id;
   previewEl.dataset.id = item.id;
   previewEl.dataset.type = item.type;
+  // Only where there is something for it to drop.
+  previewBareEl.hidden = item.type === 'image' || !hasTashkeel(item.text);
   previewKindEl.textContent = item.type === 'code' ? 'شفرة' : contentTypeIcon(item.type).label;
   previewWhenEl.textContent = [
     relativeTimeAr(item.createdAt),
@@ -2098,6 +2110,9 @@ previewEl.addEventListener('click', (e) => {
       return;
     case 'plain':
       paste(id, true);
+      return;
+    case 'bare':
+      paste(id, false, true);
       return;
     case 'copy':
       copyItem(id);
@@ -2314,7 +2329,8 @@ window.addEventListener('keydown', (e) => {
       return;
     case 'Enter':
       e.preventDefault();
-      paste(selectedId, e.altKey); // ⌥⏎ = لصق كنص عادي
+      // ⌥⏎ = لصق كنص عادي، ⌃⏎ = الصق بلا تشكيل (IMP-06).
+      paste(selectedId, e.altKey, e.ctrlKey && !e.altKey);
       return;
     case 'Escape':
       e.preventDefault();

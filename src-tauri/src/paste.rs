@@ -22,12 +22,37 @@ const PASTE_PATIENCE: Duration = Duration::from_secs(2);
 /// `ACTIVATE_DELAY_MS`, press — before the panel stops waiting for it.
 const PASTE_FINISH: Duration = Duration::from_secs(3);
 
-/// Writes an item to the pasteboard. `plain` drops rich representations
-/// ("لصق كنص عادي"). Returns false when the id is unknown.
+/// The form an item is written in.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Form {
+    /// As copied: text with its HTML and RTF, or the picture.
+    Rich,
+    /// «لصق كنص عادي»: the text alone.
+    Plain,
+    /// «الصق بلا تشكيل» (IMP-06): the text alone, without its harakat and
+    /// tatweel. The stored item is not changed.
+    Bare,
+}
+
+/// The text without what «بلا تشكيل» drops: the harakat and their
+/// relatives (U+064B–U+065F), the superscript alef (U+0670), the Quranic
+/// annotation marks (U+06D6–U+06ED) and tatweel (U+0640). Letters, digits,
+/// punctuation and every other script pass unchanged.
+pub fn without_tashkeel(text: &str) -> String {
+    text.chars()
+        .filter(|c| {
+            !matches!(c,
+                '\u{064B}'..='\u{065F}' | '\u{0670}' | '\u{06D6}'..='\u{06ED}' | '\u{0640}')
+        })
+        .collect()
+}
+
+/// Writes an item to the pasteboard in `form`. Returns false when the id is
+/// unknown.
 ///
 /// Blocking: it reads the image file and may wait for a poll to finish its
 /// read (`OwnWrites`), so it is only called from commands off the main thread.
-pub fn write_item_to_clipboard(app: &AppHandle, id: &str, plain: bool) -> bool {
+pub fn write_item_to_clipboard(app: &AppHandle, id: &str, form: Form) -> bool {
     let state = app.state::<AppState>();
     let (kind, text, html, rtf, image) = {
         let store = crate::lock_store(&state.store);
@@ -38,7 +63,9 @@ pub fn write_item_to_clipboard(app: &AppHandle, id: &str, plain: bool) -> bool {
             .image_file
             .as_ref()
             .and_then(|f| crate::storage::image_path(&store.images_dir(), f));
-        if plain {
+        if form == Form::Bare {
+            (item.kind, without_tashkeel(&item.text), None, None, image)
+        } else if form == Form::Plain {
             (item.kind, item.text.clone(), None, None, image)
         } else {
             let rtf = item
@@ -96,13 +123,13 @@ impl serde::Serialize for PasteOutcome {
 
 /// The outcome distinguishes a real synthesized paste from clipboard-only
 /// fallback, using a fresh Accessibility check instead of stale panel state.
-pub async fn paste_item(app: &AppHandle, id: &str, plain: bool) -> Result<PasteOutcome, String> {
+pub async fn paste_item(app: &AppHandle, id: &str, form: Form) -> Result<PasteOutcome, String> {
     crate::startup_trace::mark("PASTE row_click_invoke");
     // Before anything moves: no hide, no other app brought forward (ت٤٨).
     if macos::clipboard_inert() {
         return Err(crate::commands::err::CLIPBOARD_OFF.into());
     }
-    if !write_item_to_clipboard(app, id, plain) {
+    if !write_item_to_clipboard(app, id, form) {
         crate::startup_trace::mark("PASTE write_item_to_clipboard FAILED (unknown id)");
         return Err(crate::commands::err::NOT_FOUND.into());
     }
@@ -674,6 +701,26 @@ mod tests {
         assert_eq!(
             json(PasteOutcome::CopiedOverRaff),
             serde_json::json!("copiedOverRaff")
+        );
+    }
+
+    /// IMP-06: harakat, tatweel and their kin go; the words stay.
+    #[test]
+    fn bare_text_keeps_the_letters_and_drops_the_tashkeel() {
+        assert_eq!(without_tashkeel("مُحَمَّدٌ"), "محمد");
+        assert_eq!(without_tashkeel("الســـلام عليكم"), "السلام عليكم");
+        assert_eq!(without_tashkeel("رَحْمَٰن"), "رحمن", "the superscript alef too");
+        assert_eq!(
+            without_tashkeel("صَلَّى ٱللَّهُ ۖ"),
+            "صلى ٱلله ",
+            "the Quranic marks too"
+        );
+        let untouched = "Rust 1.96، والأرقام ١٢٣، و«علامات» — ok?";
+        assert_eq!(without_tashkeel(untouched), untouched);
+        assert_eq!(
+            without_tashkeel("إِنَّ أُمَّ آمِنَةٍ"),
+            "إن أم آمنة",
+            "hamza and madda are letters"
         );
     }
 

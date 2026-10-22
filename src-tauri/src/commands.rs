@@ -269,10 +269,18 @@ pub async fn paste_item(
     app: AppHandle,
     id: String,
     plain: bool,
+    bare: Option<bool>,
 ) -> Result<paste::PasteOutcome, String> {
     crate::access::require(&window, "paste_item")?;
     let began = std::time::Instant::now();
-    let result = paste::paste_item(&app, &id, plain).await;
+    let form = if bare == Some(true) {
+        paste::Form::Bare
+    } else if plain {
+        paste::Form::Plain
+    } else {
+        paste::Form::Rich
+    };
+    let result = paste::paste_item(&app, &id, form).await;
     let outcome = match result {
         Ok(paste::PasteOutcome::Pasted) => "ok",
         Ok(paste::PasteOutcome::Copied) => "clipboard-only",
@@ -297,7 +305,7 @@ pub async fn copy_item(
         crate::diagnostics::record("copy", "clipboard-off", began);
         return Err(err::CLIPBOARD_OFF.into());
     }
-    if paste::write_item_to_clipboard(&app, &id, false) {
+    if paste::write_item_to_clipboard(&app, &id, paste::Form::Rich) {
         paste::bump_copy_signals(&app, &id);
         crate::diagnostics::record("copy", "ok", began);
         Ok(())

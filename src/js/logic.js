@@ -7,6 +7,13 @@ export function arabicDigits(value) {
   return String(value).replace(/[0-9]/g, (d) => ARABIC_DIGITS[Number(d)]);
 }
 
+/** Whether «الصق بلا تشكيل» would change this text: harakat and their kin,
+ * the superscript alef, Quranic marks or tatweel (as `without_tashkeel` in
+ * paste.rs drops them). */
+export function hasTashkeel(text) {
+  return /[\u064B-\u065F\u0670\u06D6-\u06ED\u0640]/u.test(String(text ?? ''));
+}
+
 const ARABIC_MONTHS = [
   'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو',
   'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر',
