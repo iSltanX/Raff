@@ -223,10 +223,10 @@
 <details>
 <summary><strong>كيف أزيله تمامًا؟</strong></summary><br>
 
-1. أنهِ رفّ من قائمة رمزه.
+1. أطفئ «افتح رفّ عند تسجيل الدخول» من الإعدادات، ثم أنهِ رفّ من قائمة رمزه.
 2. احذف **Raff** من «التطبيقات».
 3. احذف مجلد البيانات: <span dir="ltr">`~/Library/Application Support/com.raff.app/`</span>
-4. إن فعّلت التشغيل عند الدخول، احذف <span dir="ltr">`~/Library/LaunchAgents/Raff.plist`</span>
+4. إن بقي رفّ في **إعدادات النظام ← عام ← عناصر تسجيل الدخول** فأزله منها. وفي macOS 12، أو إن فعّلت التشغيل عند الدخول في إصدار 7.0.0 أو أقدم ولم تشغّل بعده إصدارًا أحدث، احذف إن وُجد <span dir="ltr">`~/Library/LaunchAgents/Raff.plist`</span>
 5. احذف إن وُجد <span dir="ltr">`~/Library/Caches/com.raff.app/`</span> و<span dir="ltr">`~/Library/WebKit/com.raff.app/`</span>، وفيهما ذاكرة النوافذ المؤقتة لا محتوى حافظتك.
 6. أزل رفّ من **إعدادات النظام ← الخصوصية والأمن ← تسهيلات الاستخدام**.
 </details>
