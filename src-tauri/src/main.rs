@@ -8,6 +8,7 @@ mod access;
 mod backup;
 mod commands;
 mod diagnostics;
+mod login_item;
 mod macos;
 mod monitor;
 mod ocr;
@@ -264,6 +265,8 @@ fn main() {
     let mut app = builder
         .plugin(tauri_nspanel::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        // The LaunchAgent is opening at login on macOS 12 only; 13 and later
+        // use the login item (`login_item`), which never asks this plugin.
         .plugin(tauri_plugin_autostart::init(
             MacosLauncher::LaunchAgent,
             None,
@@ -396,8 +399,11 @@ fn main() {
 
             let handle = app.handle().clone();
             // This launch is the replacement an update installed, so its
-            // rollback copy has served.
+            // rollback copy has served; and the switch is made to say what
+            // the next login does, an earlier LaunchAgent moved over first.
             updater::sweep_rollback();
+            login_item::at_launch(&handle);
+            startup_trace::mark("login_item_checked");
             panel::init(&handle)?;
             startup_trace::mark("panel_init_done");
             tray::create(&handle)?;

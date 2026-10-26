@@ -1341,6 +1341,18 @@ impl Store {
         Ok(())
     }
 
+    /// Records whether the next login opens رفّ, as macOS has it — the user
+    /// may have changed it in System Settings (`login_item::sync_setting`).
+    pub fn set_launch_at_login_persisted(&mut self, on: bool) -> Result<(), String> {
+        let previous = self.settings.launch_at_login;
+        self.settings.launch_at_login = on;
+        if let Err(err) = try_save_json(&self.dir.join(SETTINGS_FILE), &self.settings) {
+            self.settings.launch_at_login = previous;
+            return Err(err);
+        }
+        Ok(())
+    }
+
     pub fn save_history(&self) {
         save_json(&self.dir.join(HISTORY_FILE), &self.history);
     }

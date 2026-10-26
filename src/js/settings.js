@@ -399,6 +399,8 @@ async function commitSettingsPatch(patch) {
   if (!failure) return true;
   if ('hotkey' in resolvedPatch) {
     flashHotkeyError(HOTKEY_ERRORS[String(failure)] ?? 'تعذّر حفظ الاختصار. حاول مرة أخرى.');
+  } else if ('launchAtLogin' in resolvedPatch && LOGIN_ITEM_ERRORS[String(failure)]) {
+    showDataStatus(LOGIN_ITEM_ERRORS[String(failure)], { error: true, duration: 9000 });
   } else {
     showDataStatus('تعذّر حفظ التغيير. حاول مرة أخرى.', { error: true, duration: 6000 });
   }
@@ -421,6 +423,15 @@ const HOTKEY_ERRORS = {
   'raff/hotkey-needs-modifier': 'أضف ⌘ أو ⌥ أو ⌃ إلى الاختصار.',
   'raff/hotkey-shared': 'هذا الاختصار تستعمله كل التطبيقات. اختر غيره.',
   'raff/hotkey-unavailable': 'تعذّر تسجيل هذا الاختصار. اختر غيره.',
+};
+
+// «افتح رفّ عند تسجيل الدخول» is macOS's login item: macOS may hold it for
+// the user's approval, or refuse it (login_item.rs). The switch then shows
+// what macOS will do, and this says why.
+const LOGIN_ITEM_ERRORS = {
+  'raff/login-item-needs-approval':
+    'رفّ موقوف في إعدادات النظام. فعّله من عام ← عناصر تسجيل الدخول، ثم أعد المحاولة.',
+  'raff/login-item-failed': 'لم يقبل macOS فتح رفّ عند تسجيل الدخول. حاول مرة أخرى.',
 };
 
 // Says why a hotkey was refused instead of silently reverting the badge.
@@ -1053,6 +1064,12 @@ on('raff://changed', () => {
     console.error('raff: settings refresh failed', err);
     showDataStatus('تعذّر تحديث الإعدادات المعروضة.', { error: true, duration: 6000 });
   });
+});
+
+// Back from System Settings, where opening at login can be turned on or off,
+// the switch shows what macOS will do now.
+window.addEventListener('focus', () => {
+  void load().catch((err) => console.error('raff: settings refresh on focus failed', err));
 });
 
 // First load: retry briefly (IPC can lag right after window creation) so a

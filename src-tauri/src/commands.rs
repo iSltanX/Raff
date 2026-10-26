@@ -4,7 +4,6 @@
 use base64::Engine;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
-use tauri_plugin_autostart::ManagerExt as AutostartExt;
 
 use crate::storage::{Appearance, ItemKind, Settings, SettingsPatch, Store};
 use crate::{macos, panel, paste, AppState};
@@ -31,6 +30,11 @@ pub mod err {
     pub const HOTKEY_SHARED: &str = "raff/hotkey-shared";
     /// macOS would not register it.
     pub const HOTKEY_UNAVAILABLE: &str = "raff/hotkey-unavailable";
+    /// Opening at login: macOS waits for the user's approval — رفّ is turned
+    /// off in System Settings → General → Login Items (`login_item`).
+    pub const LOGIN_ITEM_NEEDS_APPROVAL: &str = "raff/login-item-needs-approval";
+    /// macOS would not change it, or this build has no app bundle to register.
+    pub const LOGIN_ITEM_FAILED: &str = "raff/login-item-failed";
     /// The deleted item would leave history the moment it came back.
     pub const UNDO_NO_ROOM: &str = crate::storage::UNDO_NO_ROOM;
     /// The same, because it is past the retention period.
@@ -152,6 +156,9 @@ pub fn get_settings(
     state: State<AppState>,
 ) -> Result<SettingsPayload, String> {
     crate::access::require(&window, "get_settings")?;
+    // The switch shows what macOS will do at the next login, whatever was
+    // changed in System Settings since.
+    crate::login_item::sync_setting(&app);
     let store = crate::lock_store(&state.store);
     Ok(SettingsPayload {
         settings: store.settings.clone(),
@@ -604,17 +611,11 @@ fn apply_settings(
 
     let mut autostart_changed = false;
     if settings.launch_at_login != old.launch_at_login {
-        let autolaunch = app.autolaunch();
-        let result = if settings.launch_at_login {
-            autolaunch.enable()
-        } else {
-            autolaunch.disable()
-        };
-        result.map_err(|err| {
+        crate::login_item::apply(&app, settings.launch_at_login).map_err(|kind| {
             if settings.hotkey != old.hotkey {
                 let _ = register_hotkey(&app, &old.hotkey);
             }
-            format!("تعذّر تحديث التشغيل عند تسجيل الدخول: {err}")
+            kind.to_string()
         })?;
         autostart_changed = true;
     }
@@ -627,12 +628,7 @@ fn apply_settings(
         .map_err(save_failed);
     if let Err(err) = persisted {
         if autostart_changed {
-            let autolaunch = app.autolaunch();
-            let _ = if old.launch_at_login {
-                autolaunch.enable()
-            } else {
-                autolaunch.disable()
-            };
+            let _ = crate::login_item::apply(&app, old.launch_at_login);
         }
         if settings.hotkey != old.hotkey {
             let _ = register_hotkey(&app, &old.hotkey);
