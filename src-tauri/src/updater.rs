@@ -9,12 +9,14 @@
 //!   2. `download_and_install_update` — downloads + installs (progress events).
 //!   3. `restart_to_update`           — relaunches, only after a good install.
 //!
-//! The plugin's official primitive is `download_and_install` (download then
-//! install in one call). Its `download`/`install` split exists but would force
-//! us to hold the multi-MB package buffer in app state between IPC calls — more
-//! state, no real benefit — so we use the recommended combined call and expose
-//! the *phases* through distinct progress events instead of splitting commands.
+//! Step 2 runs the plugin's `download` and `install` back to back in one
+//! command — the package buffer never sits in app state between IPC calls —
+//! and exposes the *phases* through distinct progress events. They are two
+//! calls, not `download_and_install`, so the install can be guarded
+//! (`guarded_install`): on macOS the plugin's install moves the running
+//! bundle into a temporary directory that is deleted when an error returns.
 
+use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard};
 
 use serde::Serialize;
@@ -351,7 +353,11 @@ pub async fn download_and_install_update(
         let _ = finish_app.emit("raff://update/installing", ());
     };
 
-    let result = update.download_and_install(on_chunk, on_finish).await;
+    // The download verifies the package's signature before it returns.
+    let result = match update.download(on_chunk, on_finish).await {
+        Ok(bytes) => install_bundle(&update, &bytes),
+        Err(err) => Err(err.to_string()),
+    };
 
     let state = app.state::<UpdaterState>();
     let mut inner = state.lock();
@@ -395,6 +401,198 @@ pub async fn restart_to_update(window: tauri::WebviewWindow, app: AppHandle) -> 
         }
     }
     crate::relaunch(&app, true)
+}
+
+// ─── Install guard ────────────────────────────────────────────────────────────
+//
+// The plugin (2.10.1, `install_inner` on macOS) unpacks the new bundle into a
+// temporary directory, moves the running bundle into a second one, then the
+// new bundle into its place. Should that last move fail, it returns the error
+// and the second temporary directory — the working رفّ inside — is deleted
+// as it goes out of scope: nothing is left where رفّ was. So before the
+// plugin runs, رفّ clones its own bundle beside it (APFS, copy on write);
+// after, the bundle in place is checked, and the clone goes back unless it is
+// the complete new version. A good install leaves the clone for the new
+// version to remove when it starts (`sweep_rollback`): by then the
+// replacement has run. Only the bundle is touched; settings and history live
+// in Application Support, which no step here reaches.
+
+extern "C" {
+    /// libSystem (`sys/clonefile.h`): a copy-on-write clone of a file or a
+    /// whole directory tree, on the same APFS volume.
+    fn clonefile(
+        src: *const std::ffi::c_char,
+        dst: *const std::ffi::c_char,
+        flags: u32,
+    ) -> std::ffi::c_int;
+}
+const CLONE_NOFOLLOW: u32 = 0x0001;
+
+fn clone_tree(src: &Path, dst: &Path) -> std::io::Result<()> {
+    use std::os::unix::ffi::OsStrExt;
+    let src = std::ffi::CString::new(src.as_os_str().as_bytes())?;
+    let dst = std::ffi::CString::new(dst.as_os_str().as_bytes())?;
+    // SAFETY: two NUL-terminated paths that outlive the call.
+    if unsafe { clonefile(src.as_ptr(), dst.as_ptr(), CLONE_NOFOLLOW) } == 0 {
+        Ok(())
+    } else {
+        Err(std::io::Error::last_os_error())
+    }
+}
+
+/// The bundle the plugin replaces, found the way the plugin finds it; `None`
+/// outside an app bundle.
+fn installed_bundle() -> Option<PathBuf> {
+    let exe = tauri::utils::platform::current_exe().ok()?;
+    let bundle = tauri_plugin_updater::extract_path_from_executable(&exe).ok()?;
+    (bundle.extension()? == "app").then_some(bundle)
+}
+
+/// Where the clone waits: beside the bundle, so it is copy-on-write and the
+/// way back is a rename, under a name that is not an app's — nothing takes it
+/// for a second رفّ.
+fn rollback_path(bundle: &Path) -> Option<PathBuf> {
+    let name = bundle.file_name()?.to_str()?;
+    Some(bundle.with_file_name(format!(".{name}.update-rollback")))
+}
+
+/// A whole app's identifier and version: an Info.plist that reads, naming an
+/// executable that is there.
+fn bundle_identity(bundle: &Path) -> Option<(String, String)> {
+    use std::os::unix::fs::PermissionsExt;
+    let info = plist::Value::from_file(bundle.join("Contents/Info.plist")).ok()?;
+    let info = info.as_dictionary()?;
+    let text = |key: &str| info.get(key).and_then(plist::Value::as_string);
+    let exe = bundle
+        .join("Contents/MacOS")
+        .join(text("CFBundleExecutable")?);
+    let exe = std::fs::metadata(exe).ok()?;
+    if !exe.is_file() || exe.permissions().mode() & 0o111 == 0 {
+        return None;
+    }
+    Some((
+        text("CFBundleIdentifier")?.to_owned(),
+        text("CFBundleShortVersionString")?.to_owned(),
+    ))
+}
+
+/// Removes `path` only if it is a directory holding a whole app with this
+/// identifier — a rollback copy of رفّ's — and says whether it did.
+fn remove_owned(path: &Path, id: &str) -> bool {
+    let is_dir = std::fs::symlink_metadata(path).is_ok_and(|meta| meta.is_dir());
+    is_dir
+        && bundle_identity(path).is_some_and(|(owner, _)| owner == id)
+        && std::fs::remove_dir_all(path).is_ok()
+}
+
+/// The clone of `bundle`, with the identifier it carries. `None` — the install
+/// then runs as the plugin alone would — when there is no whole bundle to
+/// clone, or the clone cannot be made (another file system, no room, no
+/// permission), or something not رفّ's sits where it would go.
+fn prepare_rollback(bundle: &Path) -> Option<(PathBuf, (String, String))> {
+    let identity = bundle_identity(bundle)?;
+    let rollback = rollback_path(bundle)?;
+    // One left by an install that never finished.
+    if std::fs::symlink_metadata(&rollback).is_ok() && !remove_owned(&rollback, &identity.0) {
+        eprintln!("raff: no rollback copy for this update: its place is taken");
+        return None;
+    }
+    match clone_tree(bundle, &rollback) {
+        Ok(()) => Some((rollback, identity)),
+        Err(err) => {
+            eprintln!("raff: no rollback copy for this update: {err}");
+            None
+        }
+    }
+}
+
+/// Puts the clone back as `bundle`, moving aside whatever the install left.
+/// On failure the clone stays where it is, and the error says where.
+fn restore(bundle: &Path, rollback: &Path) -> Result<(), String> {
+    let kept = |err: std::io::Error| format!("{err}; رفّ's copy stays at {}", rollback.display());
+    let name = bundle
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("Raff.app");
+    let failed = bundle.with_file_name(format!(".{name}.update-failed"));
+    if std::fs::symlink_metadata(bundle).is_ok() {
+        let _ = std::fs::remove_dir_all(&failed);
+        std::fs::rename(bundle, &failed).map_err(kept)?;
+    }
+    std::fs::rename(rollback, bundle).map_err(kept)?;
+    let _ = std::fs::remove_dir_all(&failed);
+    Ok(())
+}
+
+fn same_version(a: &str, b: &str) -> bool {
+    a.trim_start_matches('v') == b.trim_start_matches('v')
+}
+
+/// Runs `install` over `bundle` with a way back. The bundle in place is the
+/// new `version` on success; on any error it is the one that ran before.
+fn guarded_install<E: std::fmt::Display>(
+    bundle: &Path,
+    version: &str,
+    install: impl FnOnce() -> Result<(), E>,
+) -> Result<(), String> {
+    let guard = prepare_rollback(bundle);
+    let result = install().map_err(|err| err.to_string());
+    let Some((rollback, (id, before))) = guard else {
+        return result;
+    };
+    let in_place = bundle_identity(bundle);
+    let is = |wanted: &str| {
+        in_place
+            .as_ref()
+            .is_some_and(|(current, installed)| *current == id && same_version(installed, wanted))
+    };
+    match result {
+        Ok(()) if is(version) => Ok(()),
+        Ok(()) => {
+            let undone = restore(bundle, &rollback)
+                .map_or_else(|err| format!(", and {err}"), |()| String::new());
+            Err(format!("the installed bundle is not {version}{undone}"))
+        }
+        // Failed before the bundle was touched: the clone has no use.
+        Err(err) if is(&before) => {
+            remove_owned(&rollback, &id);
+            Err(err)
+        }
+        Err(err) => match restore(bundle, &rollback) {
+            Ok(()) => Err(err),
+            Err(kept) => Err(format!("{err}, and {kept}")),
+        },
+    }
+}
+
+/// The plugin's install of a downloaded, verified package — guarded where
+/// رفّ runs from an app bundle.
+fn install_bundle(update: &Update, bytes: &[u8]) -> Result<(), String> {
+    match installed_bundle() {
+        Some(bundle) => guarded_install(&bundle, &update.version, || update.install(bytes)),
+        None => update.install(bytes).map_err(|err| err.to_string()),
+    }
+}
+
+fn sweep_rollback_at(bundle: &Path) {
+    let (Some(rollback), Some((id, _))) = (rollback_path(bundle), bundle_identity(bundle)) else {
+        return;
+    };
+    if std::fs::symlink_metadata(&rollback).is_ok() && !remove_owned(&rollback, &id) {
+        eprintln!(
+            "raff: left {} in place: not a copy of this رفّ",
+            rollback.display()
+        );
+    }
+}
+
+/// At launch. A rollback copy beside this bundle is from an update that put
+/// this very process in place, or from one that never finished and left this
+/// bundle whole: either way it has served.
+pub fn sweep_rollback() {
+    if let Some(bundle) = installed_bundle() {
+        sweep_rollback_at(&bundle);
+    }
 }
 
 // ─── Menu entry point ─────────────────────────────────────────────────────────
@@ -628,5 +826,527 @@ mod tests {
         assert_eq!(v["status"], "error");
         assert_eq!(v["kind"], "network");
         assert!(v["message"].as_str().unwrap().contains("مصدر التحديث"));
+    }
+
+    // ── Install guard ────────────────────────────────────────────────────────
+
+    use std::collections::BTreeMap;
+    use std::fs;
+
+    const ID: &str = "com.raff.app";
+
+    struct Scratch(PathBuf);
+
+    impl Scratch {
+        fn new(label: &str) -> Self {
+            let dir =
+                std::env::temp_dir().join(format!("raff-guard-{label}-{}", uuid::Uuid::new_v4()));
+            fs::create_dir_all(&dir).unwrap();
+            Self(dir)
+        }
+    }
+
+    impl Drop for Scratch {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    /// A whole bundle as far as `bundle_identity` and a launch can see one.
+    fn fake_bundle(at: &Path, id: &str, version: &str) {
+        use std::os::unix::fs::PermissionsExt;
+        fs::create_dir_all(at.join("Contents/MacOS")).unwrap();
+        fs::create_dir_all(at.join("Contents/Resources")).unwrap();
+        fs::write(
+            at.join("Contents/Info.plist"),
+            format!(
+                "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<plist version=\"1.0\"><dict>\
+                 <key>CFBundleExecutable</key><string>raff</string>\
+                 <key>CFBundleIdentifier</key><string>{id}</string>\
+                 <key>CFBundleShortVersionString</key><string>{version}</string>\
+                 </dict></plist>"
+            ),
+        )
+        .unwrap();
+        let exe = at.join("Contents/MacOS/raff");
+        fs::write(&exe, format!("raff {version}")).unwrap();
+        fs::set_permissions(&exe, fs::Permissions::from_mode(0o755)).unwrap();
+        fs::write(
+            at.join("Contents/Resources/THIRD-PARTY-NOTICES.md"),
+            version,
+        )
+        .unwrap();
+    }
+
+    /// Every file under `root` with its bytes, to compare trees.
+    fn tree(root: &Path) -> BTreeMap<PathBuf, Vec<u8>> {
+        fn walk(root: &Path, dir: &Path, out: &mut BTreeMap<PathBuf, Vec<u8>>) {
+            for entry in fs::read_dir(dir).unwrap() {
+                let path = entry.unwrap().path();
+                if path.is_dir() {
+                    walk(root, &path, out);
+                } else {
+                    out.insert(
+                        path.strip_prefix(root).unwrap().to_path_buf(),
+                        fs::read(&path).unwrap(),
+                    );
+                }
+            }
+        }
+        let mut out = BTreeMap::new();
+        walk(root, root, &mut out);
+        out
+    }
+
+    /// Where the plugin goes wrong, the way it goes there: the new bundle
+    /// unpacked into one temporary directory, the running one moved into a
+    /// second; then the final move fails, and the second directory is deleted
+    /// as `tempfile::TempDir` is dropped (2.10.1 `install_inner`, macOS).
+    fn plugin_install(bundle: &Path, new: &Path, fail_after_move_out: bool) -> Result<(), String> {
+        let backup =
+            std::env::temp_dir().join(format!("tauri_current_app{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&backup).unwrap();
+        fs::rename(bundle, backup.join("current_app")).map_err(|e| e.to_string())?;
+        let moved_in = if fail_after_move_out {
+            Err("Operation not permitted (os error 1)".to_string())
+        } else {
+            fs::rename(new, bundle).map_err(|e| e.to_string())
+        };
+        fs::remove_dir_all(&backup).unwrap();
+        moved_in
+    }
+
+    #[test]
+    fn a_failed_final_move_leaves_the_running_bundle_in_place() {
+        let s = Scratch::new("final-move");
+        let bundle = s.0.join("Raff.app");
+        let new = s.0.join("unpacked");
+        fake_bundle(&bundle, ID, "7.0.0");
+        fake_bundle(&new, ID, "7.0.1");
+        let before = tree(&bundle);
+
+        let result = guarded_install(&bundle, "7.0.1", || plugin_install(&bundle, &new, true));
+
+        assert!(result.is_err());
+        assert_eq!(
+            tree(&bundle),
+            before,
+            "the running رفّ is back, byte for byte"
+        );
+        assert!(
+            !rollback_path(&bundle).unwrap().exists(),
+            "the clone went back as the bundle"
+        );
+    }
+
+    #[test]
+    fn a_good_install_keeps_the_clone_until_the_new_version_runs() {
+        let s = Scratch::new("good");
+        let bundle = s.0.join("Raff.app");
+        let new = s.0.join("unpacked");
+        fake_bundle(&bundle, ID, "7.0.0");
+        fake_bundle(&new, ID, "7.0.1");
+        let old = tree(&bundle);
+        // Settings and history live elsewhere, and stay as they are.
+        let data = s.0.join("Application Support/com.raff.app");
+        fs::create_dir_all(data.join("images")).unwrap();
+        fs::write(data.join("settings.json"), br#"{"launchAtLogin":true}"#).unwrap();
+        fs::write(data.join("history.json"), b"[]").unwrap();
+        fs::write(data.join("images/a.png"), b"png").unwrap();
+        let data_before = tree(&data);
+
+        guarded_install(&bundle, "7.0.1", || plugin_install(&bundle, &new, false)).unwrap();
+
+        assert_eq!(bundle_identity(&bundle), Some((ID.into(), "7.0.1".into())));
+        let rollback = rollback_path(&bundle).unwrap();
+        assert_eq!(
+            tree(&rollback),
+            old,
+            "the way back stays until the new version has run"
+        );
+        // The new version's first launch.
+        sweep_rollback_at(&bundle);
+        assert!(!rollback.exists());
+        assert_eq!(bundle_identity(&bundle), Some((ID.into(), "7.0.1".into())));
+        assert_eq!(tree(&data), data_before);
+    }
+
+    #[test]
+    fn a_failure_before_the_bundle_is_touched_drops_the_clone() {
+        let s = Scratch::new("early");
+        let bundle = s.0.join("Raff.app");
+        fake_bundle(&bundle, ID, "7.0.0");
+        let before = tree(&bundle);
+        let result = guarded_install(&bundle, "7.0.1", || Err::<(), _>("failed to unpack entry"));
+        assert_eq!(result, Err("failed to unpack entry".into()));
+        assert_eq!(tree(&bundle), before);
+        assert!(!rollback_path(&bundle).unwrap().exists());
+    }
+
+    #[test]
+    fn an_install_that_leaves_another_version_is_undone() {
+        let s = Scratch::new("wrong");
+        let bundle = s.0.join("Raff.app");
+        let new = s.0.join("unpacked");
+        fake_bundle(&bundle, ID, "7.0.0");
+        fake_bundle(&new, ID, "6.0.1");
+        let before = tree(&bundle);
+        let result = guarded_install(&bundle, "7.0.1", || plugin_install(&bundle, &new, false));
+        assert!(result.is_err());
+        assert_eq!(tree(&bundle), before);
+        assert!(!rollback_path(&bundle).unwrap().exists());
+        assert!(!s.0.join(".Raff.app.update-failed").exists());
+    }
+
+    #[test]
+    fn an_install_that_leaves_half_a_bundle_is_undone() {
+        let s = Scratch::new("half");
+        let bundle = s.0.join("Raff.app");
+        fake_bundle(&bundle, ID, "7.0.0");
+        let before = tree(&bundle);
+        let result = guarded_install(&bundle, "7.0.1", || {
+            fs::remove_file(bundle.join("Contents/MacOS/raff")).unwrap();
+            Ok::<(), String>(())
+        });
+        assert!(result.is_err());
+        assert_eq!(tree(&bundle), before);
+    }
+
+    #[test]
+    fn a_failed_install_that_left_the_new_version_in_part_is_undone() {
+        // The admin path's `rm -rf` then a `mv` cut short: the new Info.plist
+        // and executable are there, the rest is not.
+        let s = Scratch::new("partial-new");
+        let bundle = s.0.join("Raff.app");
+        fake_bundle(&bundle, ID, "7.0.0");
+        let before = tree(&bundle);
+        let result = guarded_install(&bundle, "7.0.1", || {
+            fs::remove_dir_all(&bundle).unwrap();
+            fake_bundle(&bundle, ID, "7.0.1");
+            fs::remove_file(bundle.join("Contents/Resources/THIRD-PARTY-NOTICES.md")).unwrap();
+            Err::<(), _>("mv: No space left on device")
+        });
+        assert!(result.is_err());
+        assert_eq!(tree(&bundle), before, "the earlier version is back");
+        assert!(!rollback_path(&bundle).unwrap().exists());
+    }
+
+    #[test]
+    fn a_way_back_that_cannot_be_taken_stays_and_is_named() {
+        use std::os::unix::fs::PermissionsExt;
+        let s = Scratch::new("stuck");
+        let apps = s.0.join("Applications");
+        let bundle = apps.join("Raff.app");
+        fake_bundle(&bundle, ID, "7.0.0");
+        let before = tree(&bundle);
+        let result = guarded_install(&bundle, "7.0.1", || {
+            fs::remove_dir_all(&bundle).unwrap();
+            // Whatever stops the plugin's last move stops the way back too.
+            fs::set_permissions(&apps, fs::Permissions::from_mode(0o555)).unwrap();
+            Err::<(), _>("Operation not permitted (os error 1)")
+        });
+        fs::set_permissions(&apps, fs::Permissions::from_mode(0o755)).unwrap();
+        let rollback = rollback_path(&bundle).unwrap();
+        let err = result.unwrap_err();
+        assert!(err.contains(&rollback.display().to_string()), "{err}");
+        assert_eq!(
+            tree(&rollback),
+            before,
+            "the copy is whole, where the error says"
+        );
+    }
+
+    #[test]
+    fn a_rollback_copy_left_by_an_interrupted_install_is_swept_only_if_ours() {
+        let s = Scratch::new("sweep");
+        let bundle = s.0.join("Raff.app");
+        fake_bundle(&bundle, ID, "7.0.1");
+        let rollback = rollback_path(&bundle).unwrap();
+
+        // Ours: a clone of رفّ.
+        fake_bundle(&rollback, ID, "7.0.0");
+        sweep_rollback_at(&bundle);
+        assert!(!rollback.exists());
+
+        // Not ours: another app's bundle, a plain folder, a link.
+        fake_bundle(&rollback, "com.example.other", "1.0");
+        sweep_rollback_at(&bundle);
+        assert!(rollback.exists(), "another identifier");
+        fs::remove_dir_all(&rollback).unwrap();
+        fs::create_dir_all(rollback.join("notes")).unwrap();
+        sweep_rollback_at(&bundle);
+        assert!(
+            rollback.join("notes").exists(),
+            "a folder that is not a bundle"
+        );
+        fs::remove_dir_all(&rollback).unwrap();
+        let target = s.0.join("target");
+        fake_bundle(&target, ID, "7.0.0");
+        std::os::unix::fs::symlink(&target, &rollback).unwrap();
+        sweep_rollback_at(&bundle);
+        assert!(
+            target.join("Contents/Info.plist").exists(),
+            "a link is not followed"
+        );
+    }
+
+    #[test]
+    fn something_else_in_the_rollback_place_is_left_and_the_install_runs() {
+        let s = Scratch::new("taken");
+        let bundle = s.0.join("Raff.app");
+        let new = s.0.join("unpacked");
+        fake_bundle(&bundle, ID, "7.0.0");
+        fake_bundle(&new, ID, "7.0.1");
+        let rollback = rollback_path(&bundle).unwrap();
+        fs::create_dir_all(rollback.join("keep")).unwrap();
+        guarded_install(&bundle, "7.0.1", || plugin_install(&bundle, &new, false)).unwrap();
+        assert_eq!(bundle_identity(&bundle), Some((ID.into(), "7.0.1".into())));
+        assert!(rollback.join("keep").exists());
+    }
+
+    #[test]
+    fn the_rollback_copy_is_not_an_app() {
+        let path = rollback_path(Path::new("/Applications/Raff.app")).unwrap();
+        assert_eq!(path, Path::new("/Applications/.Raff.app.update-rollback"));
+        assert_ne!(path.extension().and_then(|e| e.to_str()), Some("app"));
+    }
+
+    #[test]
+    fn versions_compare_with_or_without_a_v() {
+        assert!(same_version("7.0.1", "v7.0.1"));
+        assert!(!same_version("7.0.1", "7.0.10"));
+    }
+
+    // ── End to end: the real plugin ──────────────────────────────────────────
+
+    /// Files at paths, over plain HTTP on 127.0.0.1 (debug builds of the
+    /// plugin allow it), one request per connection. `files` is given the
+    /// server's address, for the manifests that point back at it.
+    fn serve(files: impl FnOnce(&str) -> Vec<(String, Vec<u8>)>) -> String {
+        use std::io::{BufRead, BufReader, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        let files = files(&base);
+        std::thread::spawn(move || {
+            for stream in listener.incoming().flatten() {
+                let mut reader = BufReader::new(&stream);
+                let mut request = String::new();
+                if reader.read_line(&mut request).is_err() {
+                    continue;
+                }
+                let mut header = String::new();
+                while reader.read_line(&mut header).is_ok_and(|n| n > 2) {
+                    header.clear();
+                }
+                let path = request.split_whitespace().nth(1).unwrap_or_default();
+                let (status, body) = files
+                    .iter()
+                    .find(|(p, _)| p == path)
+                    .map_or((404, &[][..]), |(_, body)| (200, &body[..]));
+                let mut out = &stream;
+                let _ = write!(
+                    out,
+                    "HTTP/1.1 {status} R\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                    body.len()
+                );
+                let _ = out.write_all(body);
+            }
+        });
+        base
+    }
+
+    fn untar(archive: &Path, into: &Path) {
+        fs::create_dir_all(into).unwrap();
+        let ok = std::process::Command::new("/usr/bin/tar")
+            .arg("-xzf")
+            .arg(archive)
+            .arg("-C")
+            .arg(into)
+            .status()
+            .unwrap()
+            .success();
+        assert!(ok, "untar {}", archive.display());
+    }
+
+    fn codesign_ok(bundle: &Path) -> bool {
+        std::process::Command::new("/usr/bin/codesign")
+            .args(["--verify", "--deep", "--strict"])
+            .arg(bundle)
+            .status()
+            .is_ok_and(|s| s.success())
+    }
+
+    /// The plugin's leftovers in the temporary directory, by its prefixes.
+    fn plugin_staging(tmp: &Path) -> Vec<String> {
+        fs::read_dir(tmp)
+            .unwrap()
+            .filter_map(|e| e.ok()?.file_name().into_string().ok())
+            .filter(|n| n.starts_with("tauri_current_app") || n.starts_with("tauri_updated_app"))
+            .collect()
+    }
+
+    /// The real updater plugin, start to finish, over a copy of an earlier
+    /// رفّ: `RAFF_E2E_OLD` (the 7.0.0 that was published) unpacked as the
+    /// installed app under `RAFF_E2E_DIR`, `RAFF_E2E_NEW` (this build) served
+    /// from 127.0.0.1 and signed with a throwaway key, `RAFF_E2E_BAD` a
+    /// truncated copy signed the same way. Nothing is launched, and nothing
+    /// outside `RAFF_E2E_DIR` is touched; `TMPDIR` must be inside it, on the
+    /// same volume, as the plugin stages there. `scripts/e2e-upgrade.mjs`
+    /// prepares all of it.
+    #[test]
+    #[ignore = "needs the archives scripts/e2e-upgrade.mjs prepares"]
+    fn e2e_the_real_plugin_upgrades_an_earlier_release() {
+        let env = |key: &str| {
+            PathBuf::from(std::env::var_os(key).unwrap_or_else(|| panic!("{key} is not set")))
+        };
+        let (dir, old, new, bad) = (
+            env("RAFF_E2E_DIR"),
+            env("RAFF_E2E_OLD"),
+            env("RAFF_E2E_NEW"),
+            env("RAFF_E2E_BAD"),
+        );
+        let pubkey = std::env::var("RAFF_E2E_PUBKEY").expect("RAFF_E2E_PUBKEY");
+        let tmp = std::env::temp_dir();
+        assert!(tmp.starts_with(&dir), "TMPDIR inside RAFF_E2E_DIR");
+        let sig =
+            |archive: &Path| fs::read_to_string(format!("{}.sig", archive.display())).unwrap();
+
+        // The installed copy, its data beside it, and what the new one must be.
+        let install = dir.join("Applications");
+        untar(&old, &install);
+        let bundle = install.join("Raff.app");
+        assert!(codesign_ok(&bundle), "the earlier release as published");
+        let old_tree = tree(&bundle);
+        let old_identity = bundle_identity(&bundle).unwrap();
+        untar(&new, &dir.join("expected"));
+        let new_tree = tree(&dir.join("expected/Raff.app"));
+        let new_identity = bundle_identity(&dir.join("expected/Raff.app")).unwrap();
+        assert_ne!(old_tree, new_tree);
+        let data = dir.join("Application Support/com.raff.app");
+        fs::create_dir_all(data.join("images")).unwrap();
+        fs::write(
+            data.join("settings.json"),
+            br#"{"launchAtLogin":true,"hotkey":"shift+super+v"}"#,
+        )
+        .unwrap();
+        fs::write(data.join("history.json"), br#"[{"id":"a","text":"e2e"}]"#).unwrap();
+        fs::write(data.join("images/a.png"), b"png").unwrap();
+        let data_before = tree(&data);
+
+        let manifest = |url: String, sig: String| {
+            serde_json::to_vec(&serde_json::json!({
+                "version": new_identity.1,
+                "notes": "e2e",
+                "pub_date": "2026-10-26T00:00:00Z",
+                "platforms": {
+                    "darwin-aarch64": { "signature": sig, "url": url },
+                    "darwin-aarch64-app": { "signature": sig, "url": url },
+                },
+            }))
+            .unwrap()
+        };
+        let base = serve(|base| {
+            vec![
+                (
+                    "/good.json".into(),
+                    manifest(format!("{base}/good.tar.gz"), sig(&new)),
+                ),
+                ("/good.tar.gz".into(), fs::read(&new).unwrap()),
+                (
+                    "/bad.json".into(),
+                    manifest(format!("{base}/bad.tar.gz"), sig(&bad)),
+                ),
+                ("/bad.tar.gz".into(), fs::read(&bad).unwrap()),
+            ]
+        });
+
+        let mut context = tauri::test::mock_context(tauri::test::noop_assets());
+        context
+            .config_mut()
+            .plugins
+            .0
+            .insert("updater".into(), serde_json::json!({ "pubkey": pubkey }));
+        let app = tauri::test::mock_builder()
+            .plugin(tauri_plugin_updater::Builder::new().build())
+            .build(context)
+            .unwrap();
+        let fetch = |manifest: &str| {
+            let updater = app
+                .updater_builder()
+                .executable_path(bundle.join("Contents/MacOS/raff"))
+                .endpoints(vec![format!("{base}/{manifest}").parse().unwrap()])
+                .unwrap()
+                .build()
+                .unwrap();
+            tauri::async_runtime::block_on(async {
+                let update = updater
+                    .check()
+                    .await
+                    .unwrap()
+                    .expect("an update is offered");
+                let bytes = update
+                    .download(|_, _| {}, || {})
+                    .await
+                    .expect("signature verified");
+                (update, bytes)
+            })
+        };
+
+        // A package that fails to unpack: the plugin stops before the swap.
+        let (update, bytes) = fetch("bad.json");
+        let result = guarded_install(&bundle, &update.version, || update.install(&bytes));
+        assert!(result.is_err(), "a truncated package does not install");
+        assert_eq!(tree(&bundle), old_tree, "the earlier release is untouched");
+        assert!(codesign_ok(&bundle));
+        assert!(
+            !rollback_path(&bundle).unwrap().exists(),
+            "no clone left behind"
+        );
+        assert_eq!(
+            plugin_staging(&tmp),
+            Vec::<String>::new(),
+            "nothing staged left behind"
+        );
+
+        // The real package.
+        let (update, bytes) = fetch("good.json");
+        guarded_install(&bundle, &update.version, || update.install(&bytes)).expect("installed");
+        assert_eq!(
+            tree(&bundle),
+            new_tree,
+            "the bundle is the new build, byte for byte"
+        );
+        assert_eq!(bundle_identity(&bundle), Some(new_identity));
+        assert!(codesign_ok(&bundle), "and its signature holds");
+        let rollback = rollback_path(&bundle).unwrap();
+        assert_eq!(
+            tree(&rollback),
+            old_tree,
+            "the way back is the whole earlier release"
+        );
+        assert_eq!(bundle_identity(&rollback), Some(old_identity));
+        assert_eq!(
+            plugin_staging(&tmp),
+            Vec::<String>::new(),
+            "the plugin's backup went with its scope"
+        );
+        // The new version's first launch.
+        sweep_rollback_at(&bundle);
+        assert!(!rollback.exists());
+        assert_eq!(tree(&bundle), new_tree);
+        let left: Vec<_> = fs::read_dir(&install)
+            .unwrap()
+            .map(|e| e.unwrap().file_name())
+            .collect();
+        assert_eq!(
+            left,
+            vec![std::ffi::OsString::from("Raff.app")],
+            "one رفّ, nothing beside it"
+        );
+        assert_eq!(
+            tree(&data),
+            data_before,
+            "settings, history and images as they were"
+        );
     }
 }

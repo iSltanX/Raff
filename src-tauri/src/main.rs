@@ -395,6 +395,9 @@ fn main() {
             startup_trace::mark("state_managed");
 
             let handle = app.handle().clone();
+            // This launch is the replacement an update installed, so its
+            // rollback copy has served.
+            updater::sweep_rollback();
             panel::init(&handle)?;
             startup_trace::mark("panel_init_done");
             tray::create(&handle)?;

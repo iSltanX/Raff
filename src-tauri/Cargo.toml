@@ -8,6 +8,11 @@ edition = "2021"
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
+[dev-dependencies]
+# `tauri::test`'s mock runtime: the updater plugin end to end, in one test
+# (updater.rs). A feature, not a package; Cargo.lock does not change.
+tauri = { version = "2", features = ["macos-private-api", "test"] }
+
 [dependencies]
 tauri = { version = "2", features = ["macos-private-api"] }
 tauri-plugin-global-shortcut = "2"
@@ -21,6 +26,9 @@ tauri-plugin-updater = { version = "2", default-features = false, features = ["r
 tauri-nspanel = { git = "https://github.com/ahkohd/tauri-nspanel", branch = "v2" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# Reads the LaunchAgent an earlier رفّ wrote and an installed bundle's Info.plist.
+# Already in the tree through tauri, so Cargo.lock gains no package.
+plist = "1"
 uuid = { version = "1", features = ["v4"] }
 base64 = "0.22"
 image = { version = "0.25", default-features = false, features = ["png", "tiff", "jpeg"] }
