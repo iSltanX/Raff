@@ -433,16 +433,7 @@ function buildRow(item, index) {
      There is deliberately NO dblclick handler: a double click fires `click`
      twice, which would paste twice. Copy-without-pasting stays available as
      the secondary action on ⌘C. */
-  row.addEventListener('click', (e) => {
-    // Through `setSelection`, not behind the list's back: when the panel
-    // stays open after the paste, the row shown as chosen must be this one
-    // (audit 012).
-    setSelection(item.id);
-    // The search field holds the active descendant: a click on a row must not
-    // leave it without focus when the panel stays open after the paste.
-    searchEl.focus({ preventScroll: true });
-    paste(item.id, e.altKey);
-  });
+  row.addEventListener('click', (e) => chooseClicked(item.id, e.altKey));
 
   // Physical order is [ content | type ]; the action cluster is an overlay
   // (see .row-actions) so a resting row reserves no empty block for it.
@@ -544,16 +535,7 @@ function buildCard(row, item, index) {
   kind.append(createIcon(presentation.asset, 'content-type-glyph'));
   foot.append(kind, time);
 
-  row.addEventListener('click', (e) => {
-    // Through `setSelection`, not behind the list's back: when the panel
-    // stays open after the paste, the row shown as chosen must be this one
-    // (audit 012).
-    setSelection(item.id);
-    // The search field holds the active descendant: a click on a row must not
-    // leave it without focus when the panel stays open after the paste.
-    searchEl.focus({ preventScroll: true });
-    paste(item.id, e.altKey);
-  });
+  row.addEventListener('click', (e) => chooseClicked(item.id, e.altKey));
   row.append(...[media, name, foot].filter(Boolean));
   if (item.isPinned) {
     const flag = document.createElement('span');
@@ -971,6 +953,58 @@ function syncShortcutBar() {
   footerHintEl.hidden = false;
 }
 
+// A press on the list holds re-renders back until its click has landed.
+// WebKit sends `click` only to the element a press began on, and pressing
+// the panel is what gives its page the focus: the window's `focus` handler
+// refreshed, and a list rebuilt between press and release lost the click —
+// nothing was pasted, and the hand settling on the new row opened the hover
+// preview instead (2026-10-27). What arrives during the press is drawn
+// right after it.
+let pressingList = false;
+let renderHeld = false;
+
+// A row's own press only: ⌃-click is a right-click on the Mac, and the list's
+// scrollbar or a gap between rows has no click to lose.
+listEl.addEventListener(
+  'mousedown',
+  (e) => {
+    if (e.button === 0 && !e.ctrlKey && e.target.closest?.('.row[data-id]')) pressingList = true;
+  },
+  true
+);
+// A macrotask: WebKit sends the release's `click` in the same turn as the
+// `mouseup`, and that click must reach the row it began on first.
+window.addEventListener(
+  'mouseup',
+  () => {
+    if (pressingList) setTimeout(endListPress, 0);
+  },
+  true
+);
+// A release the page never heard of must not leave the list unpainted under
+// what is typed next — Enter would choose from rows no longer meant. Any of
+// these says the press is over: a key, a menu, the window losing the focus,
+// or the pointer moving with no button down.
+window.addEventListener('keydown', endListPress, true);
+window.addEventListener('contextmenu', endListPress, true);
+window.addEventListener('blur', endListPress);
+window.addEventListener(
+  'mousemove',
+  (e) => {
+    if (e.buttons === 0) endListPress();
+  },
+  true
+);
+
+function endListPress() {
+  if (!pressingList) return;
+  pressingList = false;
+  if (renderHeld) {
+    renderHeld = false;
+    render();
+  }
+}
+
 /**
  * The error boundary. `renderList` clears the list before refilling it, so a
  * throw partway through would otherwise leave the panel permanently blank
@@ -979,6 +1013,10 @@ function syncShortcutBar() {
  * state, and the technical cause goes to `diag` only.
  */
 function render() {
+  if (pressingList) {
+    renderHeld = true;
+    return;
+  }
   // Every render rebuilds the rows, so a row control holding focus is
   // replaced and focus would fall to <body> (audit 020 ج1).
   const held = heldListFocus();
@@ -1521,6 +1559,26 @@ toastUndoEl.addEventListener('click', undoLastDelete);
 
 // ─── Actions ──────────────────────────────────────────────────────────────
 
+/** A click on a row or a card: the item is chosen, never previewed. */
+function chooseClicked(id, plain) {
+  // Copied only, the panel stays — and the hand still on the row must not
+  // open what the click never asked for (2026-10-27). A hover's wait is
+  // called off, a hover preview closes, and the row stays quiet to hover
+  // until the pointer has been elsewhere. A preview held open by keys or a
+  // right-click stays, and follows the choice.
+  hoverIntent.cancel();
+  chosenUnderPointer = id;
+  if (previewWant?.mode === 'hover') requestPreview(null);
+  // Through `setSelection`, not behind the list's back: when the panel
+  // stays open after the paste, the row shown as chosen must be this one
+  // (audit 012).
+  setSelection(id);
+  // The search field holds the active descendant: a click on a row must not
+  // leave it without focus when the panel stays open after the paste.
+  searchEl.focus({ preventScroll: true });
+  paste(id, plain);
+}
+
 function paste(id, plain, bare = false) {
   if (!id) return;
   api
@@ -2020,6 +2078,7 @@ function resetPreview() {
   dropLabelField();
   hoverIntent.cancel();
   disarmHover();
+  chosenUnderPointer = null;
   previewWant = null;
   previewSide = null;
   previewEl.hidden = true;
@@ -2276,6 +2335,8 @@ const hoverIntent = createHoverIntent({
 // Hover counts again once the pointer has actually moved.
 let hoverArmed = true;
 let armedFrom = null;
+/** The row a click chose, while the pointer has not left it (`chooseClicked`). */
+let chosenUnderPointer = null;
 
 function disarmHover() {
   hoverArmed = false;
@@ -2307,6 +2368,8 @@ function onPointer(e) {
     return;
   }
   const row = target.closest('#list .row[data-id]');
+  if (row && row.dataset.id === chosenUnderPointer) return;
+  chosenUnderPointer = null;
   if (row) hoverIntent.over(row.dataset.id, e.clientX, e.clientY);
   else if (panelEl.contains(target)) hoverIntent.between();
 }
@@ -2548,6 +2611,8 @@ on('raff://changed', () => {
 }).catch((err) => diag('listen:failed', err));
 on('panel://shown', async () => {
   diag('event:panel-shown');
+  // A press the panel was hidden under never got its release.
+  endListPress();
   isShown = true;
   query = '';
   searchEl.value = '';
@@ -2567,6 +2632,7 @@ on('panel://shown', async () => {
 // happens with the panel still on screen. Rust knows, and says so.
 on('panel://hidden', () => {
   diag('event:panel-hidden');
+  endListPress();
   isShown = false;
 }).catch((err) => diag('listen:failed', err));
 
