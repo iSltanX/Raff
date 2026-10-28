@@ -313,6 +313,8 @@ pub async fn paste_item(
         Ok(paste::PasteOutcome::Pasted) => "ok",
         Ok(paste::PasteOutcome::Copied) => "clipboard-only",
         Ok(paste::PasteOutcome::CopiedOverRaff) => "clipboard-only-over-raff",
+        // A repeat of the paste under way (DS-001), which records its own.
+        Ok(paste::PasteOutcome::TargetTaken) => return result,
         Err(_) => "error",
     };
     crate::diagnostics::record("paste", outcome, began);

@@ -116,12 +116,16 @@ pub fn write_item_to_clipboard(app: &AppHandle, id: &str, form: Form) -> bool {
 /// What a paste came to, as the panel reads it: `true` pasted, `false` only
 /// copied, `"copiedOverRaff"` only copied because the panel was opened over
 /// one of رفّ's own windows (009) — said apart, since the panel's usual
-/// explanation for a copy is a missing Accessibility permission.
+/// explanation for a copy is a missing Accessibility permission — and
+/// `"targetTaken"` when a paste already under way took the app to paste into
+/// (DS-001): nothing is hidden or pressed for this one, though its item was
+/// written, and the panel says only that — not the Accessibility fallback.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum PasteOutcome {
     Pasted,
     Copied,
     CopiedOverRaff,
+    TargetTaken,
 }
 
 impl serde::Serialize for PasteOutcome {
@@ -130,6 +134,7 @@ impl serde::Serialize for PasteOutcome {
             Self::Pasted => s.serialize_bool(true),
             Self::Copied => s.serialize_bool(false),
             Self::CopiedOverRaff => s.serialize_str("copiedOverRaff"),
+            Self::TargetTaken => s.serialize_str("targetTaken"),
         }
     }
 }
@@ -167,10 +172,15 @@ pub async fn paste_item(app: &AppHandle, id: &str, form: Form) -> Result<PasteOu
             bump_paste_signals(app, id);
             return Ok(PasteOutcome::CopiedOverRaff);
         }
+        // Not counted: it is the same choice again, not another use, and the
+        // paste under way counts its own.
+        Target::Taken => {
+            crate::startup_trace::mark(
+                "PASTE STOPPED HERE: a paste under way took the target — nothing hidden, nothing pressed",
+            );
+            return Ok(PasteOutcome::TargetTaken);
+        }
     };
-    crate::startup_trace::mark_with(|| {
-        format!("PASTE previous app remembered={}", previous_pid.is_some())
-    });
 
     let handle = app.clone();
     let item = id.to_string();
@@ -192,19 +202,13 @@ pub async fn paste_item(app: &AppHandle, id: &str, form: Form) -> Result<PasteOu
                         .get_webview_panel(panel::PANEL_LABEL)
                         .map(|p| p.is_visible())
                 ));
-                if let Some(previous) = previous_pid {
-                    crate::startup_trace::mark("PASTE activate_app requested");
-                    macos::activate_app(previous);
-                    crate::startup_trace::mark("PASTE activate_app call returned");
-                } else {
-                    crate::startup_trace::mark(
-                        "PASTE no previous app to activate — never remembered or already consumed",
-                    );
-                }
+                crate::startup_trace::mark("PASTE activate_app requested");
+                macos::activate_app(previous_pid);
+                crate::startup_trace::mark("PASTE activate_app call returned");
                 crate::startup_trace::mark_with(|| {
                     format!(
                         "PASTE front is the previous app immediately after activate: {}",
-                        previous_pid == Some(macos::frontmost_app().pid)
+                        previous_pid == macos::frontmost_app().pid
                     )
                 });
                 let handle2 = handle.clone();
@@ -214,7 +218,7 @@ pub async fn paste_item(app: &AppHandle, id: &str, form: Form) -> Result<PasteOu
                     crate::startup_trace::mark_with(|| {
                         format!(
                             "PASTE front is the previous app after {ACTIVATE_DELAY_MS}ms wait: {}",
-                            previous_pid == Some(front_before_paste.pid)
+                            previous_pid == front_before_paste.pid
                         )
                     });
                     // The point of no return: past it the wait sees this
@@ -369,12 +373,18 @@ fn await_paste(
     }
 }
 
-/// Where a paste goes: back to the app the panel was opened over, or nowhere
-/// because that was رفّ.
+/// Where a paste goes: back to the app the panel was opened over; nowhere
+/// because that was رفّ; or nowhere because a paste under way already took
+/// it.
 #[derive(Debug, PartialEq)]
 enum Target {
     Raff,
-    App(Option<i32>),
+    App(i32),
+    /// Every showing remembers the app in front (`panel::show`), so nothing
+    /// remembered here means an earlier paste of this showing took it — not
+    /// that nothing was ever claimed (DS-001). Pressing ⌘V anyway sent a
+    /// second keystroke after the first, unchecked, and called it a paste.
+    Taken,
 }
 
 /// Takes the remembered app for this paste. A panel opened over رفّ keeps
@@ -386,7 +396,7 @@ fn take_target(previous_app: &std::sync::Mutex<Option<i32>>, own: i32) -> Target
     if opened_over_raff(*previous, own) {
         return Target::Raff;
     }
-    Target::App(previous.take())
+    previous.take().map_or(Target::Taken, Target::App)
 }
 
 /// Whether the panel was opened over one of رفّ's own windows — Settings in
@@ -413,15 +423,10 @@ fn may_press_paste(still_trusted: bool, front_pid: i32, own: i32) -> bool {
 /// is a claim رفّ cannot make, and the fallback it triggers instead is true in
 /// every case: the content is on the clipboard.
 ///
-/// A missing `previous_pid` means nothing was ever claimed about the target,
-/// so there is nothing to contradict.
-fn paste_confirmed(
-    still_trusted: bool,
-    sent: bool,
-    previous_pid: Option<i32>,
-    front_pid: i32,
-) -> bool {
-    still_trusted && sent && previous_pid.is_none_or(|pid| pid == front_pid)
+/// There is always a target to check against: a paste without one is
+/// `Target::Taken`, stopped before anything moves (DS-001).
+fn paste_confirmed(still_trusted: bool, sent: bool, previous_pid: i32, front_pid: i32) -> bool {
+    still_trusted && sent && previous_pid == front_pid
 }
 
 fn bump_paste_signals(app: &AppHandle, id: &str) {
@@ -469,17 +474,44 @@ mod tests {
         // Everything Raff used to look at says yes: the permission is there
         // and the event was posted. But activation did not take, so ⌘V went to
         // whatever happened to be in front.
-        assert!(!paste_confirmed(true, true, Some(TARGET), 99));
+        assert!(!paste_confirmed(true, true, TARGET, 99));
     }
 
     #[test]
     fn the_target_being_in_front_is_what_makes_it_a_paste() {
-        assert!(paste_confirmed(true, true, Some(TARGET), TARGET));
+        assert!(paste_confirmed(true, true, TARGET, TARGET));
     }
 
+    /// DS-001: every showing remembers the app in front, and the first paste
+    /// takes it. A second paste meanwhile — a double click, another row —
+    /// finds nothing, which is not "nothing was claimed" but "already taken".
+    /// It used to press ⌘V anyway and answer "pasted", checked against nothing.
     #[test]
-    fn nothing_claimed_about_the_target_leaves_nothing_to_contradict() {
-        assert!(paste_confirmed(true, true, None, 99));
+    fn a_target_already_taken_is_not_pasted_into() {
+        let slot = std::sync::Mutex::new(Some(TARGET));
+        assert_eq!(take_target(&slot, OWN), Target::App(TARGET));
+        assert_eq!(take_target(&slot, OWN), Target::Taken);
+        assert_eq!(take_target(&slot, OWN), Target::Taken, "and stays taken");
+    }
+
+    /// And the paste flow stops there — written, but nothing hidden, activated,
+    /// pressed or counted — with its own answer for the panel.
+    #[test]
+    fn a_taken_target_stops_the_paste_before_hiding_or_pressing() {
+        let src = include_str!("paste.rs");
+        let flow = &src
+            [src.find("pub async fn paste_item").unwrap()..src.find("struct PasteTicket").unwrap()];
+        let taken = &flow[flow.find("Target::Taken =>").expect("handled")..];
+        let arm = &taken[..taken.find("\n        }\n").expect("one arm")];
+        assert!(arm.contains("return Ok(PasteOutcome::TargetTaken);"));
+        assert!(
+            !arm.contains("bump_paste_signals"),
+            "a repeat is not another use"
+        );
+        assert!(
+            flow.find("Target::Taken =>").unwrap() < flow.find("spawn_blocking").unwrap(),
+            "nothing hidden, activated or pressed"
+        );
     }
 
     const OWN: i32 = 777;
@@ -554,8 +586,8 @@ mod tests {
         assert_eq!(take_target(&slot, OWN), Target::Raff);
 
         let other = std::sync::Mutex::new(Some(TARGET));
-        assert_eq!(take_target(&other, OWN), Target::App(Some(TARGET)));
-        assert_eq!(take_target(&other, OWN), Target::App(None), "spent");
+        assert_eq!(take_target(&other, OWN), Target::App(TARGET));
+        assert_eq!(take_target(&other, OWN), Target::Taken, "spent");
     }
 
     /// A paste run with chosen delays: when the main-thread work starts, how
@@ -705,15 +737,20 @@ mod tests {
         assert!(flow.contains("may_press_paste(still_trusted, front_before_paste.pid, own)"));
     }
 
-    /// The panel reads `true`, `false`, or the one reason it words apart.
+    /// The panel reads `true`, `false`, or one of the two reasons it words
+    /// apart.
     #[test]
-    fn a_paste_answers_the_panel_in_its_three_words() {
+    fn a_paste_answers_the_panel_in_its_four_words() {
         let json = |o| serde_json::to_value(o).unwrap();
         assert_eq!(json(PasteOutcome::Pasted), serde_json::json!(true));
         assert_eq!(json(PasteOutcome::Copied), serde_json::json!(false));
         assert_eq!(
             json(PasteOutcome::CopiedOverRaff),
             serde_json::json!("copiedOverRaff")
+        );
+        assert_eq!(
+            json(PasteOutcome::TargetTaken),
+            serde_json::json!("targetTaken")
         );
     }
 
@@ -759,7 +796,7 @@ mod tests {
 
     #[test]
     fn the_old_conditions_still_have_to_hold() {
-        assert!(!paste_confirmed(false, true, Some(TARGET), TARGET));
-        assert!(!paste_confirmed(true, false, Some(TARGET), TARGET));
+        assert!(!paste_confirmed(false, true, TARGET, TARGET));
+        assert!(!paste_confirmed(true, false, TARGET, TARGET));
     }
 }

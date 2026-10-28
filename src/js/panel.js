@@ -1579,12 +1579,31 @@ function chooseClicked(id, plain) {
   paste(id, plain);
 }
 
+/** A paste Rust has not answered yet. One at a time (DS-001): a second click,
+ * another row or ⌘1–9 meanwhile would write the clipboard again — another
+ * item, perhaps, under the first ⌘V — and find the app to paste into already
+ * taken. The next paste goes once this one is answered, whatever the answer. */
+let pasting = false;
+
 function paste(id, plain, bare = false) {
-  if (!id) return;
+  if (!id || pasting) return;
+  pasting = true;
   api
     .pasteItem(id, plain, bare)
+    .finally(() => {
+      pasting = false;
+    })
     .then(async (pasted) => {
       if (pasted === true) return;
+      // `targetTaken` (DS-001): a paste already under way took the app to
+      // paste into, so nothing was pressed for this one — but its item was
+      // written. The panel never sends it while a paste is under way; should
+      // one arrive anyway, the one true thing to say is where the item is,
+      // and Accessibility is not the reason.
+      if (pasted === 'targetTaken') {
+        showToast('نُسخ إلى الحافظة — الصقه بـ ⁦⌘V⁩');
+        return;
+      }
       // Copied only because رفّ itself was in front — Settings, or the
       // welcome's «افتح رفّ» (009): say that, not «grant Accessibility».
       if (pasted === 'copiedOverRaff') {

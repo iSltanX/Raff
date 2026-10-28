@@ -29,8 +29,9 @@ export const api = {
   // Ids of rows matching beyond the preview the panel holds.
   searchItems: (query) => invoke('search_items', { query }),
   // `true` pasted, `false` copied only, or a string naming why it was only
-  // copied (`'copiedOverRaff'`, paste.rs `PasteOutcome`): a new reason must be
-  // worded in panel.js, or it reads as the Accessibility fallback.
+  // copied (`'copiedOverRaff'`, `'targetTaken'`, paste.rs `PasteOutcome`): a
+  // new reason must be worded in panel.js, or it reads as the Accessibility
+  // fallback.
   // `bare`: «لصق بلا تشكيل» (IMP-06), the text without harakat or tatweel.
   // Sent only when asked for: every other paste is what it always was.
   pasteItem: (id, plain = false, bare = false) =>
