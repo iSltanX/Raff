@@ -50,10 +50,12 @@ fn preview_open() -> Option<PreviewSide> {
 }
 
 // Ignore startup movement events until the panel has received its deliberate
-// first position. A short generation-based debounce keeps live dragging fluid
-// without rewriting the placement file for every mouse-move event.
+// first position. A short debounce (`save_after_moves`) keeps live dragging
+// fluid without rewriting the placement file for every mouse-move event.
 static PLACEMENT_READY: AtomicBool = AtomicBool::new(false);
 static PLACEMENT_DEBOUNCE: OnceLock<Mutex<Option<std::sync::mpsc::Sender<()>>>> = OnceLock::new();
+/// How long the panel must stay still before its place is saved.
+const PLACEMENT_QUIET: Duration = Duration::from_millis(180);
 
 /// Milliseconds since the epoch at which the panel last hid itself because it
 /// resigned key status — 0 means "never". Clicking the tray icon to CLOSE an
@@ -501,19 +503,34 @@ pub fn remember_position(app: &AppHandle) {
         let (tx, rx) = std::sync::mpsc::channel();
         *slot = Some(tx);
         let handle = app.clone();
-        std::thread::spawn(move || loop {
-            match rx.recv_timeout(Duration::from_millis(180)) {
-                Ok(()) => continue,
-                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
-                    let main_handle = handle.clone();
-                    on_main(move || constrain_and_save(&main_handle));
-                }
-                Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => return,
-            }
+        std::thread::spawn(move || {
+            save_after_moves(rx, PLACEMENT_QUIET, || {
+                let main_handle = handle.clone();
+                on_main(move || constrain_and_save(&main_handle));
+            })
         });
     }
     if let Some(tx) = slot.as_ref() {
         let _ = tx.send(());
+    }
+}
+
+/// Calls `save` once the moves arriving on `moves` have paused for `quiet`,
+/// then waits for the next move. Without that wait the timeout came round
+/// again every `quiet`, and the place was saved — on the main thread, under
+/// the store lock — about five times a second for as long as رفّ ran (DS-007).
+fn save_after_moves(moves: std::sync::mpsc::Receiver<()>, quiet: Duration, mut save: impl FnMut()) {
+    loop {
+        match moves.recv_timeout(quiet) {
+            Ok(()) => continue,
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                save();
+                if moves.recv().is_err() {
+                    return;
+                }
+            }
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => return,
+        }
     }
 }
 
@@ -718,6 +735,40 @@ mod tests {
             std::ptr::fn_addr_eq(window_answer_now, window_answer),
             "no other window class is touched"
         );
+    }
+
+    // DS-007 ──────────────────────────────────────────────────────────────
+
+    /// A drag is a burst of moves; its pause is one save. Then nothing until
+    /// the panel moves again — the loop used to save every `quiet`, on the
+    /// main thread under the store lock, for as long as رفّ ran.
+    #[test]
+    fn a_pause_in_the_moves_is_one_save_until_the_next_move() {
+        use std::sync::atomic::AtomicUsize;
+        use std::sync::Arc;
+
+        let saves = Arc::new(AtomicUsize::new(0));
+        let counted = Arc::clone(&saves);
+        let (moves, rx) = std::sync::mpsc::channel();
+        let quiet = Duration::from_millis(20);
+        let worker = std::thread::spawn(move || {
+            save_after_moves(rx, quiet, || {
+                counted.fetch_add(1, Ordering::SeqCst);
+            })
+        });
+
+        for _ in 0..5 {
+            moves.send(()).unwrap();
+        }
+        std::thread::sleep(quiet * 15);
+        assert_eq!(saves.load(Ordering::SeqCst), 1, "one drag, one save");
+
+        moves.send(()).unwrap();
+        std::thread::sleep(quiet * 15);
+        assert_eq!(saves.load(Ordering::SeqCst), 2, "the next drag, one more");
+
+        drop(moves);
+        worker.join().unwrap();
     }
 
     #[test]
