@@ -2420,10 +2420,12 @@ window.addEventListener('keydown', (e) => {
   if (previewWant && previewWant.id !== selectedId && actsOnItem(e)) {
     setSelection(previewWant.id);
   }
+  // The keys below that act on an item act once however long they are held
+  // (DS-008): the repeats are still prevented, so they reach nothing else.
   if (e.metaKey && !e.ctrlKey && !e.shiftKey && /^Digit[1-9]$/.test(e.code)) {
     const item = visible[Number(e.code.slice(5)) - 1];
     e.preventDefault();
-    if (item) {
+    if (item && !e.repeat) {
       setSelection(item.id);
       paste(item.id, e.altKey);
     }
@@ -2467,7 +2469,7 @@ window.addEventListener('keydown', (e) => {
     e.code === 'KeyP'
   ) {
     e.preventDefault();
-    togglePinItem(selectedId);
+    if (!e.repeat) togglePinItem(selectedId); // held down: pinned once, not flipped back
     return;
   }
   // By the key's place (`code`), as ⌥P: the same key in every layout.
@@ -2490,7 +2492,9 @@ window.addEventListener('keydown', (e) => {
     // delete is genuinely enabled even while search retains DOM focus.
     if (query || (isWritable(document.activeElement) && searchEl.value.length > 0)) return;
     e.preventDefault();
-    if (selectedId) deleteItem(selectedId, { restoreFocus: true });
+    // Held down, each repeat would delete the next row and make the previous
+    // delete final, leaving «تراجع» only the last one.
+    if (selectedId && !e.repeat) deleteItem(selectedId, { restoreFocus: true });
     return;
   }
 
@@ -2541,7 +2545,7 @@ window.addEventListener('keydown', (e) => {
       e.preventDefault();
       // ⌥⏎ = لصق كنص عادي، ⌃⏎ = لصق بلا تشكيل (IMP-06) — where there is
       // something to drop, as the button; elsewhere it is ⏎.
-      paste(selectedId, e.altKey, e.ctrlKey && !e.altKey && hasSomethingToDrop(selectedId));
+      if (!e.repeat) paste(selectedId, e.altKey, e.ctrlKey && !e.altKey && hasSomethingToDrop(selectedId));
       return;
     case 'Escape':
       e.preventDefault();
@@ -2568,7 +2572,7 @@ window.addEventListener('keydown', (e) => {
       if (start !== null && end !== null && start !== end) return;
     }
     e.preventDefault();
-    if (selectedId) copyItem(selectedId);
+    if (selectedId && !e.repeat) copyItem(selectedId);
     return;
   }
   // Route actual printable input only. Modifier keys, navigation keys, dead
