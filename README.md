@@ -134,7 +134,7 @@
   <img src="docs/assets/readme/install-dmg-light.png" width="560" alt="نافذة تثبيت رفّ: أيقونة رفّ مستقرة على شعاره الكبير رفًّا، وسهم منقّط يتجه إلى مجلد التطبيقات، وفوقهما «اسحب رفّ إلى التطبيقات».">
 </picture>
 
-1. نزّل ملف <span dir="ltr">`Raff_…_aarch64.dmg`</span> من [صفحة الإصدارات](https://github.com/iSltanX/Raff/releases).
+1. نزّل ملف <span dir="ltr">`Raff_…_aarch64.dmg`</span> من [آخر إصدار](https://github.com/iSltanX/Raff/releases/latest).
 2. افتحه واسحب رفّ إلى **التطبيقات**.
 3. شغّل رفّ من «التطبيقات»، وستجد رمزه في **شريط القوائم**.
 4. يعرّفك الترحيب برفّ في خمس خطوات: الفكرة، وطريقة الفتح، ثم الالتقاط (**أبقِه يعمل** أو **أوقفه**)، ثم إذن **تسهيلات الاستخدام** اختياريًا، ثم ملخص ما اخترت.
@@ -253,7 +253,7 @@
 
 | الأمر | ما يفعله |
 | --- | --- |
-| <span dir="ltr">`npm install`</span> | يثبّت الاعتماديات |
+| <span dir="ltr">`npm ci`</span> | يثبّت الاعتماديات من <span dir="ltr">`package-lock.json`</span> |
 | <span dir="ltr">`npm run tauri dev`</span> | تشغيل تطويري |
 | <span dir="ltr">`npm run tauri build`</span> | يبني <span dir="ltr">`Raff.app`</span> وملف DMG |
 | <span dir="ltr">`node scripts/preview-server.mjs src`</span> | يعاين الصفحات في المتصفح على <span dir="ltr">`127.0.0.1:5179`</span> ببيانات <span dir="ltr">`mock.js`</span> المصطنعة |
