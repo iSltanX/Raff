@@ -1,5 +1,5 @@
 {
- "generator": "audit/scripts/gen-normalize-vectors.mjs",
+ "generator": "scripts/gen-normalize-vectors.mjs",
  "seed": "0x5eed",
  "vectors": [
   {

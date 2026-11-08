@@ -6002,7 +6002,7 @@ mod audit_tests {
     // --- تكافؤ التطبيع JS ↔ Rust عبر متجهات مشتركة -----------------------------
 
     fn vectors() -> serde_json::Value {
-        serde_json::from_str(include_str!("../../audit/fixtures/normalize-vectors.json")).unwrap()
+        serde_json::from_str(include_str!("../../tests/fixtures/normalize-vectors.json")).unwrap()
     }
 
     #[test]

@@ -1,5 +1,5 @@
 // يولّد متجهات مشتركة لاختبار تطابق normalizeArabic (JS) مع normalize_for_search (Rust).
-// التشغيل: node audit/scripts/gen-normalize-vectors.mjs > audit/fixtures/normalize-vectors.json
+// التشغيل: node scripts/gen-normalize-vectors.mjs > tests/fixtures/normalize-vectors.json
 //
 // expected      = ناتج JS الفعلي (normalizeArabic)
 // perCharModel  = نموذج JS لسلوك Rust: الطيّ حرفًا حرفًا (حلقة normalize_for_search)
@@ -7,7 +7,7 @@
 // divergence    = RAFF-AUD-007 حيث يختلف خفض النص كاملًا عن خفض كل حرف وحده
 //                 (السيغما النهائية) — أي حيث اختلف الطرفان قبل الإصلاح، فتبقى
 //                 هذه المتجهات تحت اختبارَي الانحدار في الجهتين.
-import { normalizeArabic } from '../../src/js/logic.js';
+import { normalizeArabic } from '../src/js/logic.js';
 
 function fold(s) {
   let out = '';
@@ -107,7 +107,7 @@ const trimVectors = [
 
 process.stdout.write(
   JSON.stringify(
-    { generator: 'audit/scripts/gen-normalize-vectors.mjs', seed: '0x5eed', vectors: out, trimVectors },
+    { generator: 'scripts/gen-normalize-vectors.mjs', seed: '0x5eed', vectors: out, trimVectors },
     null,
     1
   ) + '\n'

@@ -1,5 +1,5 @@
-// تدقيق رفّ (P2): متجهات مشتركة بين normalizeArabic (JS) وnormalize_for_search (Rust).
-// المتجهات في audit/fixtures/normalize-vectors.json، ويقرؤها اختبار Rust في storage.rs أيضًا.
+// متجهات مشتركة بين normalizeArabic (JS) وnormalize_for_search (Rust).
+// المتجهات في tests/fixtures/normalize-vectors.json (يولّدها scripts/gen-normalize-vectors.mjs)، ويقرؤها اختبار Rust في storage.rs أيضًا.
 // المتجهات الموسومة RAFF-AUD-007 هي حيث اختلف الطرفان قبل الإصلاح، وتبقى تحت الاختبار.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -10,7 +10,7 @@ import { normalizeArabic, filterItems } from '../src/js/logic.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const fixture = JSON.parse(
-  readFileSync(path.join(here, '../audit/fixtures/normalize-vectors.json'), 'utf8')
+  readFileSync(path.join(here, 'fixtures/normalize-vectors.json'), 'utf8')
 );
 
 test('المتجهات ما زالت تطابق normalizeArabic الحالي (حماية من تقادم الملف)', () => {

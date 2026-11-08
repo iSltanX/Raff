@@ -1,3 +1,0 @@
-run1 exit=0 dur=13s
-run2 exit=0 dur=12s
-run3 exit=0 dur=15s
